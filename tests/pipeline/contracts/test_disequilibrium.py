@@ -73,7 +73,7 @@ def _stage_manifest(stage: str = "disequilibrium") -> StageManifest:
 def _fastchem_config(species: list[str] | None = None, **kwargs) -> FastChemConfig:
     defaults = dict(
         temperature_pressure_profile_source="retrieval",
-        included_species=species or ["H2O", "CO2", "CH4"],
+        included_species=["H2O", "CO2", "CH4"] if species is None else species,
         metallicity_solar=1.0,
         c_to_o_ratio=0.55,
     )
