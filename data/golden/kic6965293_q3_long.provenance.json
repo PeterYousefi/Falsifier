@@ -1,0 +1,29 @@
+{
+  "target": "KIC 6965293",
+  "common_name": "KIC 6965293",
+  "mission": "Kepler",
+  "quarter": 3,
+  "cadence": "long",
+  "mast_product_id": "kplr006965293-2009350155506_llc",
+  "mast_uri": "mast:Kepler/url/public/lightcurves/0069/006965293/kplr006965293-2009350155506_llc.fits",
+  "pipeline_version": "SOC 9.3",
+  "time_system": "BKJD",
+  "time_scale": "TDB",
+  "time_reference": "BJD - 2454833.0",
+  "flux_column": "SAP_FLUX",
+  "flux_unit": "e-/s",
+  "access_date": "2025-07-14",
+  "sha256": "__FILL_AFTER_FETCH__",
+  "row_count_expected": null,
+  "reference_doi": "10.1088/0004-6256/141/3/83",
+  "reference_citation": "Prsa et al. 2011, AJ 141, 83",
+  "eb_catalog": {
+    "morphology_parameter": 0.04,
+    "type": "detached",
+    "period_days": 2.6045,
+    "primary_eclipse_depth": 0.1396,
+    "secondary_eclipse_depth": 0.0209,
+    "depth_ratio_primary_over_secondary": 6.68
+  },
+  "notes": "Golden file for odd/even depth EB rejection regression. Depth ratio ~6.7:1 confirms odd_even_depth as the load-bearing vetting gate."
+}

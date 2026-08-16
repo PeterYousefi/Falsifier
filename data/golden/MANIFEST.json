@@ -1,0 +1,44 @@
+{
+  "schema_version": "1",
+  "description": "Manifest of committed golden light curves. Each entry pins a MAST product ID. Run scripts/fetch_golden.py to populate data/golden/. The golden set will grow to ten systems; add entries here and re-run the script.",
+  "golden_set": [
+    {
+      "kic_id": "KIC 11904151",
+      "common_name": "Kepler-10",
+      "quarter": 3,
+      "cadence": "long",
+      "mast_product_id": "kplr011904151-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0119/011904151/kplr011904151-2009350155506_llc.fits",
+      "pipeline_version": "SOC 9.3",
+      "flux_column": "SAP_FLUX",
+      "fits_filename": "kepler10_q3_long.fits",
+      "provenance_filename": "kepler10_q3_long.provenance.json",
+      "reference_doi": "10.1088/0004-637X/729/1/27",
+      "reference_citation": "Batalha et al. 2011, ApJ 729, 27",
+      "notes": "Golden file for period recovery regression. Published Kepler-10b period 0.83749070 +/- 0.00000020 days."
+    },
+    {
+      "kic_id": "KIC 6965293",
+      "common_name": "KIC 6965293",
+      "quarter": 3,
+      "cadence": "long",
+      "mast_product_id": "kplr006965293-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0069/006965293/kplr006965293-2009350155506_llc.fits",
+      "pipeline_version": "SOC 9.3",
+      "flux_column": "SAP_FLUX",
+      "fits_filename": "kic6965293_q3_long.fits",
+      "provenance_filename": "kic6965293_q3_long.provenance.json",
+      "reference_doi": "10.1088/0004-6256/141/3/83",
+      "reference_citation": "Prsa et al. 2011, AJ 141, 83",
+      "notes": "Golden file for odd/even depth EB rejection regression. Depth ratio ~6.7:1 confirms odd_even_depth as the load-bearing vetting gate.",
+      "eb_catalog": {
+        "morphology_parameter": 0.04,
+        "type": "detached",
+        "period_days": 2.6045,
+        "primary_eclipse_depth": 0.1396,
+        "secondary_eclipse_depth": 0.0209,
+        "depth_ratio_primary_over_secondary": 6.68
+      }
+    }
+  ]
+}
