@@ -82,6 +82,15 @@ See [`AGENTS.md`](AGENTS.md) for the full policy spine.  Summary:
 ## Repository layout
 
 ```
+falsifier/api/
+  app.py          FastAPI application factory (lifespan, CORS, non-claim header)
+  models.py       API-layer Pydantic models (JobRecord, DetectionReport, …)
+  queue.py        Async job queue + stage runner + stubs for unwired stages
+  sse.py          Server-Sent Events stream helper
+  routes/
+    jobs.py       POST /jobs · GET /jobs/{id} · GET /jobs/{id}/stream (SSE)
+    provenance.py GET /provenance (live data versions, module status, non-claims)
+
 falsifier/pipeline/
   contracts/      Pydantic input/output models for every stage
   ingest/         MAST · TAP · Gaia sources + content-addressed cache
@@ -92,7 +101,8 @@ falsifier/pipeline/
 data/
   golden/         Committed FITS files + provenance sidecars (network-free tests)
   splits/         Committed train/test split indices (written by training run)
-  artifacts/      Pipeline run outputs (generated; not committed)
+  artifacts/
+    explanations/ Templated stage explanations (chat degradation artifacts)
 
 scripts/
   fetch_golden.py          Fetch golden FITS files from MAST (requires network)
@@ -107,6 +117,7 @@ tests/
   test_no_leakage.py             Host-star split disjointness
   test_provenance_complete.py    DOI + access_date + row_count on all sidecars
   test_time_systems.py           BKJD/BTJD/JD round-trip, header enforcement
+  test_api_deletion.py           All 5 stages run with every API key unset
   test_injection_recovery.py     Unit tests for injection_recovery.py
   test_adversarial_selftest.py   Unit tests for adversarial_selftest.py
   pipeline/contracts/            Per-stage Pydantic contract tests
@@ -153,6 +164,23 @@ are published as-is; they are not filtered before the artifact is committed.
 
 ---
 
+## API
+
+```
+POST   /jobs                   Enqueue a detection run; returns job_id
+GET    /jobs/{id}              Poll status / fetch DetectionReport
+GET    /jobs/{id}/stream       SSE stream of stage events (text/event-stream)
+GET    /provenance             Live data versions, module wiring status, non-claims
+GET    /health                 Liveness probe
+```
+
+Every response carries `X-Non-Claim: Not a biosignature detector. No exoplanet biosignature has ever been confirmed.`
+
+The `/provenance` endpoint reads data versions from committed provenance sidecars at request time.
+No scientific values are hardcoded in API code (AGENTS.md Rule 1).
+
+---
+
 ## Dead / Experimental Code
 
 The following modules are written but not reachable from any live code path as of
@@ -160,12 +188,12 @@ version `0.1.0-dev`:
 
 | Module | Status | Reason |
 |---|---|---|
-| `falsifier/pipeline/stages/classify.py` | Written, not wired to CLI or API | Training pipeline not yet triggered from an entrypoint |
+| `falsifier/pipeline/stages/classify.py` | Wired via API queue; no CLI entrypoint | Training pipeline not yet triggered from an entrypoint |
 | `falsifier/pipeline/contracts/retrieve.py` | Written, no stage body | `run_retrieve` not yet implemented |
 | `falsifier/pipeline/contracts/disequilibrium.py` | Written, no stage body | `run_disequilibrium` not yet implemented |
-| `falsifier/pipeline/stages/detrend.py` | Referenced by tests, not yet implemented | Golden tests will fail until written |
-| `falsifier/pipeline/stages/search.py` | Referenced by tests, not yet implemented | Golden tests will fail until written |
-| `falsifier/pipeline/stages/vet.py` | Referenced by tests, not yet implemented | Golden tests will fail until written |
+| `falsifier/pipeline/stages/detrend.py` | Aspirational; API queue uses a biweight stub | Stage body not yet implemented; golden tests will fail until written |
+| `falsifier/pipeline/stages/search.py` | Aspirational; API queue uses an empty-TCE stub | Stage body not yet implemented; golden tests will fail until written |
+| `falsifier/pipeline/stages/vet.py` | Aspirational; API queue uses an all-PASS stub | Stage body not yet implemented; golden tests will fail until written |
 
 This table is updated as modules are wired in. Any module absent from this table
 that is also unreachable from `scripts/reproduce.sh` is a policy violation.

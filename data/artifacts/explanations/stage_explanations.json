@@ -1,0 +1,48 @@
+{
+  "schema_version": "1",
+  "description": "Templated explanations for pipeline stages, read by the API layer when the chat/LLM layer is unavailable (no hosted API key). These texts are static artifacts committed to the repository. They may not be edited to include hardcoded numeric claims.",
+  "stages": {
+    "ingest": {
+      "title": "Ingest stage",
+      "summary": "The ingest stage fetches calibrated light curves from MAST and stellar parameters from Gaia DR3. When run from cache (offline mode), no network connection is required.",
+      "what_it_does": "Downloads or reads from cache: (1) Kepler/TESS long- or short-cadence light curve FITS files via lightkurve, (2) Gaia DR3 stellar parameters (Teff, radius, RUWE) via astroquery.",
+      "what_it_does_not_do": "The ingest stage does not assign any disposition to the target. It does not search for transits. It does not compute any probability score.",
+      "output_fields": ["host_star_id", "segments", "stellar_params", "manifest"]
+    },
+    "detrend": {
+      "title": "Detrend stage",
+      "summary": "The detrend stage removes instrumental systematics from the raw light curve using the wotan biweight filter. Time-system metadata (TIMESYS, TIMEUNIT) from the FITS header is propagated unchanged.",
+      "what_it_does": "Applies wotan biweight detrending to each light curve segment. Propagates time_scale and time_format without modification. Normalises flux to dimensionless relative flux.",
+      "what_it_does_not_do": "The detrend stage does not identify transit signals. It does not assign any disposition.",
+      "output_fields": ["segments", "detrending_method", "manifest"]
+    },
+    "search": {
+      "title": "Search stage",
+      "summary": "The search stage runs transitleastsquares (TLS) on the detrended light curve to identify Threshold Crossing Events (TCEs). A TCE is a periodic dip consistent with a transit shape.",
+      "what_it_does": "Runs TLS over the configured period grid. Returns all TCEs above the SNR threshold, sorted by SDE descending. An empty TCE list is a valid result for a quiet star.",
+      "what_it_does_not_do": "The search stage does not assign any disposition to TCEs. It does not distinguish planets from eclipsing binaries.",
+      "output_fields": ["tces", "tls_version", "manifest"]
+    },
+    "vet": {
+      "title": "Vet stage",
+      "summary": "The vet stage applies seven named tests to each TCE and assigns a deterministic disposition. The disposition is computed exclusively from the test outcomes — no classifier is involved.",
+      "what_it_does": "Runs seven vetting tests: odd_even_depth, secondary_eclipse, centroid_shift, transit_shape, stellar_density, gaia_ruwe, systematics_coincidence. Disposition is one of: candidate, candidate_with_caveats, false_positive, ambiguous.",
+      "what_it_does_not_do": "The vet stage does not compute a probability score. It does not claim a planet detection. It does not screen for biosignatures.",
+      "output_fields": ["disposition", "triggering_test", "triggering_reason", "test_results", "manifest"]
+    },
+    "classify": {
+      "title": "Classify stage",
+      "summary": "The classify stage applies a trained XGBoost model with isotonic calibration to produce a calibrated probability score for each TCE. This score is a ranking tool only.",
+      "what_it_does": "Extracts seven vetting-metric features from the VetOutput. Predicts a calibrated probability in [0, 1]. Estimates bootstrap uncertainty.",
+      "what_it_does_not_do": "The classifier does not assign a disposition. It does not override the vet stage result. A high probability does not constitute a detection claim. This is a ranking score, not a verdict.",
+      "output_fields": ["probability", "probability_uncertainty", "feature_importances", "manifest"]
+    }
+  },
+  "non_claims": [
+    "This project is not a biosignature detector.",
+    "No exoplanet biosignature has ever been confirmed.",
+    "The classifier probability is a ranking score only — not a verdict.",
+    "Disposition is determined exclusively by the vet stage.",
+    "The output of this pipeline is a triage list, not a detection claim."
+  ]
+}
