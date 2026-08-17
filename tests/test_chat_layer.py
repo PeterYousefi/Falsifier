@@ -337,10 +337,7 @@ async def test_session_offline_mode_no_api_key(fake_job_store):
 
     job_id, tce, _ = fake_job_store
     # Ensure no API keys are set
-    with patch.dict(os.environ, {
-        "WATSONX_API_KEY": "",
-        "WATSONX_PROJECT_ID": "",
-    }):
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
         response = await run_turn(
             job_id=job_id,
             message="What is the disposition of the first TCE?",

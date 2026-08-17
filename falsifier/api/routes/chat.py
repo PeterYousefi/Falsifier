@@ -73,10 +73,10 @@ class ChatResponseBody(BaseModel):
     """[source: tool(args)] citation strings extracted from reply."""
 
     guardian_verdict: dict[str, Any] = Field(default_factory=dict)
-    """{safe, risk_label, model_used, confidence} from Granite Guardian."""
+    """{safe, risk_label, model_used, confidence} from the heuristic screener."""
 
     offline_mode: bool = False
-    """True when no LLM API key was configured; response is templated."""
+    """True when no OpenAI API key was configured; response is templated."""
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ async def chat(req: ChatRequest) -> ChatResponseBody:
     Execute one chat turn.
 
     The server calls the pipeline tools, assembles a response, and screens
-    it through Granite Guardian before returning.  If no LLM API key is
+    it through the Guardian before returning.  If no OpenAI API key is
     configured, the response is assembled from committed artifact text only
     (offline degradation).
     """

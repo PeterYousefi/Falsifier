@@ -430,19 +430,16 @@ All endpoint URLs are defined as named constants in
 [`falsifier/pipeline/ingest/endpoints.py`](falsifier/pipeline/ingest/endpoints.py)
 and imported from there — no inline URL strings appear in any other module.
 
-### The only optional credentials are for the IBM watsonx.ai chat layer
+### The only optional credential is for the OpenAI chat layer
 
-`POST /chat` uses IBM watsonx.ai (Granite) for natural-language responses.
-**No other inference provider is supported.**
-If no credentials are set, the endpoint degrades gracefully to templated
+`POST /chat` uses OpenAI chat completions for natural-language responses.
+If no credential is set, the endpoint degrades gracefully to templated
 stage explanations — no network call is made, no error is returned.
 
 | Environment variable | Purpose | Required? |
 |---|---|---|
-| `WATSONX_API_KEY` | IBM Cloud IAM API key (exchanged for a bearer token) | Optional — offline fallback if absent |
-| `WATSONX_PROJECT_ID` | watsonx.ai project ID | Optional — offline fallback if absent |
-| `WATSONX_URL` | watsonx.ai instance URL | Optional — defaults to `https://us-south.ml.cloud.ibm.com` |
-| `WATSONX_MODEL_ID` | Model to use | Optional — defaults to `ibm/granite-3-3-8b-instruct` |
+| `OPENAI_API_KEY` | OpenAI API key | Optional — offline fallback if absent |
+| `OPENAI_MODEL_ID` | Model to use | Optional — defaults to `gpt-4o-mini` |
 
 Setting none of them is valid. The full detection pipeline (`POST /jobs`,
 `GET /jobs/*`, `GET /provenance`) runs without any credential at all.
@@ -553,7 +550,9 @@ falsifier/api/
     chat.py         POST /chat (tool-calling, Guardian-screened)
   chat/
     tools.py        8 deterministic tools reading from _job_store artifacts
-    guardian.py     Granite Guardian output screening (ibm-granite, local)
+    guardian.py     Granite Guardian output screening (ibm-granite/granite-guardian-3.1-2b,
+                    loaded from local HuggingFace cache with local_files_only=True;
+                    falls back to rule-based heuristic if model not cached)
     system_prompt.py  Runtime system prompt (never hardcodes values)
     session.py      Tool-call loop + offline degradation
 

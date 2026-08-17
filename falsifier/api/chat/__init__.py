@@ -9,7 +9,7 @@ in the in-memory job store (_job_store).  No number is hardcoded here.
 Sub-modules
 -----------
 tools         — 8 deterministic tools that read from _job_store artifacts
-guardian      — Granite Guardian output-safety screening wrapper
+guardian      — Granite Guardian output-safety screening (local, no network call)
 system_prompt — builds the LLM system prompt at runtime (never hardcoded)
-session       — conversation state + tool-call loop
+session       — OpenAI tool-call loop + offline degradation
 """
