@@ -159,7 +159,35 @@ def _fetch_entry(entry: dict, force: bool) -> bool:
         return False
 
     fits_path.parent.mkdir(parents=True, exist_ok=True)
-    lc.to_fits(str(fits_path), overwrite=True)
+
+    # Write a canonical FITS file whose columns match what the pipeline tests
+    # expect: TIME, FLUX, FLUX_ERR, QUALITY (not SAP_QUALITY).
+    # lightkurve.to_fits() writes SAP_QUALITY; we build a custom HDU instead.
+    import numpy as np
+    from astropy.io import fits as _fits
+    from astropy.table import Table as _Table
+
+    t_arr = np.asarray(lc.time.bkjd, dtype=np.float64)
+    f_arr = np.asarray(lc.flux.value, dtype=np.float64)
+    e_arr = np.asarray(lc.flux_err.value, dtype=np.float64)
+    q_arr = np.asarray(lc.quality, dtype=np.int32)
+    # MOM_CENTR columns (may be absent on some LC objects)
+    try:
+        c1_arr = np.asarray(lc.centroid_col.value, dtype=np.float64)
+        c2_arr = np.asarray(lc.centroid_row.value, dtype=np.float64)
+        has_centroid = True
+    except (AttributeError, TypeError):
+        has_centroid = False
+
+    tbl = _Table([t_arr, f_arr, e_arr, q_arr], names=["TIME", "FLUX", "FLUX_ERR", "QUALITY"])
+    if has_centroid:
+        tbl["MOM_CENTR1"] = c1_arr
+        tbl["MOM_CENTR2"] = c2_arr
+
+    primary_hdu = _fits.PrimaryHDU()
+    table_hdu = _fits.BinTableHDU(tbl, name="LIGHTCURVE")
+    hdul = _fits.HDUList([primary_hdu, table_hdu])
+    hdul.writeto(str(fits_path), overwrite=True)
     print(f"  Saved: {fits_path.name}  ({len(lc)} cadences)")
 
     # Compute SHA-256 and update provenance sidecar

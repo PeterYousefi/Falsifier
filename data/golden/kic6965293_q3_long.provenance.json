@@ -13,7 +13,7 @@
   "flux_column": "SAP_FLUX",
   "flux_unit": "e-/s",
   "access_date": "2026-08-17",
-  "sha256": "9bca4500099b13bc6bd134700f11e0e191ddcab23d6c99d23e344af8406ee7c0",
+  "sha256": "87fcfb9953b2f0ae6af6c1c377c727c3a2898b4d8409288b0a00f60c7f53cbc4",
   "row_count_expected": 4140,
   "reference_doi": "10.1088/0004-6256/141/3/83",
   "reference_citation": "Prsa et al. 2011, AJ 141, 83",

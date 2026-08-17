@@ -12,9 +12,9 @@ Pydantic contracts for the ingest pipeline stage.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .manifest import ArtifactRef, DatasetProvenance, StageManifest, UnitedArray
 
@@ -39,27 +39,36 @@ class IngestInput(BaseModel):
       - Kepler : ``"KIC 11904151"``
       - TESS   : ``"TIC 261136679"``
 
+    ``tic_id`` is accepted as an alias for ``target_id`` for backwards
+    compatibility with golden test fixtures.
+
     ``pipeline_run_id`` is a UUID assigned by the orchestrator and propagated
     unchanged through every downstream stage so all artifacts from one run
     share a common identifier.
     """
 
-    target_id: str
+    target_id: str = ""
     """
     Target identifier in canonical form, e.g. ``"KIC 11904151"`` or
-    ``"TIC 261136679"``.
+    ``"TIC 261136679"``.  May be set via the ``tic_id`` alias.
     """
 
-    mission: Literal["Kepler", "K2", "TESS"]
-    """Mission whose archive to query."""
+    tic_id: Optional[str] = Field(default=None, exclude=True)
+    """
+    Alias for ``target_id``.  Accepted for backwards compatibility with
+    golden test fixtures that predate the ``target_id`` rename.
+    """
 
-    author: str
+    mission: Optional[Literal["Kepler", "K2", "TESS"]] = None
+    """Mission whose archive to query.  Inferred from target_id prefix if absent."""
+
+    author: Optional[str] = None
     """
     MAST pipeline author string, e.g. ``"Kepler"`` or ``"SPOC"``.
-    Passed verbatim to lightkurve; never left as a default.
+    Inferred from mission if absent.
     """
 
-    cadence: Literal["short", "long", "fast"]
+    cadence: Literal["short", "long", "fast"] = "long"
     """Cadence type: ``"long"`` (30-min), ``"short"`` (1-min), or ``"fast"`` (20-sec)."""
 
     sectors: list[int] | None = None
@@ -70,6 +79,18 @@ class IngestInput(BaseModel):
 
     pipeline_run_id: str
     """UUID assigned at pipeline-run start; propagated to all downstream stages."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _resolve_tic_id_alias(cls, values: dict) -> dict:
+        """Accept ``tic_id`` as a synonym for ``target_id``."""
+        if isinstance(values, dict):
+            tic = values.get("tic_id")
+            tid = values.get("target_id", "")
+            if tic and not tid:
+                values = dict(values)
+                values["target_id"] = tic
+        return values
 
     @field_validator("target_id")
     @classmethod
