@@ -1,0 +1,72 @@
+{
+  "falsifier_version": "0.1.0-dev",
+  "data_versions": [
+    {
+      "name": "kepler_q3_kic11904151",
+      "source_doi": "10.17909/T9P59R",
+      "access_date": "2024-01-10",
+      "row_count": 4480,
+      "description": "Kepler Q3 long-cadence, KIC 11904151"
+    },
+    {
+      "name": "gaia_dr3_kic11904151",
+      "source_doi": "10.1051/0004-6361/202243940",
+      "access_date": "2024-01-10",
+      "row_count": 1,
+      "description": "Gaia DR3 stellar parameters, KIC 11904151"
+    },
+    {
+      "name": "nasa_exoplanet_archive_koi",
+      "source_doi": "10.26133/NEA12",
+      "access_date": "2024-01-08",
+      "row_count": 9564,
+      "description": "NASA Exoplanet Archive KOI table (Q1-Q17 DR25)"
+    }
+  ],
+  "modules": [
+    {
+      "module": "falsifier.pipeline.stages.ingest",
+      "status": "wired",
+      "note": "run_ingest is called by the job queue for every detection run."
+    },
+    {
+      "module": "falsifier.pipeline.stages.detrend",
+      "status": "aspirational",
+      "note": "Stage body not yet implemented; queue uses a normalisation stub."
+    },
+    {
+      "module": "falsifier.pipeline.stages.search",
+      "status": "aspirational",
+      "note": "Stage body not yet implemented; queue uses an empty-TCE stub."
+    },
+    {
+      "module": "falsifier.pipeline.stages.vet",
+      "status": "aspirational",
+      "note": "Stage body not yet implemented; queue uses an all-PASS stub."
+    },
+    {
+      "module": "falsifier.pipeline.stages.classify",
+      "status": "wired",
+      "note": "run_classify is implemented; used when xgboost and a trained model artifact are present. Falls back to a stub when either is absent."
+    },
+    {
+      "module": "falsifier.pipeline.contracts.retrieve",
+      "status": "aspirational",
+      "note": "Contract written; run_retrieve not yet implemented."
+    },
+    {
+      "module": "falsifier.pipeline.contracts.disequilibrium",
+      "status": "aspirational",
+      "note": "Contract written; run_disequilibrium not yet implemented. This stage is not a biosignature detector."
+    }
+  ],
+  "non_claims": [
+    "This project is not a biosignature detector.",
+    "No exoplanet biosignature has ever been confirmed.",
+    "The classifier probability is a ranking score only — not a verdict.",
+    "Disposition is determined exclusively by the vet stage, not by the classifier.",
+    "No detection rate, false-positive rate, or model score is reported here unless it is produced by scripts/reproduce.sh.",
+    "The output of this pipeline is a triage list, not a detection claim."
+  ],
+  "golden_manifest_entry_count": 3
+}

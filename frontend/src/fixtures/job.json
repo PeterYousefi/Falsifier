@@ -1,0 +1,133 @@
+{
+  "job_id": "fixture-job-001",
+  "status": "done",
+  "request": {
+    "target_id": "KIC 11904151",
+    "mission": "Kepler",
+    "author": "Kepler",
+    "cadence": "long",
+    "sectors": null,
+    "run_classify": true
+  },
+  "pipeline_run_id": "fixture-run-2024-01-15",
+  "started_at": "2024-01-15T14:00:00Z",
+  "finished_at": "2024-01-15T14:00:47Z",
+  "report": {
+    "job_id": "fixture-job-001",
+    "target_id": "KIC 11904151",
+    "pipeline_run_id": "fixture-run-2024-01-15",
+    "started_at": "2024-01-15T14:00:00Z",
+    "finished_at": "2024-01-15T14:00:47Z",
+    "ingest": {
+      "host_star_id": "KIC 11904151",
+      "n_segments": 17,
+      "has_stellar_params": true,
+      "code_version": "0.1.0-dev",
+      "input_hash": "a3f8c1d2e9b047a6c3f8e1d29b047a6c3f8e1d29b047a6c3f8e1d29b047a6c3",
+      "wall_time_seconds": 12.34
+    },
+    "detrend": {
+      "host_star_id": "KIC 11904151",
+      "n_segments": 17,
+      "detrending_method": "biweight",
+      "wall_time_seconds": 8.71
+    },
+    "search": {
+      "host_star_id": "KIC 11904151",
+      "n_tces": 1,
+      "tls_version": "1.0.31",
+      "wall_time_seconds": 22.15,
+      "tce_ids": ["KIC-11904151-00"]
+    },
+    "vet": [
+      {
+        "tce_id": "KIC-11904151-00",
+        "disposition": "candidate",
+        "triggering_test": null,
+        "triggering_reason": null,
+        "wall_time_seconds": 1.83,
+        "test_results": [
+          {
+            "test_name": "odd_even_depth",
+            "outcome": "PASS",
+            "metric_value": 0.018,
+            "metric_unit": "dimensionless",
+            "reason": "Odd and even transit depths consistent within 2σ; no depth asymmetry detected."
+          },
+          {
+            "test_name": "secondary_eclipse",
+            "outcome": "PASS",
+            "metric_value": null,
+            "metric_unit": null,
+            "reason": "No significant secondary eclipse detected at phase 0.5 or in TLS power spectrum."
+          },
+          {
+            "test_name": "centroid_shift",
+            "outcome": "PASS",
+            "metric_value": 0.21,
+            "metric_unit": "arcsec",
+            "reason": "Centroid displacement during transit is 0.21 arcsec, within the 0.5 arcsec threshold."
+          },
+          {
+            "test_name": "transit_shape",
+            "outcome": "PASS",
+            "metric_value": 0.94,
+            "metric_unit": "dimensionless",
+            "reason": "Transit profile χ² ratio 0.94 is consistent with a limb-darkened planetary transit."
+          },
+          {
+            "test_name": "stellar_density",
+            "outcome": "PASS",
+            "metric_value": 1.07,
+            "metric_unit": "rho_sun",
+            "reason": "Photometric stellar density 1.07 ρ☉ is consistent with Gaia DR3 spectroscopic estimate."
+          },
+          {
+            "test_name": "gaia_ruwe",
+            "outcome": "PASS",
+            "metric_value": 1.04,
+            "metric_unit": "dimensionless",
+            "reason": "Gaia DR3 RUWE 1.04 is below the 1.4 threshold; single-star astrometric solution."
+          },
+          {
+            "test_name": "systematics_coincidence",
+            "outcome": "PASS",
+            "metric_value": null,
+            "metric_unit": null,
+            "reason": "Transit timing does not coincide with known systematic events in the Kepler data."
+          }
+        ],
+        "period_days": 0.8375,
+        "depth_ppm": 154,
+        "duration_hours": 1.61,
+        "epoch_bkjd": 2454833.528,
+        "inclination_deg": 88.7,
+        "phased_lc": {
+          "phase": [-0.49, -0.47, -0.45, -0.43, -0.41, -0.39, -0.37, -0.35, -0.33, -0.31, -0.29, -0.27, -0.25, -0.23, -0.21, -0.19, -0.17, -0.15, -0.13, -0.11, -0.09, -0.07, -0.05, -0.03, -0.01, 0.01, 0.03, 0.05, 0.07, 0.09, 0.11, 0.13, 0.15, 0.17, 0.19, 0.21, 0.23, 0.25, 0.27, 0.29, 0.31, 0.33, 0.35, 0.37, 0.39, 0.41, 0.43, 0.45, 0.47, 0.49],
+          "flux": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9998, 0.9995, 0.9990, 0.9985, 0.9985, 0.9985, 0.9985, 0.9985, 0.9985, 0.9985, 0.9985, 0.9990, 0.9995, 0.9998, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        }
+      }
+    ],
+    "classify": [
+      {
+        "tce_id": "KIC-11904151-00",
+        "probability": 0.812,
+        "probability_uncertainty": 0.041,
+        "model_version": "xgb-v0.3.1"
+      }
+    ],
+    "non_claims": [
+      "This project is not a biosignature detector.",
+      "No exoplanet biosignature has ever been confirmed.",
+      "The classifier probability is a ranking score only, not a verdict.",
+      "Disposition is determined exclusively by the vet stage."
+    ],
+    "stellar_params": {
+      "teff": { "values": [5627], "unit": "K" },
+      "radius": { "values": [1.065], "unit": "solRad" },
+      "luminosity_lsun": 1.12
+    }
+  },
+  "error": null,
+  "events": []
+}

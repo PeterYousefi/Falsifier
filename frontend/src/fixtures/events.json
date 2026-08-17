@@ -1,0 +1,101 @@
+[
+  {
+    "ts": "14:00:00.012",
+    "event": "stage_start",
+    "stage": "ingest",
+    "status": "ok",
+    "detail": "Starting ingest for KIC 11904151",
+    "artifact_path": null,
+    "elapsed_seconds": null
+  },
+  {
+    "ts": "14:00:12.346",
+    "event": "stage_done",
+    "stage": "ingest",
+    "status": "ok",
+    "detail": "Ingest complete: 17 segments, stellar params present",
+    "artifact_path": "data/artifacts/batch/fixture-run-2024-01-15/ingest.json",
+    "elapsed_seconds": 12.34
+  },
+  {
+    "ts": "14:00:12.350",
+    "event": "stage_start",
+    "stage": "detrend",
+    "status": "ok",
+    "detail": "Starting detrend (biweight)",
+    "artifact_path": null,
+    "elapsed_seconds": null
+  },
+  {
+    "ts": "14:00:21.065",
+    "event": "stage_done",
+    "stage": "detrend",
+    "status": "ok",
+    "detail": "Detrend complete: 17 segments normalised",
+    "artifact_path": "data/artifacts/batch/fixture-run-2024-01-15/detrend.json",
+    "elapsed_seconds": 8.71
+  },
+  {
+    "ts": "14:00:21.070",
+    "event": "stage_start",
+    "stage": "search",
+    "status": "ok",
+    "detail": "Starting TLS period search (P ∈ [0.5, 30] d, SNR ≥ 7)",
+    "artifact_path": null,
+    "elapsed_seconds": null
+  },
+  {
+    "ts": "14:00:43.220",
+    "event": "stage_done",
+    "stage": "search",
+    "status": "ok",
+    "detail": "Search complete: 1 TCE found (SDE=14.3, SNR=11.8)",
+    "artifact_path": "data/artifacts/batch/fixture-run-2024-01-15/search.json",
+    "elapsed_seconds": 22.15
+  },
+  {
+    "ts": "14:00:43.225",
+    "event": "stage_start",
+    "stage": "vet",
+    "status": "ok",
+    "detail": "Vetting KIC-11904151-00",
+    "artifact_path": null,
+    "elapsed_seconds": null
+  },
+  {
+    "ts": "14:00:45.055",
+    "event": "stage_done",
+    "stage": "vet",
+    "status": "ok",
+    "detail": "Vet complete: disposition=candidate (all 7 tests PASS)",
+    "artifact_path": "data/artifacts/batch/fixture-run-2024-01-15/vet.json",
+    "elapsed_seconds": 1.83
+  },
+  {
+    "ts": "14:00:45.060",
+    "event": "stage_start",
+    "stage": "classify",
+    "status": "ok",
+    "detail": "Classifying KIC-11904151-00",
+    "artifact_path": null,
+    "elapsed_seconds": null
+  },
+  {
+    "ts": "14:00:47.010",
+    "event": "stage_done",
+    "stage": "classify",
+    "status": "ok",
+    "detail": "Classify complete: probability=0.812 ± 0.041",
+    "artifact_path": "data/artifacts/batch/fixture-run-2024-01-15/classify.json",
+    "elapsed_seconds": 1.95
+  },
+  {
+    "ts": "14:00:47.015",
+    "event": "job_done",
+    "stage": "pipeline",
+    "status": "ok",
+    "detail": "Job fixture-job-001 completed successfully",
+    "artifact_path": null,
+    "elapsed_seconds": 47.0
+  }
+]

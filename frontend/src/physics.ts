@@ -1,0 +1,137 @@
+/**
+ * src/physics.ts
+ * Pure orbital-mechanics helpers for visual display only.
+ *
+ * Policy (AGENTS.md Rule 1): every function takes measured values as
+ * arguments and returns a computed result. No hardcoded measured quantities.
+ * Constants here are fundamental physics / IAU definitions, not measured
+ * planetary values. All outputs are labelled "visual only" or "computed for
+ * display" in the UI — they are not scientific results.
+ */
+
+/** IAU 2012 solar radius in AU */
+const R_SUN_AU = 0.00465047
+
+/**
+ * Semi-major axis (AU) from orbital period via Kepler III.
+ * Assumes host mass ≈ 1 M☉ — for visual mapping only.
+ * period_days → semi_major_axis_AU
+ */
+export function semiMajorAxisFromPeriod(period_days: number): number {
+  const period_yr = period_days / 365.25
+  return Math.pow(period_yr, 2 / 3)
+}
+
+/**
+ * Equilibrium temperature (K) for visual colour mapping.
+ * Assumes Bond albedo A=0.3, uniform heat redistribution.
+ * T_eq = T_star × √(R_star / (2a)) × (1−A)^(1/4)
+ *
+ * @param teff_K       host star Teff (K)  — from stellar_params
+ * @param r_star_rsun  host star radius (Rsun) — from stellar_params
+ * @param a_AU         semi-major axis (AU) — from Kepler III
+ */
+export function equilibriumTemperature(
+  teff_K: number,
+  r_star_rsun: number,
+  a_AU: number,
+): number {
+  const r_star_AU = r_star_rsun * R_SUN_AU
+  const A = 0.3
+  return teff_K * Math.sqrt(r_star_AU / (2 * a_AU)) * Math.pow(1 - A, 0.25)
+}
+
+/**
+ * Map equilibrium temperature to a hex colour string.
+ * Cold → blue; warm → orange; hot → white.
+ * For visual display only.
+ */
+export function teqToColor(t_eq_K: number): string {
+  const t = Math.max(0, Math.min(t_eq_K, 5000))
+  const x = t / 5000
+  const r = Math.round(Math.min(255, x * 512))
+  const g = Math.round(Math.min(255, x < 0.5 ? x * 200 : 100 + (x - 0.5) * 310))
+  const b = Math.round(Math.min(255, x < 0.3 ? 200 - x * 400 : Math.max(0, 80 - (x - 0.3) * 200)))
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
+
+/**
+ * Habitable zone inner and outer radii (AU) via Kopparapu+2013 analytic fit.
+ * For visual display only.
+ *
+ * @param teff_K  host star Teff (K)
+ * @param l_lsun  host star luminosity (Lsun)
+ */
+export function habitableZone(
+  teff_K: number,
+  l_lsun: number,
+): { inner: number; outer: number } {
+  const T_sun = 5780
+  const dt = teff_K - T_sun
+  const dt2 = dt * dt
+  const dt3 = dt2 * dt
+  const dt4 = dt3 * dt
+  // Runaway greenhouse inner edge (moist greenhouse)
+  const S_in  = 1.0140 + 8.1774e-5 * dt + 1.7063e-9 * dt2 - 4.3241e-12 * dt3 - 6.6462e-16 * dt4
+  // Maximum greenhouse outer edge
+  const S_out = 0.3438 + 5.8942e-5 * dt + 1.6558e-9 * dt2 - 3.0045e-12 * dt3 - 5.2983e-16 * dt4
+  return {
+    inner: Math.sqrt(l_lsun / Math.max(S_in,  0.01)),
+    outer: Math.sqrt(l_lsun / Math.max(S_out, 0.001)),
+  }
+}
+
+/**
+ * Approximate planet radius (R_earth) from transit depth and stellar radius.
+ * depth ≈ (R_p / R_star)² — for visual sphere sizing only.
+ *
+ * @param depth_ppm    transit depth (ppm)  — from TCE
+ * @param r_star_rsun  host star radius (Rsun) — from stellar_params
+ */
+export function depthToRadiusRearth(depth_ppm: number, r_star_rsun: number): number {
+  const ratio = Math.sqrt(depth_ppm / 1e6)
+  const r_star_rearth = r_star_rsun * 109.076   // 1 Rsun = 109.076 Rearth
+  return ratio * r_star_rearth
+}
+
+/**
+ * Scale planet radius (R_earth) to Three.js scene units.
+ * Clamps to [minSize, maxSize] for visual clarity.
+ */
+export function radiusToSceneSize(
+  r_earth: number,
+  { minSize = 0.02, maxSize = 0.18 } = {},
+): number {
+  const raw = r_earth / 11.2  // 11.2 Rearth ≈ 1 Rjupiter
+  return Math.max(minSize, Math.min(maxSize, raw * 0.15))
+}
+
+/**
+ * Convert semi-major axis (AU) to Three.js scene units.
+ * Normalised: 1 AU ≈ 2 scene units.
+ */
+export function auToScene(au: number): number {
+  return au * 2.0
+}
+
+/**
+ * Orbital angular velocity (rad/s wall time) for animation.
+ *
+ * @param period_days  orbital period (days) — from TCE
+ * @param playFactor   simulation days per real second (default = 1 Earth year per second)
+ */
+export function orbitalAngularVelocity(period_days: number, playFactor = 365.25): number {
+  if (period_days <= 0) return 0
+  const T_wall = period_days / playFactor
+  return (2 * Math.PI) / T_wall
+}
+
+/**
+ * Map orbital inclination (degrees) to scene rotation angle (radians).
+ * 90° → edge-on (transit geometry). 0° → face-on.
+ *
+ * @param inclination_deg  inclination from line of sight (degrees) — from TCE
+ */
+export function inclinationToRotation(inclination_deg: number): number {
+  return (inclination_deg * Math.PI) / 180
+}

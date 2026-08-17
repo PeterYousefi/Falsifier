@@ -1,0 +1,56 @@
+{
+  "session": {
+    "labeled_set_name": "koi-dr25-fixture",
+    "labeled_set_doi": "10.26133/NEA12",
+    "n_rows": 8054,
+    "n_host_stars": 4216,
+    "min_rows_threshold": 500,
+    "min_host_stars_threshold": 100,
+    "leakage_check": {
+      "passed": true,
+      "detail": "No host star appears in both train and test partitions."
+    }
+  },
+  "session_metrics": {
+    "fold": "test",
+    "n_samples": 1611,
+    "auc_roc": 0.924,
+    "brier_score": 0.072,
+    "ece": 0.031,
+    "precision_at_50": 0.871,
+    "recall_at_50": 0.803,
+    "calibration_bins": [
+      { "bin_center": 0.05, "fraction_positive": 0.03, "n_samples": 140 },
+      { "bin_center": 0.15, "fraction_positive": 0.11, "n_samples": 98 },
+      { "bin_center": 0.25, "fraction_positive": 0.22, "n_samples": 87 },
+      { "bin_center": 0.35, "fraction_positive": 0.33, "n_samples": 75 },
+      { "bin_center": 0.45, "fraction_positive": 0.44, "n_samples": 61 },
+      { "bin_center": 0.55, "fraction_positive": 0.54, "n_samples": 72 },
+      { "bin_center": 0.65, "fraction_positive": 0.66, "n_samples": 84 },
+      { "bin_center": 0.75, "fraction_positive": 0.74, "n_samples": 96 },
+      { "bin_center": 0.85, "fraction_positive": 0.86, "n_samples": 108 },
+      { "bin_center": 0.95, "fraction_positive": 0.94, "n_samples": 590 }
+    ]
+  },
+  "baseline_metrics": {
+    "fold": "test",
+    "n_samples": 1611,
+    "auc_roc": 0.887,
+    "brier_score": 0.101,
+    "ece": 0.058,
+    "precision_at_50": 0.812,
+    "recall_at_50": 0.741,
+    "calibration_bins": [
+      { "bin_center": 0.05, "fraction_positive": 0.07, "n_samples": 140 },
+      { "bin_center": 0.15, "fraction_positive": 0.09, "n_samples": 98 },
+      { "bin_center": 0.25, "fraction_positive": 0.19, "n_samples": 87 },
+      { "bin_center": 0.35, "fraction_positive": 0.28, "n_samples": 75 },
+      { "bin_center": 0.45, "fraction_positive": 0.40, "n_samples": 61 },
+      { "bin_center": 0.55, "fraction_positive": 0.52, "n_samples": 72 },
+      { "bin_center": 0.65, "fraction_positive": 0.61, "n_samples": 84 },
+      { "bin_center": 0.75, "fraction_positive": 0.71, "n_samples": 96 },
+      { "bin_center": 0.85, "fraction_positive": 0.82, "n_samples": 108 },
+      { "bin_center": 0.95, "fraction_positive": 0.91, "n_samples": 590 }
+    ]
+  }
+}
