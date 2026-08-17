@@ -347,24 +347,37 @@ class SourceFluxRatio(BaseModel):
     Headline disequilibrium metric:
         required_source_flux / max_plausible_abiotic_flux
 
-    ``required_source_flux`` is the photon/chemical energy flux needed to
-    sustain the observed disequilibrium abundance of a target species above
-    its FastChem thermochemical equilibrium value, computed from the VULCAN
-    photochemical network driven by the MUSCLES stellar UV spectrum.
+    Unit note
+    ---------
+    Both ``required_source_flux`` and ``max_plausible_abiotic_flux`` are
+    **photochemical energy deposition rates per unit area** (W m⁻²), as
+    output by the VULCAN photochemical network.  This is an energy-budget
+    representation of the chemical source term: VULCAN integrates reaction
+    rates and converts to net power deposition per m² of atmospheric column.
+    W m⁻² is the natural unit for comparing against the stellar UV irradiance
+    that drives the network.
 
-    ``max_plausible_abiotic_flux`` is the maximum flux the same species could
-    receive from known abiotic processes (volcanism, lightning, UV
-    photolysis of other species) as computed from the VULCAN network without
-    any biotic flux term.
+    Their **ratio is dimensionless** and is stored as a bare ``float``.
+    The two ``UnitedArray`` fields carry ``unit="W / m2"`` to preserve
+    the provenance of each individual flux value; dividing them yields a
+    dimensionless number.
 
-    A ratio >> 1 means an unaccounted-for source is required.  A ratio ≈ 1
-    means the abiotic budget is sufficient.
+    ``required_source_flux`` is the minimum energy flux that would need to
+    be injected into the VULCAN network to sustain the retrieved VMR above
+    the FastChem equilibrium value.
+
+    ``max_plausible_abiotic_flux`` is the maximum energy flux the same
+    species could receive from known abiotic processes (volcanism, lightning,
+    UV photolysis of precursor species) as computed from the same VULCAN
+    network with no added biotic term.
+
+    A ratio >> 1 means the abiotic budget is insufficient to explain the
+    observed abundance.  A ratio ≈ 1 means the abiotic budget is sufficient.
 
     **This is a screening metric.  It does NOT constitute a biosignature
     claim.  No exoplanet biosignature has ever been confirmed.**
 
-    All flux quantities carry units of W m⁻².  Uncertainty is propagated
-    from the posterior samples of the VULCAN photochemical integration.
+    Uncertainty is propagated from the VULCAN posterior integration samples.
     """
 
     species: str

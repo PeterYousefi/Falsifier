@@ -7,9 +7,12 @@ name = "falsifier"
 version = "0.1.0-dev"
 description = "Disequilibrium screening and false-positive triage for exoplanet candidates."
 requires-python = ">=3.11"
-# Core runtime deps: pydantic + numpy only.
-# Everything else (astropy, lightkurve, xgboost, …) is optional so the
-# fast CI job can prove the contracts import with pydantic alone.
+# Core runtime deps: pydantic + numpy.
+# numpy is a genuine core dep, not a test convenience: UnitedArray in
+# falsifier/pipeline/contracts/manifest.py uses numpy at module scope for
+# array serialisation and dtype coercion.  The fast CI job installs
+# pydantic + numpy and nothing else; any accidental module-scope import
+# of astropy, lightkurve, sklearn, etc. will surface immediately.
 dependencies = [
     "pydantic>=2.0",
     "numpy>=1.24",

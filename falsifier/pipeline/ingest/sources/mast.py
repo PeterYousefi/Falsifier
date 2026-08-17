@@ -10,7 +10,10 @@ Responsibilities
   TIMEUNIT / TIME_FMT).  Raise ``HeaderMissingKeyError`` if either is absent.
 - Return ``list[LightCurveSegment]`` with all physical arrays as ``UnitedArray``.
 - Raise typed exceptions on all failure modes.  Never return partial data
-  silently.  Never fall back to a different product.
+  silently.  Never fall back to a different data source.  A MAST failure
+  raises ``MastFetchError``; calling code must handle it explicitly and may
+  choose to attempt a TAP or Gaia query as a separate, explicit step.
+  There is no automatic source substitution in this module.
 
 Time-system extraction
 ----------------------

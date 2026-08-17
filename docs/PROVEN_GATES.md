@@ -8,22 +8,35 @@ verbatim tool output produced when the mutation was run on **2025-07-14**.
 All mutations were run in isolated subprocesses; no real source file was permanently
 modified.  Each stub was written to a temporary file and deleted after the run.
 
-Gates covered:
+## Audit status
 
-| # | Gate name | Enforcement point |
-|---|---|---|
-| 1 | Golden case — period recovery | `tests/test_kepler10_recovery.py` |
-| 2 | EB rejection reason | `tests/test_known_eb_rejected.py` |
-| 3 | No-fabricated-numbers | `scripts/verify_readme.py` |
-| 4 | Leakage | `tests/test_no_leakage.py` |
-| 5 | Time-system round-trip | `tests/test_time_systems.py` |
-| 6 | Provenance completeness | `tests/test_provenance_complete.py` |
+| # | Gate name | Enforcement point | Status |
+|---|---|---|---|
+| 1 | Golden case — period recovery | `tests/test_kepler10_recovery.py` | **PENDING** — blocking on uncommitted golden FITS + unimplemented stage bodies |
+| 2 | EB rejection reason | `tests/test_known_eb_rejected.py` | **PENDING** — blocking on uncommitted golden FITS + unimplemented vet stage body |
+| 3 | No-fabricated-numbers | `scripts/verify_readme.py` | ✅ EXECUTED — mutation ran against real files; verbatim output recorded |
+| 4 | Leakage | `tests/test_no_leakage.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
+| 5 | Time-system round-trip | `tests/test_time_systems.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
+| 6 | Provenance completeness | `tests/test_provenance_complete.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
+
+**Gates 1 and 2 could not be executed** because:
+- The golden FITS files (`data/golden/kepler10_q3_long.fits`, `data/golden/kic6965293_q3_long.fits`) have not been committed. Run `python scripts/fetch_golden.py` to fetch them.
+- The detrend, search, and vet stage bodies are aspirational stubs — they do not yet implement the real algorithms. The integration tests that call them will be skipped or fail until those bodies are written.
+
+The assertion logic for Gates 1 and 2 was verified by injecting stubs (see sections below), but the end-to-end mutation — running a mutated `run_search`/`run_vet` against real data and watching the gate catch it — has not been executed. The sections below record the injection-stub verification, not an end-to-end run.
+
+Gates 3–6 were fully executed with real mutations against real files.
 
 ---
 
-## Gate 1 — Period tolerance: `test_kepler10b_period_recovery`
+## Gate 1 — Period tolerance: `test_kepler10b_period_recovery` ⚠️ PENDING
 
-### Mutation
+> **Blocking dependencies**: golden FITS file not committed; detrend/search stage bodies are stubs.
+> The mutation below was verified against injected stubs only, not against a real pipeline run.
+> This section will be updated to EXECUTED once `python scripts/fetch_golden.py` has been run,
+> the FITS files committed, and the stage bodies implemented.
+
+### Mutation (stub-verified, not end-to-end)
 
 `run_search` returns a TCE with `period = 0.83749070 + 0.01 = 0.84749070 days`.
 This is 100× the test tolerance of `1e-4 days`.
@@ -81,9 +94,14 @@ It does not validate the shape of the transit, the depth, or the epoch.
 
 ---
 
-## Gate 2 — EB triggering test specificity: `test_known_eb_triggering_test_is_odd_even_depth`
+## Gate 2 — EB triggering test specificity: `test_known_eb_triggering_test_is_odd_even_depth` ⚠️ PENDING
 
-### Mutation
+> **Blocking dependencies**: golden FITS file not committed; vet stage body is a stub.
+> The mutation below was verified against injected stubs only, not against a real pipeline run.
+> This section will be updated to EXECUTED once the vet stage body is implemented and
+> `data/golden/kic6965293_q3_long.fits` is committed.
+
+### Mutation (stub-verified, not end-to-end)
 
 `run_vet` returns `disposition="false_positive"` with `triggering_test="centroid_shift"`
 instead of the correct `"odd_even_depth"`. The `odd_even_depth` test result is set

@@ -3,11 +3,16 @@ falsifier.pipeline.stages.ingest
 ===================================
 ``run_ingest`` — the ingest stage body.
 
-Orchestrates three data sources:
+Orchestrates three independent data sources:
 
   1. MAST / lightkurve  — light curve FITS files
   2. NASA Exoplanet Archive TAP  — planet and stellar parameters
   3. Gaia DR3  — stellar RUWE, radius, teff
+
+These are independent queries, not a fallback chain.  A failure at any
+source raises a typed exception (``MastFetchError``, ``TapFetchError``,
+``GaiaFetchError``).  There is no automatic substitution: a MAST failure
+does not cause a TAP fetch, and vice versa.
 
 and the content-addressed cache layer.
 

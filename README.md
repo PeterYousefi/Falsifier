@@ -47,6 +47,12 @@ pipeline artifact (`data/golden/MANIFEST.json`, provenance sidecars,
 A number that does not trace to a committed artifact fails this test.
 That is the entire claim: **numbers cannot be invented**.
 
+**What this test does NOT catch:**
+- Integer literals (e.g. `4032`, `7`) — only decimal floats with ≥ 3 digits after the point.
+- Numbers embedded inside string literals (e.g. `"TIMESYS = '2454833'"`) that are not top-level JSON values.
+- Computed values derived from artifact inputs at runtime (e.g. `period * 2`) — only literal tokens are scanned.
+- Numbers in Python source files outside `tests/fixtures/` and `frontend/src/`.
+
 ---
 
 ## Measured results
@@ -97,8 +103,17 @@ The seven tests are:
 
 Disposition is a **deterministic function** of these seven outcomes.
 No classifier, no threshold tuning, no probability involved.
-The truth table is enforced as a Pydantic `model_validator` on `VetOutput`:
-any inconsistent disposition raises at object-construction time.
+
+Each outcome is one of `PASS | FAIL | FLAG | INCONCLUSIVE`.
+The truth table (enforced as a Pydantic `model_validator` on `VetOutput`:
+any inconsistent disposition raises at object-construction time):
+
+| Test outcome combination | Disposition |
+|---|---|
+| All seven `PASS` | `candidate` |
+| Any `FAIL` (first one triggers) | `false_positive` |
+| No `FAIL`, any `FLAG` (first one triggers) | `candidate_with_caveats` |
+| No `FAIL`, no `FLAG`, any `INCONCLUSIVE` | `ambiguous` |
 
 ### Period recovery (Kepler-10b golden regression)
 
@@ -117,8 +132,9 @@ Period recovery tolerance: 1e-04 days (~8.6 s)
 
 **Method**: the committed FITS file (`data/golden/kepler10_q3_long.fits`)
 is detrended with a `wotan` biweight filter, searched with
-`transitleastsquares`, and the recovered period is compared to the published
-value.  The test fails if `|P_recovered − P_published| ≥ tolerance`.
+`transitleastsquares` (which fits a **limb-darkened transit profile**,
+not a box — it is not BLS), and the recovered period is compared to the
+published value.  The test fails if `|P_recovered − P_published| ≥ tolerance`.
 
 The tolerance of ~8.6 s is ~500× the published uncertainty
 (Batalha+2011: ±0.00000020 days = ±17 ms) and is deliberately conservative
@@ -312,18 +328,29 @@ TRAPPIST-1 b and GJ 1132 b.
 
 ### Screen (FastChem + VULCAN + Gibbs + source-flux ratio)
 
+Two distinct metrics are produced and must not be confused:
+
+**Per-species disequilibrium metric** (`ChemicalSpeciesProfile.disequilibrium_metric`):
+∫ |log(VMR\_obs / VMR\_eq)| dP, normalised to the pressure range.
+This is the implemented metric. It is dimensionless and always ≥ 0.
+
+**Gibbs free energy** (`GibbsMinimisationResult.gibbs_free_energy`, unit `J/mol`):
+output of the Gibbs minimisation solver at individual T/P grid points.
+This is a separate, per-point product used to cross-check FastChem equilibrium.
+It is not the disequilibrium metric.
+
 - **Equilibrium baseline**: FastChem (Stock et al. 2018,
   DOI 10.1093/mnras/sty1531) — thermochemical equilibrium VMR at each T/P level.
 - **Photochemistry**: VULCAN (Tsai et al. 2017, DOI 10.3847/1538-4365/aa60d7)
   — kinetics/photochemistry network driven by MUSCLES stellar UV spectra
   (France et al. 2016, DOI 10.3847/0004-637X/820/2/89).
-- **Disequilibrium metric**: integrated |log(VMR\_obs / VMR\_eq)| over the
-  atmospheric pressure grid.
-- **Headline metric**: `required_source_flux / max_plausible_abiotic_flux`
-  — energy flux (W m⁻²) needed to sustain the observed disequilibrium
-  abundance above FastChem equilibrium, divided by the maximum abiotic
-  flux the VULCAN network can produce.  Both values carry
-  `UnitedArray(unit="W / m2")` and propagated uncertainty.
+- **Headline screening metric**: `SourceFluxRatio.ratio` —
+  `required_source_flux / max_plausible_abiotic_flux`.
+  Both are photochemical energy deposition rates per unit area in W m⁻²,
+  computed from the VULCAN network output.  Their ratio is dimensionless
+  (stored as `float`; the flux fields carry `UnitedArray(unit="W / m2")`).
+  A ratio >> 1 indicates the abiotic photochemical budget is insufficient
+  to sustain the observed VMR.
   **A ratio > 1 does NOT constitute a biosignature claim.**
 
 ### What these modules do not claim
@@ -426,7 +453,7 @@ Five jobs run on every push and pull request (`.github/workflows/ci.yml`):
 
 | Job | What it proves | Install |
 |---|---|---|
-| `test-fast` | Contracts import with pydantic alone; no accidental astropy at module scope | `pip install -e . --no-deps && pip install pydantic numpy pytest` |
+| `test-fast` | Contracts import with pydantic + numpy only; no accidental astropy/lightkurve at module scope. numpy is a declared core dep because `manifest.py` uses it for `UnitedArray` serialisation. | `pip install -e . --no-deps && pip install pydantic numpy pytest` |
 | `test-no-invented-numbers` | Every scientific float in fixtures/frontend traces to a committed artifact | `pip install pytest` |
 | `frontend-build` | Vite build succeeds; bundle contains no invented numbers | Node 20 + npm ci |
 | `verify-readme` | Every `<!-- CLAIM:... -->` block matches its regenerated value | `pip install -e . --no-deps && pip install pydantic numpy` |

@@ -7,6 +7,16 @@ Pydantic contracts for the search pipeline stage.
   TCE          — one Threshold Crossing Event found by TLS
   SearchOutput — the list of TCEs emitted by run_search
 
+Transit search algorithm
+------------------------
+The search stage uses ``transitleastsquares`` (TLS, Hippke & Heller 2019,
+DOI 10.1051/0004-6361/201834672).  TLS fits a **limb-darkened transit
+profile** (not a box, not a trapezoid) and returns a Signal Detection
+Efficiency (SDE) rather than a power spectrum.  It is **not BLS**
+(Box-fitting Least Squares).  This distinction matters: TLS has higher
+sensitivity to shallow transits because the template matches the physical
+transit shape.
+
 Policy
 ------
 No disposition is assigned here.  ``TCE`` carries TLS signal statistics only.
