@@ -411,6 +411,61 @@ See [`AGENTS.md`](AGENTS.md) for the full policy spine.
 
 ---
 
+## External data sources and API keys
+
+### No API key is required for data access
+
+All three external data services are publicly accessible without authentication:
+
+| Service | Purpose | Endpoint | No-auth confirmed |
+|---|---|---|---|
+| **MAST** (STScI) | Kepler/TESS light curve FITS | `https://mast.stsci.edu/api/v0/invoke` via `lightkurve` | ✓ |
+| **NASA Exoplanet Archive TAP** | Planet and stellar parameters | `https://exoplanetarchive.ipac.caltech.edu/TAP/sync` | ✓ |
+| **Gaia DR3 TAP+** (ESA) | Stellar RUWE, Teff, radius | `https://gea.esac.esa.int/tap-server/tap` via `astroquery` | ✓ |
+
+No API key, token, or credential is read, stored, or transmitted by any ingest code.
+Setting any data-source environment variable has no effect on the pipeline.
+
+All endpoint URLs are defined as named constants in
+[`falsifier/pipeline/ingest/endpoints.py`](falsifier/pipeline/ingest/endpoints.py)
+and imported from there — no inline URL strings appear in any other module.
+
+### The only optional credential is for the LLM chat layer
+
+`POST /chat` uses an LLM provider for natural-language responses.
+If no key is set, the endpoint degrades gracefully to templated stage
+explanations (no LLM call is made, no error is returned).
+
+| Environment variable | Provider | Required for chat? |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI | Optional |
+| `ANTHROPIC_API_KEY` | Anthropic | Optional |
+| `WATSONX_API_KEY` | IBM watsonx | Optional |
+
+Setting none of them is valid — the full detection pipeline (`POST /jobs`)
+runs without any LLM key.
+
+### Provenance: DOIs recorded per data source
+
+Every fetch writes a [`DatasetProvenance`](falsifier/pipeline/contracts/manifest.py)
+entry into the stage manifest with:
+
+| Source | `source_doi` | `source_url` |
+|---|---|---|
+| MAST (Kepler mission) | `10.17909/t9-st5g-3177` | MAST API URL |
+| NASA Exoplanet Archive | `10.26133/NEA12` | TAP/sync URL |
+| Gaia DR3 | `10.1051/0004-6361/202243940` | Gaia TAP+ URL |
+
+### ADQL notes (Exoplanet Archive)
+
+- Use `SELECT TOP N` — the Archive TAP service does **not** support `LIMIT`.
+- Approved tables: `ps`, `pscomppars`, `cumulative`.
+- Retired tables **must never appear** in any ADQL query: `exoplanet`, `exomultpars`, `compositepars`.
+  The `_guard_table()` function in [`tap.py`](falsifier/pipeline/ingest/sources/tap.py)
+  raises `ValueError` at query-build time if any retired table name is referenced.
+
+---
+
 ## API
 
 ```

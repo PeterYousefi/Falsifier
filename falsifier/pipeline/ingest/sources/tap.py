@@ -34,18 +34,22 @@ from typing import Any
 
 import pandas as pd
 
+from ..endpoints import NEA_DOI, NEA_TAP_ASYNC_URL, NEA_TAP_SYNC_URL
 from ..exceptions import TapFetchError, TargetNotFoundError
 
 log = logging.getLogger(__name__)
 
-TAP_ENDPOINT = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
-NEA_DOI = "10.26133/NEA12"
+# Re-export for callers that import TAP_ENDPOINT / NEA_DOI from here.
+TAP_ENDPOINT = NEA_TAP_SYNC_URL
+TAP_ASYNC_ENDPOINT = NEA_TAP_ASYNC_URL
+
+__all__ = ["TAP_ENDPOINT", "TAP_ASYNC_ENDPOINT", "NEA_DOI", "fetch_planet_params"]
 
 # Retired tables that must never be queried — kept here for the guard check  # retired-table-ref-ok
 _RETIRED_TABLES = frozenset({"exoplanet", "exomultpars", "compositepars"})  # retired-table-ref-ok
 
-# Approved tables
-_APPROVED_TABLES = frozenset({"ps", "pscomppars"})
+# Approved tables — ps, pscomppars, and cumulative (Kepler cumulative catalog)
+_APPROVED_TABLES = frozenset({"ps", "pscomppars", "cumulative"})
 
 
 def _guard_table(adql: str) -> None:

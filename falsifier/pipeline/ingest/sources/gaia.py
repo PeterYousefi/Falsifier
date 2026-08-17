@@ -36,12 +36,14 @@ import numpy as np
 
 from ...contracts.ingest import StellarParams
 from ...contracts.manifest import DatasetProvenance, UnitedArray
+from ..endpoints import GAIA_DOI, GAIA_TAP_URL
 from ..exceptions import GaiaFetchError, TargetNotFoundError
 
 log = logging.getLogger(__name__)
 
-GAIA_DOI = "10.1051/0004-6361/202243940"
-GAIA_ENDPOINT = "https://gea.esac.esa.int/tap-server/tap"
+# Re-export for callers that import GAIA_DOI / GAIA_ENDPOINT from here.
+GAIA_ENDPOINT = GAIA_TAP_URL
+__all__ = ["GAIA_DOI", "GAIA_ENDPOINT", "fetch_stellar_params"]
 
 _GAIA_COLUMNS = (
     "source_id, ra, dec, parallax, parallax_error, ruwe, "

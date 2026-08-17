@@ -315,14 +315,15 @@ class TestIngestCache:
 
 class TestTypedExceptions:
     def test_fetch_error_carries_endpoint_and_query(self):
+        from falsifier.pipeline.ingest.endpoints import MAST_API_URL
         from falsifier.pipeline.ingest.exceptions import MastFetchError
 
         err = MastFetchError(
             "connection refused",
-            endpoint="https://mast.stsci.edu",
+            endpoint=MAST_API_URL,
             query="KIC 11904151",
         )
-        assert err.endpoint == "https://mast.stsci.edu"
+        assert err.endpoint == MAST_API_URL
         assert err.query == "KIC 11904151"
         assert "connection refused" in str(err)
         assert "mast.stsci.edu" in str(err)

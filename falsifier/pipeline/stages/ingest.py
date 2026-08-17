@@ -62,6 +62,7 @@ from ..contracts.manifest import (
     UnitedArray,
 )
 from ..ingest.cache import IngestCache, query_hash
+from ..ingest.endpoints import MAST_API_URL, NEA_TAP_SYNC_URL
 from ..ingest.exceptions import (
     IngestError,
     MastFetchError,
@@ -332,7 +333,7 @@ def _fetch_lightcurves(
     if not segments_and_meta:
         raise MastFetchError(
             f"fetch_lightcurve returned empty list for {inp.target_id!r}",
-            endpoint="https://mast.stsci.edu",
+            endpoint=MAST_API_URL,
             query=inp.target_id,
         )
 

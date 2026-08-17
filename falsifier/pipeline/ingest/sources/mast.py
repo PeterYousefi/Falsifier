@@ -54,6 +54,7 @@ import numpy as np
 
 from ...contracts.ingest import LightCurveSegment
 from ...contracts.manifest import UnitedArray
+from ..endpoints import MAST_API_URL, MAST_DOI
 from ..exceptions import (
     HeaderMissingKeyError,
     MastFetchError,
@@ -64,15 +65,8 @@ from ..exceptions import (
 
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-MAST_DOI = "10.17909/t9-st5g-3177"
-"""
-DOI for the MAST High Level Science Products archive.
-Used as DatasetProvenance.source_doi for all MAST-fetched data.
-"""
+# Re-export so callers that already import MAST_DOI from here continue to work.
+__all__ = ["MAST_DOI", "fetch_lightcurve", "extract_time_system"]
 
 # Map TELESCOP header value → astropy Time format for the time column
 _TELESCOP_TO_TIME_FORMAT: dict[str, str] = {
@@ -257,14 +251,14 @@ def fetch_lightcurve(
     except Exception as exc:
         raise MastFetchError(
             f"lightkurve.search_lightcurve failed: {exc}",
-            endpoint="https://mast.stsci.edu",
+            endpoint=MAST_API_URL,
             query=str(search_kwargs),
         ) from exc
 
     if len(results) == 0:
         raise TargetNotFoundError(
             f"No MAST results for target={target_id!r} with {search_kwargs}",
-            endpoint="https://mast.stsci.edu",
+            endpoint=MAST_API_URL,
             query=str(search_kwargs),
         )
 
@@ -280,7 +274,7 @@ def fetch_lightcurve(
                 f"No result matches mast_product_id={mast_product_id!r} "
                 f"for target={target_id!r}.\n"
                 f"Available products: {list(results.table['productFilename'])}",
-                endpoint="https://mast.stsci.edu",
+                endpoint=MAST_API_URL,
                 query=mast_product_id,
             )
         if len(matched_indices) > 1:
@@ -288,7 +282,7 @@ def fetch_lightcurve(
             raise AmbiguousProductError(
                 f"Multiple results match mast_product_id={mast_product_id!r}; "
                 "mast_product_id must be unique.",
-                endpoint="https://mast.stsci.edu",
+                endpoint=MAST_API_URL,
                 query=mast_product_id,
             )
         results = results[matched_indices[0] : matched_indices[0] + 1]
@@ -320,14 +314,14 @@ def fetch_lightcurve(
         except Exception as exc:
             raise MastFetchError(
                 f"lightkurve download failed for {target_id!r} item {i}: {exc}",
-                endpoint="https://mast.stsci.edu",
+                endpoint=MAST_API_URL,
                 query=target_id,
             ) from exc
 
         if lc is None:
             raise MastFetchError(
                 f"lightkurve download returned None for {target_id!r} item {i}",
-                endpoint="https://mast.stsci.edu",
+                endpoint=MAST_API_URL,
                 query=target_id,
             )
 
