@@ -3,32 +3,64 @@ falsifier.api.chat.session
 ===========================
 Conversation state management and tool-call loop.
 
-The session drives the LLM interaction:
-  1. Build the system prompt (system_prompt.build_system_prompt).
-  2. Send user message + history to the model with tool schemas.
-  3. If the model emits a tool_use block, dispatch to tools.TOOL_REGISTRY.
-  4. Append the tool result to the conversation and call the model again.
-  5. Repeat until the model emits a text response (no pending tool calls).
-  6. Screen the final text through guardian.screen().
-  7. Return ChatResponse.
+IBM watsonx.ai only
+-------------------
+This module uses IBM watsonx.ai (Granite) as the sole inference backend.
+No OpenAI, Anthropic, or other provider is supported.
+
+Configuration (all from environment — nothing hardcoded):
+  WATSONX_API_KEY    — IBM Cloud IAM API key
+  WATSONX_PROJECT_ID — watsonx.ai project ID
+  WATSONX_URL        — watsonx.ai instance URL
+                       (default: https://us-south.ml.cloud.ibm.com)
+  WATSONX_MODEL_ID   — model to use
+                       (default: ibm/granite-3-3-8b-instruct)
+
+Authentication
+--------------
+The IBM Cloud IAM API key is exchanged for a bearer token via:
+  POST https://iam.cloud.ibm.com/identity/token
+The token is cached in-process and refreshed automatically before expiry
+(5 minutes before the ``expiration`` timestamp returned by IAM).
+
+Tool calling
+------------
+All 8 tool schemas are sent in OpenAI-compatible format to the watsonx
+/ml/v1/text/chat endpoint, which granite-3-3-8b-instruct supports natively.
+Tool results are injected as role="tool" messages, matching the format
+verified to round-trip through the model.
+
+Model: ibm/granite-3-3-8b-instruct
+  - Supports tool calling (function calling) natively via /ml/v1/text/chat
+  - Not all Granite instruct variants support tool calling; this one does.
+  - Configurable via WATSONX_MODEL_ID for future upgrades.
 
 Degradation
 -----------
-If no LLM API key is set (OPENAI_API_KEY, ANTHROPIC_API_KEY, WATSONX_API_KEY)
-the session runs in "offline" mode: it calls the requested tools directly and
-assembles a templated answer from stage_explanations.json without contacting
-any hosted model.
+If no WATSONX_API_KEY (or no WATSONX_PROJECT_ID) is set, the session runs in
+"offline" mode: it calls the requested tools directly and assembles a
+templated answer from stage_explanations.json without contacting any model.
+The endpoint never raises on a missing key.
+
+Guardian
+--------
+Guardian (guardian.py) runs locally with local_files_only=True.
+It is never routed through watsonx and makes no network call.
+It is called on every response including offline mode.
 
 AGENTS.md enforcement
 ---------------------
-Rule 1: numbers are only injected into responses from tool call results.
-The offline path also satisfies this: it reads from tools, never from memory.
+Rule 1: numbers are injected into responses only from tool call results.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,6 +68,8 @@ from typing import Any
 from .guardian import GuardianVerdict, screen
 from .system_prompt import build_system_prompt
 from .tools import TOOL_REGISTRY, TOOL_SCHEMAS
+
+import re as _re
 
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
 _EXPLANATIONS_PATH = (
@@ -45,9 +79,14 @@ _EXPLANATIONS_PATH = (
 # Maximum tool-call iterations per turn to prevent infinite loops
 _MAX_TOOL_ITERATIONS = 8
 
+# Default model — granite-3-3-8b-instruct supports tool calling on watsonx.ai
+_DEFAULT_MODEL_ID = "ibm/granite-3-3-8b-instruct"
+_DEFAULT_WATSONX_URL = "https://us-south.ml.cloud.ibm.com"
+_IAM_TOKEN_URL = "https://iam.cloud.ibm.com/identity/token"
+
 
 # ---------------------------------------------------------------------------
-# ChatMessage — one turn in the conversation
+# ChatMessage / ChatResponse
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -57,10 +96,6 @@ class ChatMessage:
     tool_call_id: str | None = None
     tool_name: str | None = None
 
-
-# ---------------------------------------------------------------------------
-# ChatResponse — returned by run_turn()
-# ---------------------------------------------------------------------------
 
 @dataclass
 class ChatResponse:
@@ -77,7 +112,171 @@ class ChatResponse:
     """GuardianVerdict serialised to dict for the API response body."""
 
     offline_mode: bool = False
-    """True when no LLM API key was available and offline degradation was used."""
+    """True when no watsonx credentials were available."""
+
+
+# ---------------------------------------------------------------------------
+# IAM bearer-token cache
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _IamToken:
+    access_token: str
+    expires_at: float  # Unix timestamp
+
+
+_iam_cache: _IamToken | None = None
+
+
+def _exchange_iam_token(api_key: str) -> _IamToken:
+    """
+    Exchange an IBM Cloud IAM API key for a bearer token.
+
+    POST https://iam.cloud.ibm.com/identity/token
+    Response: {"access_token": "...", "expiration": <unix_ts>, ...}
+
+    Raises urllib.error.URLError on network failure.
+    """
+    data = urllib.parse.urlencode({
+        "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
+        "apikey": api_key,
+    }).encode()
+    req = urllib.request.Request(
+        _IAM_TOKEN_URL,
+        data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        body = json.loads(resp.read())
+
+    expires_at = float(body.get("expiration", time.time() + 3600))
+    return _IamToken(
+        access_token=body["access_token"],
+        # Refresh 5 minutes before actual expiry
+        expires_at=expires_at - 300,
+    )
+
+
+def _get_bearer_token(api_key: str) -> str:
+    """
+    Return a valid bearer token, refreshing from IAM if near expiry.
+
+    Caches the token in-process across requests.
+    """
+    global _iam_cache
+    now = time.time()
+    if _iam_cache is None or now >= _iam_cache.expires_at:
+        _iam_cache = _exchange_iam_token(api_key)
+    return _iam_cache.access_token
+
+
+# ---------------------------------------------------------------------------
+# Credential detection
+# ---------------------------------------------------------------------------
+
+def _detect_watsonx_config() -> dict | None:
+    """
+    Return watsonx config dict if all required env vars are set, else None.
+
+    Required: WATSONX_API_KEY, WATSONX_PROJECT_ID
+    Optional: WATSONX_URL (default: us-south.ml.cloud.ibm.com)
+              WATSONX_MODEL_ID (default: ibm/granite-3-3-8b-instruct)
+    """
+    api_key = os.environ.get("WATSONX_API_KEY", "").strip()
+    project_id = os.environ.get("WATSONX_PROJECT_ID", "").strip()
+    if not api_key or not project_id:
+        return None
+    return {
+        "api_key": api_key,
+        "project_id": project_id,
+        "url": os.environ.get("WATSONX_URL", _DEFAULT_WATSONX_URL).rstrip("/"),
+        "model_id": os.environ.get("WATSONX_MODEL_ID", _DEFAULT_MODEL_ID),
+    }
+
+
+# ---------------------------------------------------------------------------
+# watsonx.ai chat call
+# ---------------------------------------------------------------------------
+
+def _build_watsonx_tools(schemas: list[dict]) -> list[dict]:
+    """
+    Convert TOOL_SCHEMAS (OpenAI-compatible) to the watsonx /text/chat format.
+
+    watsonx /ml/v1/text/chat accepts tools in this shape:
+      {
+        "type": "function",
+        "function": {
+          "name": "...",
+          "description": "...",
+          "parameters": { <JSON Schema object> }
+        }
+      }
+    This is identical to the OpenAI format, so no transformation is needed
+    beyond wrapping each schema in {"type": "function", "function": schema}.
+    """
+    return [{"type": "function", "function": t} for t in schemas]
+
+
+def _call_watsonx(
+    config: dict,
+    messages: list[dict],
+    tools: list[dict],
+) -> dict:
+    """
+    Call the watsonx.ai /ml/v1/text/chat endpoint.
+
+    Endpoint: POST {url}/ml/v1/text/chat?version=2024-05-01
+    Auth: Bearer token from IAM (exchanged from config["api_key"])
+
+    Returns the raw response dict.
+    Raises on HTTP errors.
+    """
+    bearer = _get_bearer_token(config["api_key"])
+
+    payload = json.dumps({
+        "model_id": config["model_id"],
+        "project_id": config["project_id"],
+        "messages": messages,
+        "tools": _build_watsonx_tools(tools),
+        "tool_choice": "auto",
+        "max_tokens": 1024,
+    }).encode()
+
+    url = f"{config['url']}/ml/v1/text/chat?version=2024-05-01"
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {bearer}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return json.loads(resp.read())
+
+
+def _extract_watsonx_turn(response: dict) -> tuple[str, list[dict]]:
+    """
+    Parse a watsonx /text/chat response into (text, tool_calls).
+
+    watsonx uses the same response shape as OpenAI chat completions:
+      response["choices"][0]["message"] with:
+        - "content": str (text response)
+        - "tool_calls": list of {"id", "type", "function": {"name", "arguments"}}
+      response["choices"][0]["finish_reason"]: "stop" | "tool_calls" | "length"
+
+    Returns (text, []) for text responses and ("", tool_calls) for tool turns.
+    """
+    choice = response["choices"][0]
+    msg = choice["message"]
+    finish_reason = choice.get("finish_reason", "stop")
+
+    if finish_reason == "tool_calls" and msg.get("tool_calls"):
+        return "", msg["tool_calls"]
+
+    return msg.get("content", "") or "", []
 
 
 # ---------------------------------------------------------------------------
@@ -102,14 +301,14 @@ def _offline_response(
     """
     Assemble a templated response from committed artifact text.
 
-    Used when no LLM key is available.  Numbers come only from tool_calls_made
-    results; template text comes from stage_explanations.json.
+    Used when no watsonx credentials are available.  Numbers come only from
+    tool_calls_made results; template text comes from stage_explanations.json.
     """
     expl = _load_explanations()
     non_claims = expl.get("non_claims", [])
 
     lines = [
-        "**Offline mode** — no LLM API key configured.  "
+        "**Offline mode** — no watsonx credentials configured.  "
         "Showing pipeline artifact summary only.",
         "",
     ]
@@ -141,105 +340,6 @@ def _offline_response(
 
 
 # ---------------------------------------------------------------------------
-# LLM client (minimal, provider-agnostic)
-# ---------------------------------------------------------------------------
-
-def _detect_api_key() -> tuple[str, str] | None:
-    """
-    Return (provider, api_key) for the first available LLM provider.
-
-    Checks: OPENAI_API_KEY, ANTHROPIC_API_KEY, WATSONX_API_KEY.
-    Returns None if none are set.
-    """
-    for env_var, provider in [
-        ("OPENAI_API_KEY", "openai"),
-        ("ANTHROPIC_API_KEY", "anthropic"),
-        ("WATSONX_API_KEY", "watsonx"),
-    ]:
-        key = os.environ.get(env_var, "").strip()
-        if key:
-            return provider, key
-    return None
-
-
-def _call_llm_openai(
-    api_key: str,
-    messages: list[dict],
-    tools: list[dict],
-) -> dict:
-    """
-    Call the OpenAI chat completions API.
-
-    Returns the raw API response dict.  Raises on HTTP errors.
-    """
-    import urllib.request
-    import urllib.error
-
-    payload = json.dumps({
-        "model": "gpt-4o-mini",
-        "messages": messages,
-        "tools": [{"type": "function", "function": t} for t in tools],
-        "tool_choice": "auto",
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read())
-
-
-def _call_llm_anthropic(
-    api_key: str,
-    messages: list[dict],
-    tools: list[dict],
-    system: str,
-) -> dict:
-    """
-    Call the Anthropic Messages API.
-
-    Returns a normalised response dict with keys "content" and "stop_reason".
-    """
-    import urllib.request
-
-    # Anthropic uses a separate system parameter
-    ant_tools = [
-        {
-            "name": t["name"],
-            "description": t["description"],
-            "input_schema": t["parameters"],
-        }
-        for t in tools
-    ]
-    payload = json.dumps({
-        "model": "claude-3-5-haiku-20241022",
-        "max_tokens": 1024,
-        "system": system,
-        "messages": [m for m in messages if m["role"] != "system"],
-        "tools": ant_tools,
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read())
-
-
-# ---------------------------------------------------------------------------
 # Tool dispatch
 # ---------------------------------------------------------------------------
 
@@ -248,7 +348,7 @@ def _dispatch_tool(name: str, arguments: dict) -> dict:
     Call the named tool with the given arguments.
 
     Returns the tool result dict.  Any exception is caught and returned as
-    {"error": str} so the LLM can report it rather than crashing the session.
+    {"error": str} so the model can report it rather than crashing the session.
     """
     fn = TOOL_REGISTRY.get(name)
     if fn is None:
@@ -272,7 +372,7 @@ async def run_turn(
     enqueue_fn=None,
 ) -> ChatResponse:
     """
-    Execute one user turn: send message to LLM, dispatch tool calls, screen.
+    Execute one user turn: send message to watsonx, dispatch tool calls, screen.
 
     Parameters
     ----------
@@ -290,27 +390,25 @@ async def run_turn(
     -------
     ChatResponse
     """
-    api_info = _detect_api_key()
+    config = _detect_watsonx_config()
     system_text = build_system_prompt(job_id)
     tool_calls_made: list[dict] = []
 
-    # Build message list for the LLM
+    # Build message list for watsonx (OpenAI-compatible format)
     messages: list[dict] = [{"role": "system", "content": system_text}]
     for h in history:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
     # -----------------------------------------------------------------------
-    # Offline degradation — no API key available
+    # Offline degradation — no watsonx credentials
     # -----------------------------------------------------------------------
-    if api_info is None:
-        # Run obvious tools implied by the message context for the summary
+    if config is None:
         if job_id:
-            # Always try to surface job summary
             from .tools import get_vetting_results, get_planet_params
-            report_record = _get_record_summary(job_id)
-            if report_record:
-                for tce_id in report_record.get("tce_ids", []):
+            record_summary = _get_record_summary(job_id)
+            if record_summary:
+                for tce_id in record_summary.get("tce_ids", []):
                     vet_r = get_vetting_results(job_id, tce_id)
                     params_r = get_planet_params(job_id, tce_id)
                     tool_calls_made.append({
@@ -335,117 +433,64 @@ async def run_turn(
         )
 
     # -----------------------------------------------------------------------
-    # Live LLM path — tool-call loop
+    # Live watsonx path — tool-call loop
     # -----------------------------------------------------------------------
-    provider, api_key = api_info
     final_text = ""
 
     for _iteration in range(_MAX_TOOL_ITERATIONS):
         try:
-            if provider == "openai":
-                response = _call_llm_openai(api_key, messages, TOOL_SCHEMAS)
-                choice = response["choices"][0]
-                msg = choice["message"]
-                finish_reason = choice.get("finish_reason", "stop")
+            response = _call_watsonx(config, messages, TOOL_SCHEMAS)
+            text, raw_tool_calls = _extract_watsonx_turn(response)
 
-                if finish_reason == "tool_calls" and msg.get("tool_calls"):
-                    # Append assistant message with tool_calls
-                    messages.append(msg)
-                    for tc in msg["tool_calls"]:
-                        fn_name = tc["function"]["name"]
-                        try:
-                            fn_args = json.loads(tc["function"]["arguments"])
-                        except json.JSONDecodeError:
-                            fn_args = {}
-                        result = _dispatch_tool(fn_name, fn_args)
-                        # Handle async refit
-                        if result.get("pending_enqueue") and enqueue_fn:
-                            from ..models import JobRequest
-                            new_req = JobRequest(**result["new_request"])
-                            new_job_id = await enqueue_fn(new_req)
-                            result = {
-                                "new_job_id": new_job_id,
-                                "status": "queued",
-                                "source_job_id": result["source_job_id"],
-                            }
-                        tool_calls_made.append({
-                            "tool": fn_name,
-                            "args": fn_args,
-                            "result": result,
-                        })
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": json.dumps(result),
-                        })
-                    continue  # call LLM again with tool results
+            if raw_tool_calls:
+                # Append the assistant message with tool_calls (watsonx uses
+                # the same OpenAI-compatible shape)
+                choice_msg = response["choices"][0]["message"]
+                messages.append(choice_msg)
 
-                # Text response
-                final_text = msg.get("content", "") or ""
-                break
+                for tc in raw_tool_calls:
+                    fn_name = tc["function"]["name"]
+                    try:
+                        fn_args = json.loads(tc["function"]["arguments"])
+                    except (json.JSONDecodeError, KeyError):
+                        fn_args = {}
 
-            elif provider == "anthropic":
-                response = _call_llm_anthropic(
-                    api_key, messages, TOOL_SCHEMAS, system_text
-                )
-                stop_reason = response.get("stop_reason", "end_turn")
-                content_blocks = response.get("content", [])
+                    result = _dispatch_tool(fn_name, fn_args)
 
-                if stop_reason == "tool_use":
-                    # Extract tool use blocks and text blocks
-                    tool_results = []
-                    for block in content_blocks:
-                        if block.get("type") == "tool_use":
-                            fn_name = block["name"]
-                            fn_args = block.get("input", {})
-                            result = _dispatch_tool(fn_name, fn_args)
-                            if result.get("pending_enqueue") and enqueue_fn:
-                                from ..models import JobRequest
-                                new_req = JobRequest(**result["new_request"])
-                                new_job_id = await enqueue_fn(new_req)
-                                result = {
-                                    "new_job_id": new_job_id,
-                                    "status": "queued",
-                                    "source_job_id": result["source_job_id"],
-                                }
-                            tool_calls_made.append({
-                                "tool": fn_name,
-                                "args": fn_args,
-                                "result": result,
-                            })
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": block["id"],
-                                "content": json.dumps(result),
-                            })
+                    # Handle async refit
+                    if result.get("pending_enqueue") and enqueue_fn:
+                        from ..models import JobRequest
+                        new_req = JobRequest(**result["new_request"])
+                        new_job_id = await enqueue_fn(new_req)
+                        result = {
+                            "new_job_id": new_job_id,
+                            "status": "queued",
+                            "source_job_id": result["source_job_id"],
+                        }
 
-                    # Append assistant turn and tool results
-                    messages.append({
-                        "role": "assistant",
-                        "content": content_blocks,
+                    tool_calls_made.append({
+                        "tool": fn_name,
+                        "args": fn_args,
+                        "result": result,
                     })
+
+                    # Inject tool result — watsonx /text/chat uses the same
+                    # role="tool" + tool_call_id format as OpenAI
                     messages.append({
-                        "role": "user",
-                        "content": tool_results,
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": json.dumps(result),
                     })
-                    continue
 
-                # Text response
-                for block in content_blocks:
-                    if block.get("type") == "text":
-                        final_text = block.get("text", "")
-                        break
-                break
+                continue  # call model again with tool results appended
 
-            else:
-                # Unknown provider — offline fallback
-                final_text = _offline_response(job_id, message, tool_calls_made)
-                break
+            # Text response — done
+            final_text = text
+            break
 
         except Exception as exc:  # noqa: BLE001
-            # LLM call failed — fall back to offline response
             final_text = (
-                f"[LLM call failed: {type(exc).__name__}: {exc}]\n\n"
+                f"[watsonx call failed: {type(exc).__name__}: {exc}]\n\n"
                 + _offline_response(job_id, message, tool_calls_made)
             )
             break
@@ -456,7 +501,7 @@ async def run_turn(
         )
 
     # -----------------------------------------------------------------------
-    # Guardian screening
+    # Guardian screening — always local, never routed through watsonx
     # -----------------------------------------------------------------------
     verdict = screen(final_text)
     return ChatResponse(
@@ -485,8 +530,6 @@ def _get_record_summary(job_id: str) -> dict | None:
         "tce_ids": [v.tce_id for v in record.report.vet],
     }
 
-
-import re as _re
 
 _SOURCE_RE = _re.compile(r"\[source:\s*[^\]]+\]")
 

@@ -113,8 +113,12 @@ def _make_minimal_stellar_params():
 # ---------------------------------------------------------------------------
 
 _HOSTED_API_KEYS = [
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
+    # IBM watsonx.ai — the only supported inference backend
+    "WATSONX_API_KEY",
+    "WATSONX_PROJECT_ID",
+    # Legacy keys retained to ensure they are also absent from the environment
+    # during the deletion test.  These providers are not supported but we
+    # confirm they produce no effect.
     "COHERE_API_KEY",
     "AZURE_OPENAI_API_KEY",
     "GOOGLE_API_KEY",

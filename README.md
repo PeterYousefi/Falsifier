@@ -430,20 +430,24 @@ All endpoint URLs are defined as named constants in
 [`falsifier/pipeline/ingest/endpoints.py`](falsifier/pipeline/ingest/endpoints.py)
 and imported from there — no inline URL strings appear in any other module.
 
-### The only optional credential is for the LLM chat layer
+### The only optional credentials are for the IBM watsonx.ai chat layer
 
-`POST /chat` uses an LLM provider for natural-language responses.
-If no key is set, the endpoint degrades gracefully to templated stage
-explanations (no LLM call is made, no error is returned).
+`POST /chat` uses IBM watsonx.ai (Granite) for natural-language responses.
+**No other inference provider is supported.**
+If no credentials are set, the endpoint degrades gracefully to templated
+stage explanations — no network call is made, no error is returned.
 
-| Environment variable | Provider | Required for chat? |
+| Environment variable | Purpose | Required? |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI | Optional |
-| `ANTHROPIC_API_KEY` | Anthropic | Optional |
-| `WATSONX_API_KEY` | IBM watsonx | Optional |
+| `WATSONX_API_KEY` | IBM Cloud IAM API key (exchanged for a bearer token) | Optional — offline fallback if absent |
+| `WATSONX_PROJECT_ID` | watsonx.ai project ID | Optional — offline fallback if absent |
+| `WATSONX_URL` | watsonx.ai instance URL | Optional — defaults to `https://us-south.ml.cloud.ibm.com` |
+| `WATSONX_MODEL_ID` | Model to use | Optional — defaults to `ibm/granite-3-3-8b-instruct` |
 
-Setting none of them is valid — the full detection pipeline (`POST /jobs`)
-runs without any LLM key.
+Setting none of them is valid. The full detection pipeline (`POST /jobs`,
+`GET /jobs/*`, `GET /provenance`) runs without any credential at all.
+
+Copy `.env.example` to `.env` and fill in your values. `.env` is git-ignored.
 
 ### Provenance: DOIs recorded per data source
 
