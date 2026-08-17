@@ -36,6 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .queue import init_queue, shutdown_queue
 from .routes.jobs import router as jobs_router
 from .routes.provenance import router as provenance_router
+from .routes.chat import router as chat_router
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +101,7 @@ def create_app() -> FastAPI:
 
     application.include_router(jobs_router)
     application.include_router(provenance_router)
+    application.include_router(chat_router)
 
     @application.get("/health", tags=["meta"])
     async def health() -> dict:

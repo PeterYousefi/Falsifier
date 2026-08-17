@@ -24,14 +24,14 @@ from falsifier.pipeline.contracts.manifest import (
 
 class TestUnitedArray:
     def test_to_quantity_returns_correct_unit(self):
-        import astropy.units as u
+        u = pytest.importorskip("astropy.units")
         ua = UnitedArray(values=[1.0, 2.0, 3.0], unit="day")
         q = ua.to_quantity()
         assert q.unit == u.day
         assert list(q.value) == pytest.approx([1.0, 2.0, 3.0])
 
     def test_from_quantity_roundtrip(self):
-        import astropy.units as u
+        u = pytest.importorskip("astropy.units")
         import numpy as np
         q = np.array([10.0, 20.0]) * u.ppm
         ua = UnitedArray.from_quantity(q)
@@ -39,7 +39,7 @@ class TestUnitedArray:
         assert ua.values == pytest.approx([10.0, 20.0])
 
     def test_to_quantity_from_quantity_roundtrip(self):
-        import astropy.units as u
+        pytest.importorskip("astropy.units")
         ua = UnitedArray(values=[3.14, 2.72], unit="electron / s")
         q = ua.to_quantity()
         ua2 = UnitedArray.from_quantity(q)
@@ -67,8 +67,8 @@ class TestUnitedArray:
         assert restored.unit == ua.unit
 
     def test_dimensionless_unit_accepted(self):
+        u = pytest.importorskip("astropy.units")
         ua = UnitedArray(values=[1.0], unit="dimensionless")
-        import astropy.units as u
         q = ua.to_quantity()
         assert q.unit == u.dimensionless_unscaled
 

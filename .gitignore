@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Node / frontend build
+node_modules/
+frontend/dist/
+frontend/.vite/
+.npm/
+
+# Secrets / keys
+.env
+.env.*
+*.pem
+*.key
+
+# Pipeline cache (generated — not reproducibility inputs)
+data/artifacts/batch/
+data/cache/
+*.npz
+
+# Model weights (too large for git — use DVC or LFS)
+*.pt
+*.bin
+*.safetensors
+models/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# mypy
+.mypy_cache/

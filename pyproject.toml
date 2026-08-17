@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "falsifier"
+version = "0.1.0-dev"
+description = "Disequilibrium screening and false-positive triage for exoplanet candidates."
+requires-python = ">=3.11"
+# Core runtime deps: pydantic + numpy only.
+# Everything else (astropy, lightkurve, xgboost, …) is optional so the
+# fast CI job can prove the contracts import with pydantic alone.
+dependencies = [
+    "pydantic>=2.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pydantic>=2.0",
+    "numpy>=1.24",
+    "pytest>=7.4",
+    "astropy>=5.3",
+    "lightkurve>=2.4",
+    "pandas>=2.0",
+    "fastapi>=0.111",
+    "httpx>=0.27",
+    "scikit-learn>=1.3",
+    "xgboost>=2.0",
+    "transformers>=4.40",
+]
+
+[tool.setuptools.packages.find]
+# Flat layout: falsifier/ lives directly under the repo root, not under src/.
+# No `where` key needed (defaults to ".").
+include = ["falsifier*"]

@@ -1,0 +1,51 @@
+{
+  "schema_version": "1",
+  "description": "Curated list of confirmed planets for the exploratory retrieve+screen batch pipeline. All entries must have committed atmospheric observations (e.g. HST WFC3 transmission spectra). This list is NOT a candidate list — every entry is a confirmed planet.",
+  "non_claims": [
+    "This module is exploratory and not validated against ground truth.",
+    "No exoplanet biosignature has ever been confirmed.",
+    "Source flux ratios are screening metrics only. A ratio > 1 does not constitute a biosignature claim."
+  ],
+  "targets": [
+    {
+      "planet_name": "TRAPPIST-1 b",
+      "planet_doi": "10.1038/nature21360",
+      "host_star_id": "TRAPPIST-1",
+      "muscles_key": "trappist-1",
+      "muscles_doi": "10.3847/0004-637X/820/2/89",
+      "muscles_analogue": "GJ1132",
+      "included_species": ["H2O", "CO2", "CH4"],
+      "metallicity_solar": 1.0,
+      "c_to_o_ratio": 0.55,
+      "n_live_points": 500,
+      "pressure_grid_levels": 60,
+      "chemistry_scheme": "equilibrium",
+      "tp_profile_source": "retrieval",
+      "include_clouds": false,
+      "uv_band_lower_nm": 115.0,
+      "uv_band_upper_nm": 320.0,
+      "force_rerun": false,
+      "notes": "Seed target. TRAPPIST-1 is an M8 dwarf; the nearest MUSCLES analogue is GJ1132 (M4.5). Atmospheric observations from Lustig-Yaeger et al. 2019."
+    },
+    {
+      "planet_name": "GJ 1132 b",
+      "planet_doi": "10.1038/nature14501",
+      "host_star_id": "GJ1132",
+      "muscles_key": "GJ1132",
+      "muscles_doi": "10.3847/0004-637X/820/2/89",
+      "muscles_analogue": null,
+      "included_species": ["H2O", "CO2", "CH4", "CO"],
+      "metallicity_solar": 0.5,
+      "c_to_o_ratio": 0.55,
+      "n_live_points": 500,
+      "pressure_grid_levels": 60,
+      "chemistry_scheme": "equilibrium",
+      "tp_profile_source": "retrieval",
+      "include_clouds": false,
+      "uv_band_lower_nm": 115.0,
+      "uv_band_upper_nm": 320.0,
+      "force_rerun": false,
+      "notes": "Seed target. GJ1132 has a direct MUSCLES HST spectrum (France et al. 2016). Transmission spectrum from Southworth et al. 2017, AJ 153, 191."
+    }
+  ]
+}

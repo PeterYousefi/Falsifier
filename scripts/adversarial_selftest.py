@@ -590,7 +590,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     run_id = str(uuid.uuid4())
-    started_at = datetime.datetime.utcnow()
+    started_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     rng = np.random.default_rng(seed=args.seed)
 
     # ------------------------------------------------------------------

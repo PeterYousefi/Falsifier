@@ -51,10 +51,13 @@ from .classify import (
     ClassifyOutput,
 )
 from .retrieve import (
+    BayesFactor,
+    PosteriorSummary,
     RetrievalConfig,
     RetrievedSpectrum,
     RetrieveInput,
     RetrieveOutput,
+    SpotModelResult,
 )
 from .disequilibrium import (
     ChemicalSpeciesProfile,
@@ -62,6 +65,8 @@ from .disequilibrium import (
     DisequilibriumOutput,
     FastChemConfig,
     GibbsMinimisationResult,
+    MUSCLESConfig,
+    SourceFluxRatio,
 )
 
 __all__ = [
@@ -95,16 +100,21 @@ __all__ = [
     "ClassifyInput",
     "ClassifyOutput",
     # retrieve  (JobStatus is deliberately absent — it belongs in the API layer)
+    "BayesFactor",
+    "PosteriorSummary",
     "RetrievalConfig",
     "RetrievedSpectrum",
     "RetrieveInput",
     "RetrieveOutput",
+    "SpotModelResult",
     # disequilibrium
     "ChemicalSpeciesProfile",
     "DisequilibriumInput",
     "DisequilibriumOutput",
     "FastChemConfig",
     "GibbsMinimisationResult",
+    "MUSCLESConfig",
+    "SourceFluxRatio",
 ]
 
 # ---------------------------------------------------------------------------

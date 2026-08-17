@@ -7,23 +7,35 @@ on:
     branches: ["**"]
 
 jobs:
-  # -------------------------------------------------------------------------
-  # Fast contract + policy tests — no network, no FITS files, no astropy
-  # -------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Fast contract + policy tests — no network, no FITS files, no astropy.
+  #
+  # Install order is deliberate:
+  #   1. pip install -e . --no-deps   installs falsifier into the venv using
+  #      only its declared core deps (pydantic, numpy).  --no-deps means pip
+  #      will NOT follow any transitive requirements — this proves the contracts
+  #      import correctly with pydantic alone and surfaces any accidental
+  #      module-scope astropy/lightkurve/etc. import immediately.
+  #   2. pip install pydantic pytest   satisfies the two deps that --no-deps
+  #      withheld.
+  #
+  # Do NOT add a PYTHONPATH env var or conftest.py sys.path hack to this job.
+  # ---------------------------------------------------------------------------
   test-fast:
     name: Fast tests (stdlib + pydantic only)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install package (no transitive deps)
         run: |
           pip install --upgrade pip
+          pip install -e . --no-deps
           pip install pydantic numpy pytest
 
       - name: Run fast test suite
@@ -33,56 +45,125 @@ jobs:
             --ignore=tests/test_known_eb_rejected.py \
             --ignore=tests/pipeline/stages/test_ingest.py \
             --ignore=tests/test_time_systems.py \
+            --ignore=tests/test_api_deletion.py \
+            --ignore=tests/test_chat_layer.py \
             -q
 
-  # -------------------------------------------------------------------------
-  # README claim verification — AGENTS.md Rule 5
-  # -------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # No-invented-numbers policy gate — stdlib only, no falsifier import needed.
+  # ---------------------------------------------------------------------------
+  test-no-invented-numbers:
+    name: No invented numbers (policy gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run no-invented-numbers gate
+        run: pytest tests/test_no_number_is_invented.py -v
+        # Skips build-output check when frontend/dist/ is absent.
+        # The frontend-build job below runs that check against the real bundle.
+
+  # ---------------------------------------------------------------------------
+  # Frontend build + bundle artifact check.
+  # ---------------------------------------------------------------------------
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+      - name: Set up Python (for bundle artifact check)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run no-invented-numbers gate against built bundle
+        run: |
+          pytest tests/test_no_number_is_invented.py::test_build_output_floats_are_backed_by_artifacts -v
+        # frontend/dist/ now exists so the build-output test is not skipped.
+
+  # ---------------------------------------------------------------------------
+  # README claim verification — AGENTS.md Rule 5.
+  # verify_readme.py uses only stdlib + re; no package install needed.
+  # ---------------------------------------------------------------------------
   verify-readme:
     name: Verify README claims
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      - name: Verify README claims
+      - name: Install package
         run: |
-          python scripts/verify_readme.py --strict
-        # Exit 1 on any drift between README and committed sources.
-        # Exit 2 on a block in README with no registry entry, or vice versa.
-        # This enforces AGENTS.md Rule 5:
-        #   "No claim appears in the README that is not regenerated by the
-        #    reproducibility script."
+          pip install --upgrade pip
+          pip install -e . --no-deps
+          pip install pydantic numpy
 
-  # -------------------------------------------------------------------------
-  # Full suite with astropy — requires astropy install
-  # -------------------------------------------------------------------------
+      - name: Verify README claims
+        run: python scripts/verify_readme.py --strict
+        # Exits 1 on any drift between README and committed sources.
+        # Exits 2 on a CLAIM block with no registry entry, or vice versa.
+        # Enforces AGENTS.md Rule 5: no claim in README unless regenerable.
+
+  # ---------------------------------------------------------------------------
+  # Full suite with astropy and the complete dev dependency set.
+  #
+  # pip install -e ".[dev]"  installs falsifier plus every optional dep
+  # declared in [project.optional-dependencies.dev] in pyproject.toml.
+  # ---------------------------------------------------------------------------
   test-full:
     name: Full tests (astropy required)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      - name: Install full dependencies
+      - name: Install package with full dev dependencies
         run: |
           pip install --upgrade pip
-          pip install pydantic numpy pytest astropy lightkurve
+          pip install -e ".[dev]"
 
       - name: Run full test suite (excluding golden integration tests)
         run: |
+          pip install pytest-asyncio
           pytest tests/ \
             --ignore=tests/test_kepler10_recovery.py \
             --ignore=tests/test_known_eb_rejected.py \
             -q
-        # Golden integration tests (kepler10_recovery, known_eb_rejected)
-        # require committed FITS files fetched by scripts/fetch_golden.py.
-        # They are excluded from CI until golden files are committed to the repo.
+        # Golden integration tests require committed FITS files from
+        # scripts/fetch_golden.py and are excluded until those are committed.
+        # test_chat_layer.py uses pytest-asyncio for async session tests.

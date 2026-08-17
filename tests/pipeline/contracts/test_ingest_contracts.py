@@ -237,7 +237,7 @@ class TestLightCurveSegment:
             )
 
     def test_to_quantity_on_time_field(self):
-        import astropy.units as u
+        pytest.importorskip("astropy.units")
         seg = _minimal_segment()
         q = seg.time.to_quantity()
         # bkjd is not a standard astropy unit — UnitedArray stores it as a string;

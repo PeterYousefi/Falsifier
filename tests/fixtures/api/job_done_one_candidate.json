@@ -1,0 +1,85 @@
+{
+  "__fixture_schema_version": "1",
+  "__description": "API fixture for a job with one TCE that passes vetting (candidate disposition). Every numeric value must trace to a committed pipeline artifact.",
+  "__artifact_sources": {
+    "report.vet[0].period_days": "falsifier/pipeline/contracts/search.py TCE.period — stub value",
+    "report.vet[0].depth_ppm": "falsifier/pipeline/contracts/search.py TCE.depth — stub value",
+    "report.classify[0].probability": "stub-0.0.0 model returns 0.5 — see falsifier/api/queue.py _stub_classify",
+    "report.classify[0].probability_uncertainty": "stub-0.0.0 model returns 0.5 — see falsifier/api/queue.py _stub_classify"
+  },
+  "job_id": "fixture-job-002",
+  "status": "done",
+  "request": {
+    "target_id": "KIC 11904151",
+    "mission": "Kepler",
+    "author": "Kepler",
+    "cadence": "long",
+    "sectors": null,
+    "run_classify": true
+  },
+  "pipeline_run_id": "fixture-run-002",
+  "started_at": "2025-07-14T00:01:00+00:00",
+  "finished_at": "2025-07-14T00:01:12+00:00",
+  "report": {
+    "job_id": "fixture-job-002",
+    "target_id": "KIC 11904151",
+    "pipeline_run_id": "fixture-run-002",
+    "started_at": "2025-07-14T00:01:00+00:00",
+    "finished_at": "2025-07-14T00:01:12+00:00",
+    "ingest": {
+      "host_star_id": "KIC 11904151",
+      "n_segments": 1,
+      "has_stellar_params": false,
+      "code_version": "0.1.0-dev",
+      "input_hash": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "wall_time_seconds": 0.0
+    },
+    "detrend": {
+      "host_star_id": "KIC 11904151",
+      "n_segments": 1,
+      "detrending_method": "biweight",
+      "wall_time_seconds": 0.0
+    },
+    "search": {
+      "host_star_id": "KIC 11904151",
+      "n_tces": 1,
+      "tls_version": "stub-0.0.0",
+      "wall_time_seconds": 0.0,
+      "tce_ids": ["KIC 11904151-00"]
+    },
+    "vet": [
+      {
+        "tce_id": "KIC 11904151-00",
+        "disposition": "candidate",
+        "triggering_test": null,
+        "triggering_reason": null,
+        "wall_time_seconds": 0.0,
+        "test_results": [
+          {"test_name": "odd_even_depth",          "outcome": "PASS", "metric_value": 0.0, "metric_unit": "dimensionless", "reason": "odd_even_depth passed (stub)"},
+          {"test_name": "secondary_eclipse",       "outcome": "PASS", "metric_value": 0.0, "metric_unit": "dimensionless", "reason": "secondary_eclipse passed (stub)"},
+          {"test_name": "centroid_shift",          "outcome": "PASS", "metric_value": 0.0, "metric_unit": "dimensionless", "reason": "centroid_shift passed (stub)"},
+          {"test_name": "transit_shape",           "outcome": "PASS", "metric_value": 0.0, "metric_unit": "dimensionless", "reason": "transit_shape passed (stub)"},
+          {"test_name": "stellar_density",         "outcome": "PASS", "metric_value": 0.0, "metric_unit": "dimensionless", "reason": "stellar_density passed (stub)"},
+          {"test_name": "gaia_ruwe",               "outcome": "PASS", "metric_value": 0.0, "metric_unit": "dimensionless", "reason": "gaia_ruwe passed (stub)"},
+          {"test_name": "systematics_coincidence", "outcome": "PASS", "metric_value": 0.0, "metric_unit": "dimensionless", "reason": "systematics_coincidence passed (stub)"}
+        ]
+      }
+    ],
+    "classify": [
+      {
+        "tce_id": "KIC 11904151-00",
+        "probability": 0.5,
+        "probability_uncertainty": 0.5,
+        "model_version": "stub-0.0.0"
+      }
+    ],
+    "non_claims": [
+      "This project is not a biosignature detector.",
+      "No exoplanet biosignature has ever been confirmed.",
+      "The classifier probability is a ranking score only, not a verdict.",
+      "Disposition is determined exclusively by the vet stage."
+    ]
+  },
+  "error": null,
+  "events": []
+}

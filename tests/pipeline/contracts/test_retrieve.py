@@ -97,16 +97,40 @@ def _retrieve_input(**kwargs) -> RetrieveInput:
     return RetrieveInput(**defaults)
 
 
+def _spot_model() -> "SpotModelResult":
+    from falsifier.pipeline.contracts.retrieve import SpotModelResult
+    return SpotModelResult(
+        spot_filling_factor=0.05,
+        spot_temperature_contrast=UnitedArray(values=[400.0], unit="K"),
+        log_evidence=-130.0,
+        log_evidence_uncertainty=0.3,
+        n_live_points=500,
+    )
+
+
 def _retrieve_output(**kwargs) -> RetrieveOutput:
+    from falsifier.pipeline.contracts.retrieve import BayesFactor
     inp = _retrieve_input()
+    ln_z_atm = kwargs.pop("log_evidence", -123.4)
+    ln_z_spot = -130.0
+    spot = kwargs.pop("spot_model", _spot_model())
+    bf = BayesFactor.from_evidences(
+        "petitRADTRANS_equilibrium", "unocculted_spot",
+        ln_z_atm, 0.3,
+        ln_z_spot, 0.3,
+    )
     defaults = dict(
         input=inp,
         tce_id="KIC 11904151-00",
         host_star_id="KIC 11904151",
         spectrum=_spectrum(),
+        posterior_summaries=[],
         posterior_artifact=_artifact_ref("retrieve"),
-        log_evidence=-123.4,
+        log_evidence=ln_z_atm,
         log_evidence_uncertainty=0.3,
+        spot_model=spot,
+        bayes_factor_atm_vs_spot=bf,
+        sampler="dynesty",
         wall_time_cpu_hours=2.5,
         manifest=_stage_manifest(),
         artifact=_artifact_ref("retrieve"),

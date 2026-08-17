@@ -1,0 +1,43 @@
+{
+  "__fixture_schema_version": "1",
+  "__description": "API fixture for GET /provenance. Every numeric value (golden_manifest_entry_count, row_count) must trace to a committed artifact.",
+  "__artifact_sources": {
+    "golden_manifest_entry_count": "data/golden/MANIFEST.json golden_set length — 2 entries as of 2025-07-14",
+    "data_versions[].row_count": "data/golden/*.provenance.json row_count field — null until FITS files are committed"
+  },
+  "falsifier_version": "0.1.0-dev",
+  "data_versions": [
+    {
+      "name": "kepler10_q3_long.provenance",
+      "source_doi": "10.1088/0004-637X/729/1/27",
+      "access_date": "2025-07-14",
+      "row_count": null,
+      "description": "kepler10_q3_long.provenance"
+    },
+    {
+      "name": "kic6965293_q3_long.provenance",
+      "source_doi": "10.1088/0004-6256/141/3/83",
+      "access_date": "2025-07-14",
+      "row_count": null,
+      "description": "kic6965293_q3_long.provenance"
+    }
+  ],
+  "modules": [
+    {"module": "falsifier.pipeline.stages.ingest",          "status": "wired",        "note": "run_ingest is called by the job queue for every detection run."},
+    {"module": "falsifier.pipeline.stages.detrend",         "status": "aspirational", "note": "Stage body not yet implemented; queue uses a normalisation stub."},
+    {"module": "falsifier.pipeline.stages.search",          "status": "aspirational", "note": "Stage body not yet implemented; queue uses an empty-TCE stub."},
+    {"module": "falsifier.pipeline.stages.vet",             "status": "aspirational", "note": "Stage body not yet implemented; queue uses an all-PASS stub."},
+    {"module": "falsifier.pipeline.stages.classify",        "status": "wired",        "note": "run_classify is implemented; used when xgboost and a trained model artifact are present.  Falls back to a stub when either is absent."},
+    {"module": "falsifier.pipeline.contracts.retrieve",     "status": "aspirational", "note": "Contract written; run_retrieve not yet implemented."},
+    {"module": "falsifier.pipeline.contracts.disequilibrium","status": "aspirational", "note": "Contract written; run_disequilibrium not yet implemented.  This stage is not a biosignature detector."}
+  ],
+  "non_claims": [
+    "This project is not a biosignature detector.",
+    "No exoplanet biosignature has ever been confirmed.",
+    "The classifier probability is a ranking score only — not a verdict.",
+    "Disposition is determined exclusively by the vet stage, not by the classifier.",
+    "No detection rate, false-positive rate, or model score is reported here unless it is produced by scripts/reproduce.sh.",
+    "The output of this pipeline is a triage list, not a detection claim."
+  ],
+  "golden_manifest_entry_count": 2
+}

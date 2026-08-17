@@ -1,0 +1,62 @@
+{
+  "__fixture_schema_version": "1",
+  "__description": "Canonical API response fixture for GET /jobs/{id}. Every numeric value in this fixture must appear verbatim in a committed pipeline artifact. This file is the ground truth for test_no_number_is_invented.py.",
+  "__artifact_sources": {
+    "ingest.wall_time_seconds": "generated at runtime — not a scientific value",
+    "search.tls_version": "transitleastsquares.__version__ at runtime",
+    "ingest.code_version": "falsifier.__version__ = data/golden/MANIFEST.json schema_version chain",
+    "vet[].wall_time_seconds": "generated at runtime — not a scientific value",
+    "classify[].probability": "classifier output — not committed until model is trained"
+  },
+  "job_id": "fixture-job-001",
+  "status": "done",
+  "request": {
+    "target_id": "KIC 11904151",
+    "mission": "Kepler",
+    "author": "Kepler",
+    "cadence": "long",
+    "sectors": [3],
+    "run_classify": true
+  },
+  "pipeline_run_id": "fixture-run-001",
+  "started_at": "2025-07-14T00:00:00+00:00",
+  "finished_at": "2025-07-14T00:00:10+00:00",
+  "report": {
+    "job_id": "fixture-job-001",
+    "target_id": "KIC 11904151",
+    "pipeline_run_id": "fixture-run-001",
+    "started_at": "2025-07-14T00:00:00+00:00",
+    "finished_at": "2025-07-14T00:00:10+00:00",
+    "ingest": {
+      "host_star_id": "KIC 11904151",
+      "n_segments": 1,
+      "has_stellar_params": false,
+      "code_version": "0.1.0-dev",
+      "input_hash": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "wall_time_seconds": 0.0
+    },
+    "detrend": {
+      "host_star_id": "KIC 11904151",
+      "n_segments": 1,
+      "detrending_method": "biweight",
+      "wall_time_seconds": 0.0
+    },
+    "search": {
+      "host_star_id": "KIC 11904151",
+      "n_tces": 0,
+      "tls_version": "stub-0.0.0",
+      "wall_time_seconds": 0.0,
+      "tce_ids": []
+    },
+    "vet": [],
+    "classify": [],
+    "non_claims": [
+      "This project is not a biosignature detector.",
+      "No exoplanet biosignature has ever been confirmed.",
+      "The classifier probability is a ranking score only, not a verdict.",
+      "Disposition is determined exclusively by the vet stage."
+    ]
+  },
+  "error": null,
+  "events": []
+}

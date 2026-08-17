@@ -85,6 +85,88 @@ def _regen_falsifier_version() -> str:
     return f"Pipeline version: `{version}`"
 
 
+def _regen_n_pipeline_stages() -> str:
+    """Count wired stage names from the queue's _run_job sequence in queue.py."""
+    queue_path = REPO_ROOT / "falsifier" / "api" / "queue.py"
+    text = queue_path.read_text(encoding="utf-8")
+    # Count _run_stage calls — each corresponds to one pipeline stage
+    stages = re.findall(r'await _run_stage\(', text)
+    n = len(stages)
+    return f"Pipeline stages wired in API queue: {n}"
+
+
+def _regen_injection_sde_threshold() -> str:
+    """Read SDE_THRESHOLD from scripts/injection_recovery.py."""
+    script_path = REPO_ROOT / "scripts" / "injection_recovery.py"
+    text = script_path.read_text(encoding="utf-8")
+    m = re.search(r'^SDE_THRESHOLD\s*=\s*([0-9.]+)', text, re.MULTILINE)
+    if not m:
+        raise ValueError("Could not find SDE_THRESHOLD in injection_recovery.py")
+    return f"Injection recovery SDE threshold: {float(m.group(1)):.1f}"
+
+
+def _regen_injection_period_match_pct() -> str:
+    """Read PERIOD_MATCH_TOLERANCE from scripts/injection_recovery.py as a percentage."""
+    script_path = REPO_ROOT / "scripts" / "injection_recovery.py"
+    text = script_path.read_text(encoding="utf-8")
+    m = re.search(r'^PERIOD_MATCH_TOLERANCE\s*=\s*([0-9.]+)', text, re.MULTILINE)
+    if not m:
+        raise ValueError("Could not find PERIOD_MATCH_TOLERANCE in injection_recovery.py")
+    pct = float(m.group(1)) * 100.0
+    return f"Period-match tolerance for recovery: {pct:.0f}%"
+
+
+def _regen_adversarial_sde_threshold() -> str:
+    """Read SDE_THRESHOLD from scripts/adversarial_selftest.py."""
+    script_path = REPO_ROOT / "scripts" / "adversarial_selftest.py"
+    text = script_path.read_text(encoding="utf-8")
+    m = re.search(r'^SDE_THRESHOLD\s*=\s*([0-9.]+)', text, re.MULTILINE)
+    if not m:
+        raise ValueError("Could not find SDE_THRESHOLD in adversarial_selftest.py")
+    return f"Adversarial false-alarm SDE threshold: {float(m.group(1)):.1f}"
+
+
+def _regen_adversarial_n_categories() -> str:
+    """Count CATEGORIES list in scripts/adversarial_selftest.py."""
+    script_path = REPO_ROOT / "scripts" / "adversarial_selftest.py"
+    text = script_path.read_text(encoding="utf-8")
+    m = re.search(
+        r'^CATEGORIES\s*=\s*\[(.*?)\]',
+        text,
+        re.DOTALL | re.MULTILINE,
+    )
+    if not m:
+        raise ValueError("Could not find CATEGORIES in adversarial_selftest.py")
+    # Strip inline comments before splitting on commas
+    block = re.sub(r'#[^\n]*', '', m.group(1))
+    entries = [e.strip().strip('"').strip("'") for e in block.split(",") if e.strip()]
+    n = len(entries)
+    return f"Adversarial null-data categories: {n}"
+
+
+def _regen_n_curated_targets() -> str:
+    """Count entries in data/targets/curated_targets.json."""
+    path = REPO_ROOT / "data" / "targets" / "curated_targets.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing: {path}")
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    n = len(data.get("targets", []))
+    return f"Curated exploratory targets: {n}"
+
+
+def _regen_time_roundtrip_tolerance() -> str:
+    """Read ROUND_TRIP_TOLERANCE_DAYS from tests/test_time_systems.py."""
+    test_path = REPO_ROOT / "tests" / "test_time_systems.py"
+    text = test_path.read_text(encoding="utf-8")
+    m = re.search(r'ROUND_TRIP_TOLERANCE_DAYS\s*=\s*([0-9eE+\-\.]+)', text)
+    if not m:
+        raise ValueError("Could not find ROUND_TRIP_TOLERANCE_DAYS in test_time_systems.py")
+    tol = float(m.group(1))
+    us = tol * 86400.0 * 1e6
+    return f"Time round-trip tolerance: {tol:.0e} days ({us:.1f} µs)"
+
+
 def _regen_n_golden_targets() -> str:
     """Count entries in data/golden/MANIFEST.json."""
     manifest_path = REPO_ROOT / "data" / "golden" / "MANIFEST.json"
@@ -160,12 +242,28 @@ def _regen_eb_depth_ratio() -> str:
 # ---------------------------------------------------------------------------
 
 CLAIM_REGISTRY: dict[str, Callable[[], str]] = {
+    # Pipeline identity
     "falsifier_version": _regen_falsifier_version,
+    "n_pipeline_stages": _regen_n_pipeline_stages,
+    # Golden targets
     "n_golden_targets": _regen_n_golden_targets,
+    # Vetting
     "n_vetting_tests": _regen_n_vetting_tests,
+    # Period recovery
     "period_tolerance_days": _regen_period_tolerance_days,
     "kepler10b_period_days": _regen_kepler10b_period_days,
+    # EB rejection
     "eb_depth_ratio": _regen_eb_depth_ratio,
+    # Injection recovery methodology
+    "injection_sde_threshold": _regen_injection_sde_threshold,
+    "injection_period_match_pct": _regen_injection_period_match_pct,
+    # Adversarial false-alarm rate methodology
+    "adversarial_sde_threshold": _regen_adversarial_sde_threshold,
+    "adversarial_n_categories": _regen_adversarial_n_categories,
+    # Exploratory module
+    "n_curated_targets": _regen_n_curated_targets,
+    # Time-system integrity
+    "time_roundtrip_tolerance": _regen_time_roundtrip_tolerance,
 }
 
 

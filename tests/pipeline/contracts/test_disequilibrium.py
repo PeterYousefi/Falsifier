@@ -104,6 +104,16 @@ def _gibbs_result(**kwargs) -> GibbsMinimisationResult:
     return GibbsMinimisationResult(**defaults)
 
 
+def _muscles_config() -> "MUSCLESConfig":
+    from falsifier.pipeline.contracts.disequilibrium import MUSCLESConfig
+    return MUSCLESConfig(
+        spectral_type_key="GJ1132",
+        muscles_doi="10.3847/0004-637X/820/2/89",
+        uv_band_lower_nm=115.0,
+        uv_band_upper_nm=320.0,
+    )
+
+
 def _disq_input(species: list[str] | None = None, **kwargs) -> DisequilibriumInput:
     sp = species or ["H2O", "CO2", "CH4"]
     defaults = dict(
@@ -111,22 +121,38 @@ def _disq_input(species: list[str] | None = None, **kwargs) -> DisequilibriumInp
         planet_name="TRAPPIST-1 b",
         planet_doi="10.1038/s41586-021-03394-8",
         fastchem_config=_fastchem_config(species=sp),
+        muscles_config=_muscles_config(),
         pipeline_run_id=_run_id(),
     )
     defaults.update(kwargs)
     return DisequilibriumInput(**defaults)
 
 
+def _source_flux_ratio(species: str) -> "SourceFluxRatio":
+    from falsifier.pipeline.contracts.disequilibrium import SourceFluxRatio
+    return SourceFluxRatio(
+        species=species,
+        required_source_flux=UnitedArray(values=[2.0], unit="W / m2"),
+        max_plausible_abiotic_flux=UnitedArray(values=[1.0], unit="W / m2"),
+        ratio=2.0,
+        ratio_uncertainty=0.1,
+        muscles_spectrum_doi="10.3847/0004-637X/820/2/89",
+        vulcan_version="2.0",
+    )
+
+
 def _disq_output(species: list[str] | None = None, **kwargs) -> DisequilibriumOutput:
     sp = species or ["H2O", "CO2", "CH4"]
     inp = _disq_input(species=sp)
     profiles = [_species_profile(s) for s in sp]
+    source_flux_ratios = [_source_flux_ratio(s) for s in sp]
     defaults = dict(
         input=inp,
         planet_name="TRAPPIST-1 b",
         host_star_id="TRAPPIST-1",
         species_profiles=profiles,
         gibbs_results=[_gibbs_result()],
+        source_flux_ratios=source_flux_ratios,
         overall_disequilibrium_score=0.1,
         manifest=_stage_manifest(),
         artifact=_artifact_ref("disequilibrium"),
@@ -272,6 +298,8 @@ class TestDisequilibriumOutput:
     def test_rejects_species_count_mismatch(self):
         """species_profiles must have same length as included_species."""
         inp = _disq_input(species=["H2O", "CO2", "CH4"])
+        # Provide matching source_flux_ratios for the 1 species_profile so
+        # Pydantic reaches the cross-count validator (not a missing-field error)
         with pytest.raises(ValidationError, match="species_profiles has"):
             DisequilibriumOutput(
                 input=inp,
@@ -279,6 +307,7 @@ class TestDisequilibriumOutput:
                 host_star_id="TRAPPIST-1",
                 species_profiles=[_species_profile("H2O")],  # only 1, need 3
                 gibbs_results=[_gibbs_result()],
+                source_flux_ratios=[_source_flux_ratio("H2O")],  # matches species_profiles
                 overall_disequilibrium_score=0.1,
                 manifest=_stage_manifest(),
                 artifact=_artifact_ref("disequilibrium"),
