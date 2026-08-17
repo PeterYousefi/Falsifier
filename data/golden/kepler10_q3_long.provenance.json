@@ -12,10 +12,10 @@
   "time_reference": "BJD - 2454833.0",
   "flux_column": "SAP_FLUX",
   "flux_unit": "e-/s",
-  "access_date": "2025-07-14",
-  "sha256": "__FILL_AFTER_FETCH__",
-  "row_count_expected": null,
+  "access_date": "2026-08-17",
+  "sha256": "992678def93ad7a2030b5d08b55b2343546cbb0c27cecdc8e6025a3174885181",
+  "row_count_expected": 4140,
   "reference_doi": "10.1088/0004-637X/729/1/27",
   "reference_citation": "Batalha et al. 2011, ApJ 729, 27",
-  "notes": "Golden file for period recovery regression. Published period 0.83749070 +/- 0.00000020 days."
+  "notes": "Golden file for period recovery regression. Published Kepler-10b period 0.83749070 +/- 0.00000020 days."
 }

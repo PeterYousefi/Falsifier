@@ -87,8 +87,16 @@ def _fetch_entry(entry: dict, force: bool) -> bool:
 
     print(f"  Searching MAST for {entry['kic_id']}, Q{entry['quarter']}, {entry['cadence']} ...")
 
-    # Pin the exact product ID.  lightkurve's search returns a collection;
-    # we filter to the exact mast_product_id so no default is used.
+    # Pin the exact MAST product by specifying every disambiguating dimension.
+    # lightkurve >= 2.4 exposes the search result table as results.table (an
+    # astropy Table).  We filter the table rows to the exact mast_product_id
+    # so no lightkurve default selects a different product version.
+    #
+    # The four arguments below are all required — no default may remain:
+    #   mission  = "Kepler"  (not K2 or TESS)
+    #   quarter  = int       (not None — would fetch all quarters)
+    #   cadence  = "long"    (not short or fast)
+    #   author   = "Kepler"  (not a community pipeline reprocessing)
     results = lk.search_lightcurve(
         entry["kic_id"],
         mission="Kepler",
@@ -101,22 +109,50 @@ def _fetch_entry(entry: dict, force: bool) -> bool:
         print(f"  ERROR: No MAST results for {entry['kic_id']} Q{entry['quarter']}.", file=sys.stderr)
         return False
 
-    # Filter to the pinned product ID
+    # Filter the result table to rows whose #product_filename contains the
+    # pinned product ID.  lightkurve stores the MAST product filename in the
+    # "productFilename" column of results.table.
     pinned_id = entry["mast_product_id"]
-    matched = [r for r in results if pinned_id in str(r.table["productFilename"][0]
-                                                        if hasattr(r, "table") else r)]
+    tbl = results.table
+    # "productFilename" column contains the base name; "#" prefix may or may not
+    # be present depending on lightkurve version.  Match as substring.
+    if "#product_filename" in tbl.colnames:
+        fn_col = tbl["#product_filename"]
+    elif "productFilename" in tbl.colnames:
+        fn_col = tbl["productFilename"]
+    elif "description" in tbl.colnames:
+        fn_col = tbl["description"]
+    else:
+        fn_col = None
 
-    if not matched:
-        # Fallback: use first result but warn loudly
+    matched_indices = []
+    if fn_col is not None:
+        for i, val in enumerate(fn_col):
+            if pinned_id in str(val):
+                matched_indices.append(i)
+
+    if not matched_indices:
+        # Print all available filenames so the operator can update MANIFEST.json
+        available = []
+        for col in ("#product_filename", "productFilename", "description", "target_name"):
+            if col in tbl.colnames:
+                available = list(tbl[col])
+                break
         print(
-            f"  WARNING: Could not match pinned product ID '{pinned_id}' in results.\n"
-            f"  Available: {[str(r) for r in results]}\n"
-            f"  Falling back to first result.  Verify the mast_product_id in MANIFEST.json.",
+            f"  ERROR: Pinned product ID '{pinned_id}' not found in MAST results.\n"
+            f"  Available identifiers ({len(results)} rows): {available}\n"
+            f"  Update mast_product_id in data/golden/MANIFEST.json to match one of\n"
+            f"  the above, then re-run.",
             file=sys.stderr,
         )
-        lc = results[0].download()
-    else:
-        lc = results[matched[0] if isinstance(matched[0], int) else 0].download()
+        return False
+
+    # Use the first (and normally only) matching row
+    idx = matched_indices[0]
+    print(f"  Pinned match: index {idx} of {len(results)} results")
+    lc_collection = results[idx].download()
+    # results[idx].download() returns a LightCurve (or None on failure)
+    lc = lc_collection
 
     if lc is None:
         print(f"  ERROR: Download returned None for {entry['kic_id']}.", file=sys.stderr)

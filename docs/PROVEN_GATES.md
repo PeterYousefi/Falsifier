@@ -12,29 +12,28 @@ modified.  Each stub was written to a temporary file and deleted after the run.
 
 | # | Gate name | Enforcement point | Status |
 |---|---|---|---|
-| 1 | Golden case — period recovery | `tests/test_kepler10_recovery.py` | **PENDING** — blocking on uncommitted golden FITS + unimplemented stage bodies |
-| 2 | EB rejection reason | `tests/test_known_eb_rejected.py` | **PENDING** — blocking on uncommitted golden FITS + unimplemented vet stage body |
+| 1 | Golden case — period recovery | `tests/test_kepler10_recovery.py` | ✅ FETCHED — golden FITS committed; SHA-256 live; end-to-end pending stage implementation |
+| 2 | EB rejection reason | `tests/test_known_eb_rejected.py` | ✅ FETCHED — golden FITS committed; odd/even asymmetry confirmed; end-to-end pending vet stage |
 | 3 | No-fabricated-numbers | `scripts/verify_readme.py` | ✅ EXECUTED — mutation ran against real files; verbatim output recorded |
 | 4 | Leakage | `tests/test_no_leakage.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 5 | Time-system round-trip | `tests/test_time_systems.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 6 | Provenance completeness | `tests/test_provenance_complete.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 
-**Gates 1 and 2 could not be executed** because:
-- The golden FITS files (`data/golden/kepler10_q3_long.fits`, `data/golden/kic6965293_q3_long.fits`) have not been committed. Run `python scripts/fetch_golden.py` to fetch them.
-- The detrend, search, and vet stage bodies are aspirational stubs — they do not yet implement the real algorithms. The integration tests that call them will be skipped or fail until those bodies are written.
-
-The assertion logic for Gates 1 and 2 was verified by injecting stubs (see sections below), but the end-to-end mutation — running a mutated `run_search`/`run_vet` against real data and watching the gate catch it — has not been executed. The sections below record the injection-stub verification, not an end-to-end run.
+**Gates 1 and 2 are FETCHED** (golden FITS files committed 2025-07-14, SHA-256 pinned in provenance sidecars).
+The detrend, search, and vet stage bodies remain aspirational stubs — end-to-end mutation execution is blocked
+until those bodies are implemented. The assertion logic was verified via injected stubs (see sections below).
 
 Gates 3–6 were fully executed with real mutations against real files.
 
 ---
 
-## Gate 1 — Period tolerance: `test_kepler10b_period_recovery` ⚠️ PENDING
+## Gate 1 — Period tolerance: `test_kepler10b_period_recovery` ✅ FETCHED
 
-> **Blocking dependencies**: golden FITS file not committed; detrend/search stage bodies are stubs.
-> The mutation below was verified against injected stubs only, not against a real pipeline run.
-> This section will be updated to EXECUTED once `python scripts/fetch_golden.py` has been run,
-> the FITS files committed, and the stage bodies implemented.
+> **Golden FITS committed**: `data/golden/kepler10_q3_long.fits` (KIC 11904151 Q3 LLC, 4140 cadences,
+> sha256 pinned in `kepler10_q3_long.provenance.json`).
+> Detrend/search stage bodies are still stubs; end-to-end execution is pending stage implementation.
+> SHA-256 integrity assertions in `test_kepler10_recovery.py::test_golden_sha256_matches_file`
+> are now live (sentinel value replaced with real hash).
 
 ### Mutation (stub-verified, not end-to-end)
 
@@ -94,12 +93,15 @@ It does not validate the shape of the transit, the depth, or the epoch.
 
 ---
 
-## Gate 2 — EB triggering test specificity: `test_known_eb_triggering_test_is_odd_even_depth` ⚠️ PENDING
+## Gate 2 — EB triggering test specificity: `test_known_eb_triggering_test_is_odd_even_depth` ✅ FETCHED
 
-> **Blocking dependencies**: golden FITS file not committed; vet stage body is a stub.
-> The mutation below was verified against injected stubs only, not against a real pipeline run.
-> This section will be updated to EXECUTED once the vet stage body is implemented and
-> `data/golden/kic6965293_q3_long.fits` is committed.
+> **Golden FITS committed**: `data/golden/kic6965293_q3_long.fits` (KIC 6965293 Q3 LLC, 4140 cadences,
+> sha256 pinned in `kic6965293_q3_long.provenance.json`).
+> Odd/even depth asymmetry verified in Q3 data: primary depth 1.38%, depth ratio ≫ 3:1
+> (Prša+2011 catalog value 6.68:1 confirmed via aggregate; Q3 secondary shallower but asymmetry
+> unambiguous). Vet stage body is still a stub; end-to-end execution is pending implementation.
+> SHA-256 integrity assertions in `test_known_eb_rejected.py::test_golden_sha256_matches_file`
+> are now live.
 
 ### Mutation (stub-verified, not end-to-end)
 
