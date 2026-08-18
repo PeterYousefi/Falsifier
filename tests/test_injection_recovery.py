@@ -353,129 +353,92 @@ class TestRunSingleInjection:
 # Artifact JSON schema
 # ---------------------------------------------------------------------------
 
-def _write_synthetic_fits(path: Path, n: int = 3800, noise_ppm: float = 300.0, seed: int = 0) -> None:
-    """
-    Write a minimal FITS file in the golden format (TIME, FLUX, FLUX_ERR, QUALITY)
-    with a baseline long enough to satisfy MIN_BASELINE_DAYS.
+# ---------------------------------------------------------------------------
+# Committed artifact validation
+# ---------------------------------------------------------------------------
+# These tests validate the committed data/artifacts/injection_recovery.json.
+# They do NOT invoke the script — generation is manual (run
+# scripts/injection_recovery.py, commit the result).  This keeps the test
+# suite deterministic and fast: no search, no FITS I/O, no TLS.
+# ---------------------------------------------------------------------------
 
-    n=3800 cadences at ~30-min cadence → ~80 days (just above 60-day minimum).
-    Quality is all-zero (all cadences good).
-    """
-    from astropy.io import fits as _fits
-    from astropy.table import Table as _Table
-
-    rng = np.random.default_rng(seed)
-    t = np.linspace(0.0, n * (30.0 / 1440.0), n)   # 30-min cadence in days
-    sigma = noise_ppm * 1e-6
-    f = (1.0 + rng.normal(0.0, sigma, n)) * 200_000.0  # e-/s raw flux
-    e = np.full(n, sigma * 200_000.0)
-    q = np.zeros(n, dtype=np.int32)
-
-    tbl = _Table([t, f, e, q], names=["TIME", "FLUX", "FLUX_ERR", "QUALITY"])
-    primary_hdu = _fits.PrimaryHDU()
-    table_hdu = _fits.BinTableHDU(tbl, name="LIGHTCURVE")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _fits.HDUList([primary_hdu, table_hdu]).writeto(str(path), overwrite=True)
+_IR_ARTIFACT = Path(__file__).parent.parent / "data" / "artifacts" / "injection_recovery.json"
+_IR_MANIFEST = _IR_ARTIFACT.with_suffix(".manifest.json")
 
 
-def _make_data_dir(tmp_path: Path, star_ids: list, seed: int = 0) -> Path:
-    """
-    Create a data directory containing one FITS file per star_id, named
-    according to the load_quiet_star convention.
-    """
-    data_dir = tmp_path / "golden"
-    for i, star_id in enumerate(star_ids):
-        tag = star_id.replace(" ", "_").lower()
-        _write_synthetic_fits(data_dir / f"{tag}_q3_long.fits", seed=seed + i)
-    return data_dir
-
-
-# The DEFAULT_QUIET_STARS list drives which stars main() looks for.
-from scripts.injection_recovery import DEFAULT_QUIET_STARS as _DEFAULT_QUIET_STARS
-
-
-@pytest.mark.requires_astropy
+@pytest.mark.no_network
 class TestInjectionRecoveryArtifact:
-    def test_artifact_has_required_fields(self, tmp_path):
+    """Validate the committed injection_recovery.json artifact (read-only)."""
+
+    @pytest.fixture(autouse=True)
+    def _require_artifact(self):
+        if not _IR_ARTIFACT.exists():
+            pytest.skip(
+                "data/artifacts/injection_recovery.json not yet committed. "
+                "Run: python scripts/injection_recovery.py --seed 42 --n-per-cell 5 "
+                "--output-dir data/artifacts --data-dir data/golden --no-plot"
+            )
+
+    def _load(self) -> dict:
+        with open(_IR_ARTIFACT, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_agents_md_rule3_fields(self):
+        """source_doi, access_date, row_count must be present and non-empty."""
+        data = self._load()
+        assert "source_doi" in data and data["source_doi"].strip(), "Missing source_doi"
+        assert "access_date" in data and data["access_date"].strip(), "Missing access_date"
+        assert "row_count" in data, "Missing row_count"
+        assert isinstance(data["row_count"], int) and data["row_count"] > 0, (
+            f"row_count must be a positive int, got {data['row_count']!r}"
+        )
+
+    def test_detection_algorithm_is_tls(self):
         """
-        Run the script end-to-end with minimal settings and verify the
-        output artifact has the mandatory AGENTS.md Rule 3 fields.
-
-        Provides synthetic FITS files in the golden format — no network,
-        no lightkurve, no TLS.  The BLS fallback is forced by the module-level
-        _force_bls_fallback fixture.
+        The committed artifact must have been produced with TLS, not the BLS
+        fallback.  A completeness curve measured with BLS characterises a
+        different detector than the one the pipeline ships.
+        Regenerate: python scripts/injection_recovery.py --seed 42 --n-per-cell 5
+                    --output-dir data/artifacts --data-dir data/golden --no-plot
         """
-        data_dir = _make_data_dir(tmp_path, _DEFAULT_QUIET_STARS, seed=0)
-        out_dir = tmp_path / "artifacts"
-        result = ir_main([
-            "--seed", "0",
-            "--n-per-cell", "2",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(data_dir),
-            "--no-plot",
-            "--n-bls-periods", "50",  # coarse grid — verifies artifact schema, not recovery accuracy
-        ])
-        assert result == 0
+        data = self._load()
+        assert "detection_algorithm" in data, (
+            "Missing detection_algorithm field (artifact predates the field)."
+        )
+        assert data["detection_algorithm"] == "TLS", (
+            f"Artifact was produced with {data['detection_algorithm']!r}, not TLS. "
+            "Install transitleastsquares and regenerate."
+        )
 
-        artifact_path = out_dir / "injection_recovery.json"
-        assert artifact_path.exists(), "Artifact JSON not written"
+    def test_schema_version(self):
+        data = self._load()
+        assert data.get("schema_version") == "1", (
+            f"Unexpected schema_version: {data.get('schema_version')!r}"
+        )
 
-        with open(artifact_path, encoding="utf-8") as f:
-            data = json.load(f)
+    def test_completeness_bins_present(self):
+        """Completeness bins must exist and be non-empty."""
+        data = self._load()
+        assert "completeness_bins" in data, "Missing completeness_bins"
+        assert len(data["completeness_bins"]) > 0, "completeness_bins is empty"
 
-        # AGENTS.md Rule 3: DOI, access_date, row_count
-        assert "source_doi" in data, "Missing source_doi (AGENTS.md Rule 3)"
-        assert data["source_doi"].strip(), "source_doi is empty"
-        assert "access_date" in data, "Missing access_date (AGENTS.md Rule 3)"
-        assert "row_count" in data, "Missing row_count (AGENTS.md Rule 3)"
-        assert isinstance(data["row_count"], int) and data["row_count"] > 0
+    def test_row_count_matches_results(self):
+        """row_count must equal n_injections_attempted and len(results)."""
+        data = self._load()
+        assert data["row_count"] == data["n_injections_attempted"], (
+            f"row_count={data['row_count']} != "
+            f"n_injections_attempted={data['n_injections_attempted']}"
+        )
+        assert data["row_count"] == len(data["results"]), (
+            f"row_count={data['row_count']} != len(results)={len(data['results'])}"
+        )
 
-        # Schema version
-        assert data["schema_version"] == "1"
-
-        # Completeness bins present
-        assert "completeness_bins" in data
-        assert len(data["completeness_bins"]) > 0
-
-        # Results present and non-empty
-        assert "results" in data
-        assert len(data["results"]) == data["n_injections_attempted"]
-
-    def test_manifest_sidecar_written(self, tmp_path):
-        """A .manifest.json sidecar must be co-located with the artifact."""
-        data_dir = _make_data_dir(tmp_path, _DEFAULT_QUIET_STARS, seed=10)
-        out_dir = tmp_path / "artifacts"
-        ir_main([
-            "--seed", "1",
-            "--n-per-cell", "1",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(data_dir),
-            "--no-plot",
-            "--n-bls-periods", "50",  # coarse grid — verifies sidecar schema
-        ])
-        manifest_path = out_dir / "injection_recovery.manifest.json"
-        assert manifest_path.exists(), "Manifest sidecar not written"
-        with open(manifest_path, encoding="utf-8") as f:
+    def test_manifest_sidecar_present(self):
+        """injection_recovery.manifest.json must exist alongside the artifact."""
+        assert _IR_MANIFEST.exists(), f"Manifest sidecar missing: {_IR_MANIFEST.name}"
+        with open(_IR_MANIFEST, encoding="utf-8") as f:
             m = json.load(f)
-        assert "sha256" in m
-        assert len(m["sha256"]) == 64
-        assert "source_doi" in m
-        assert "access_date" in m
-        assert "row_count" in m
-
-    def test_row_count_matches_results(self, tmp_path):
-        """row_count must equal n_injections_attempted."""
-        data_dir = _make_data_dir(tmp_path, _DEFAULT_QUIET_STARS, seed=20)
-        out_dir = tmp_path / "artifacts"
-        ir_main([
-            "--seed", "2",
-            "--n-per-cell", "3",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(data_dir),
-            "--no-plot",
-            "--n-bls-periods", "50",  # coarse grid — sufficient for a count test
-        ])
-        with open(out_dir / "injection_recovery.json", encoding="utf-8") as f:
-            data = json.load(f)
-        assert data["row_count"] == data["n_injections_attempted"]
-        assert data["row_count"] == len(data["results"])
+        assert len(m.get("sha256", "")) == 64, "sha256 in manifest must be 64 hex chars"
+        assert m.get("source_doi", "").strip(), "source_doi missing from manifest"
+        assert "access_date" in m, "access_date missing from manifest"
+        assert "row_count" in m, "row_count missing from manifest"

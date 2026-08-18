@@ -178,6 +178,7 @@ class AdversarialSelftestArtifact:
     source_doi: str
     access_date: str
     row_count: int
+    detection_algorithm: str             # "TLS" or "BLS_fallback"
     trials: list[dict]
     false_alarm_rates: list[dict]
     plot_artifact_path: str
@@ -400,14 +401,31 @@ def _bls_search(
     return float(periods[best_idx]), sde, float(powers[best_idx] * 1e6)
 
 
+# Tracks which detection algorithm was actually used; set on first call.
+_DETECTION_ALGORITHM_USED: str = "unknown"
+
+
 def run_detection(
     time: np.ndarray,
     flux: np.ndarray,
     flux_err: np.ndarray,
 ) -> tuple[float, float, float]:
-    """Return (best_period_days, sde, depth_ppm). Tries TLS, falls back to BLS."""
+    """
+    Return (best_period_days, sde, depth_ppm).
+
+    Primary algorithm: TransitLeastSquares (TLS, Hippke & Heller 2019) — the
+    same algorithm the main Falsifier pipeline ships.  A FAR measured with TLS
+    characterises the deployed pipeline; a FAR measured with BLS characterises
+    a different detector and must not be committed.
+
+    Fallback: internal BLS, activated only when ``transitleastsquares`` is not
+    installed.  BLS-fallback artifacts must not be committed; see the warning
+    in main() and the ``detection_algorithm`` field in the artifact.
+    """
+    global _DETECTION_ALGORITHM_USED
     try:
         from transitleastsquares import transitleastsquares as TLS
+        _DETECTION_ALGORITHM_USED = "TLS"
         model = TLS(time, flux, flux_err)
         results = model.power(
             period_min=PERIOD_MIN_DAYS,
@@ -416,6 +434,7 @@ def run_detection(
         )
         return float(results.period), float(results.SDE), float(results.depth * 1e6)
     except ImportError:
+        _DETECTION_ALGORITHM_USED = "BLS_fallback"
         return _bls_search(time, flux, PERIOD_MIN_DAYS, PERIOD_MAX_DAYS)
 
 
@@ -723,6 +742,14 @@ def main(argv: list[str] | None = None) -> int:
     total_trials = len(all_trials)
     total_false_alarms = sum(1 for tr in all_trials if tr.detected)
 
+    # Report and guard against BLS-fallback commits (mirrors injection_recovery.py)
+    log.info("Detection algorithm used: %s", _DETECTION_ALGORITHM_USED)
+    if _DETECTION_ALGORITHM_USED == "BLS_fallback":
+        log.warning(
+            "BLS fallback was used — transitleastsquares is not installed. "
+            "This artifact MUST NOT be committed. Install TLS and re-run."
+        )
+
     artifact = AdversarialSelftestArtifact(
         schema_version="1",
         script_version=SCRIPT_VERSION,
@@ -739,6 +766,7 @@ def main(argv: list[str] | None = None) -> int:
         source_doi="10.17909/T9-NMC8-F686",   # Kepler mission DOI
         access_date=datetime.date.today().isoformat(),
         row_count=total_trials,
+        detection_algorithm=_DETECTION_ALGORITHM_USED,
         trials=[asdict(tr) for tr in all_trials],
         false_alarm_rates=[asdict(far) for far in far_results],
         plot_artifact_path=str(plot_path),
@@ -747,12 +775,12 @@ def main(argv: list[str] | None = None) -> int:
             f"Overall: {total_false_alarms}/{total_trials} detections on null data "
             f"({100.0 * total_false_alarms / total_trials:.1f}% across all categories). "
             "High false-alarm rates are reported as-is — they are not filtered. "
-            "SDE threshold: {SDE_THRESHOLD}. "
-            "Detection algorithm: TLS if installed, internal BLS otherwise. "
+            f"SDE threshold: {SDE_THRESHOLD}. "
+            f"Detection algorithm: {_DETECTION_ALGORITHM_USED}. "
             "Null categories: scrambled (time permuted), sign_inverted (flux negated), "
             "off_target (aperture shifted ~15 arcsec proxy), blank_sky (pure noise). "
             "See injection_recovery.py for completeness (true-positive) rates."
-        ).format(SDE_THRESHOLD=SDE_THRESHOLD),
+        ),
     )
 
     out_path = args.output_dir / OUTPUT_ARTIFACT_NAME

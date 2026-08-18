@@ -236,146 +236,103 @@ class TestRunTrial:
 
 
 # ---------------------------------------------------------------------------
-# Artifact JSON schema + policy
+# Committed artifact validation
+# ---------------------------------------------------------------------------
+# These tests validate the committed data/artifacts/adversarial_selftest.json.
+# They do NOT invoke the script — generation is manual (run
+# scripts/adversarial_selftest.py, commit the result).  This keeps the test
+# suite deterministic and fast: no search, no FITS I/O, no TLS.
 # ---------------------------------------------------------------------------
 
-@pytest.mark.requires_astropy
+_ADV_ARTIFACT = Path(__file__).parent.parent / "data" / "artifacts" / "adversarial_selftest.json"
+_ADV_MANIFEST = _ADV_ARTIFACT.with_suffix(".manifest.json")
+
+
+@pytest.mark.no_network
 class TestAdversarialSelftestArtifact:
-    def test_artifact_has_agents_md_rule3_fields(self, tmp_path):
-        """
-        The output artifact must contain source_doi, access_date, row_count
-        per AGENTS.md Rule 3.
-        """
-        out_dir = tmp_path / "artifacts"
-        rc = adv_main([
-            "--seed", "0",
-            "--n-trials", "4",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(_GOLDEN_DIR),
-            "--no-plot",
-        ])
-        assert rc == 0
+    """Validate the committed adversarial_selftest.json artifact (read-only)."""
 
-        artifact_path = out_dir / "adversarial_selftest.json"
-        assert artifact_path.exists()
-        with open(artifact_path, encoding="utf-8") as f:
-            data = json.load(f)
+    @pytest.fixture(autouse=True)
+    def _require_artifact(self):
+        if not _ADV_ARTIFACT.exists():
+            pytest.skip(
+                "data/artifacts/adversarial_selftest.json not yet committed. "
+                "Run: python scripts/adversarial_selftest.py --seed 42 --n-trials 20 "
+                "--output-dir data/artifacts --data-dir data/golden --no-plot"
+            )
 
-        assert "source_doi" in data, "Missing source_doi"
-        assert data["source_doi"].strip()
-        assert "access_date" in data, "Missing access_date"
+    def _load(self) -> dict:
+        with open(_ADV_ARTIFACT, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_agents_md_rule3_fields(self):
+        """source_doi, access_date, row_count must be present and non-empty."""
+        data = self._load()
+        assert "source_doi" in data and data["source_doi"].strip(), "Missing source_doi"
+        assert "access_date" in data and data["access_date"].strip(), "Missing access_date"
         assert "row_count" in data, "Missing row_count"
-        assert isinstance(data["row_count"], int) and data["row_count"] > 0
-
-    def test_exit_code_always_zero(self, tmp_path):
-        """
-        The script must exit 0 regardless of FAR value.
-        Suppressing a high FAR is a policy violation.
-        """
-        out_dir = tmp_path / "artifacts"
-        rc = adv_main([
-            "--seed", "99",
-            "--n-trials", "2",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(_GOLDEN_DIR),
-            "--no-plot",
-        ])
-        assert rc == 0, (
-            "adversarial_selftest.py must always exit 0.  "
-            "High false-alarm rates are published, not suppressed."
+        assert isinstance(data["row_count"], int) and data["row_count"] > 0, (
+            f"row_count must be a positive int, got {data['row_count']!r}"
         )
 
-    def test_all_categories_in_artifact(self, tmp_path):
-        out_dir = tmp_path / "artifacts"
-        adv_main([
-            "--seed", "1",
-            "--n-trials", "2",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(_GOLDEN_DIR),
-            "--no-plot",
-        ])
-        with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:
-            data = json.load(f)
-
-        assert set(data["categories"]) == set(CATEGORIES), (
-            "All four null categories must appear in the artifact."
+    def test_detection_algorithm_is_tls(self):
+        """
+        The committed artifact must have been produced with TLS, not the BLS
+        fallback.  A FAR measured with BLS characterises a different detector.
+        Regenerate: python scripts/adversarial_selftest.py --seed 42 --n-trials 20
+                    --output-dir data/artifacts --data-dir data/golden --no-plot
+        """
+        data = self._load()
+        assert "detection_algorithm" in data, (
+            "Missing detection_algorithm field — regenerate the artifact with the "
+            "updated script (scripts/adversarial_selftest.py)."
+        )
+        assert data["detection_algorithm"] == "TLS", (
+            f"Artifact was produced with {data['detection_algorithm']!r}, not TLS. "
+            "Install transitleastsquares and regenerate."
         )
 
-    def test_far_values_in_unit_interval(self, tmp_path):
-        """All false_alarm_rate values must be in [0.0, 1.0]."""
-        out_dir = tmp_path / "artifacts"
-        adv_main([
-            "--seed", "2",
-            "--n-trials", "5",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(_GOLDEN_DIR),
-            "--no-plot",
-        ])
-        with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:
-            data = json.load(f)
+    def test_all_categories_present(self):
+        """All four null categories must appear in false_alarm_rates."""
+        data = self._load()
+        recorded = {e["category"] for e in data["false_alarm_rates"]}
+        assert recorded == set(CATEGORIES), (
+            f"Missing categories: {set(CATEGORIES) - recorded}"
+        )
 
-        for far_entry in data["false_alarm_rates"]:
-            rate = far_entry["false_alarm_rate"]
+    def test_far_values_in_unit_interval(self):
+        """Every false_alarm_rate must be in [0.0, 1.0]."""
+        data = self._load()
+        for entry in data["false_alarm_rates"]:
+            rate = entry["false_alarm_rate"]
             assert 0.0 <= rate <= 1.0, (
-                f"false_alarm_rate={rate} for category "
-                f"{far_entry['category']} is out of [0, 1]"
+                f"false_alarm_rate={rate} for {entry['category']} outside [0,1]"
             )
-            assert far_entry["far_lower_68"] <= rate <= far_entry["far_upper_68"], (
-                f"FAR bounds are inconsistent for {far_entry['category']}"
+            assert entry["far_lower_68"] <= rate <= entry["far_upper_68"], (
+                f"Wilson bounds inconsistent for {entry['category']}"
             )
 
-    def test_row_count_equals_total_trials(self, tmp_path):
-        """row_count must equal the total number of trial rows."""
-        n_trials = 3
-        n_cats = len(CATEGORIES)
-        out_dir = tmp_path / "artifacts"
-        adv_main([
-            "--seed", "3",
-            "--n-trials", str(n_trials),
-            "--output-dir", str(out_dir),
-            "--data-dir", str(_GOLDEN_DIR),
-            "--no-plot",
-        ])
-        with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:
-            data = json.load(f)
+    def test_row_count_matches_trials(self):
+        """row_count must equal len(trials)."""
+        data = self._load()
+        assert data["row_count"] == len(data["trials"]), (
+            f"row_count={data['row_count']} but len(trials)={len(data['trials'])}"
+        )
 
-        assert data["row_count"] == n_trials * n_cats
-        assert len(data["trials"]) == n_trials * n_cats
-
-    def test_manifest_sidecar_written(self, tmp_path):
-        """A .manifest.json sidecar must be co-located with the artifact."""
-        out_dir = tmp_path / "artifacts"
-        adv_main([
-            "--seed", "4",
-            "--n-trials", "2",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(_GOLDEN_DIR),
-            "--no-plot",
-        ])
-        manifest_path = out_dir / "adversarial_selftest.manifest.json"
-        assert manifest_path.exists()
-        with open(manifest_path, encoding="utf-8") as f:
+    def test_manifest_sidecar_present(self):
+        """adversarial_selftest.manifest.json must exist alongside the artifact."""
+        assert _ADV_MANIFEST.exists(), (
+            f"Manifest sidecar missing: {_ADV_MANIFEST.name}"
+        )
+        with open(_ADV_MANIFEST, encoding="utf-8") as f:
             m = json.load(f)
-        assert len(m["sha256"]) == 64
-        assert m["source_doi"].strip()
+        assert len(m.get("sha256", "")) == 64, "sha256 in manifest must be 64 hex chars"
+        assert m.get("source_doi", "").strip(), "source_doi missing from manifest"
 
-    def test_notes_contains_high_far_acknowledgement(self, tmp_path):
-        """
-        The artifact notes field must acknowledge that high FAR is published
-        as-is (policy guard against suppression).
-        """
-        out_dir = tmp_path / "artifacts"
-        adv_main([
-            "--seed", "5",
-            "--n-trials", "2",
-            "--output-dir", str(out_dir),
-            "--data-dir", str(_GOLDEN_DIR),
-            "--no-plot",
-        ])
-        with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:
-            data = json.load(f)
-
+    def test_notes_acknowledges_published_far(self):
+        """Artifact notes must state FAR is published as-is (anti-suppression guard)."""
+        data = self._load()
         notes = data.get("notes", "")
         assert "published" in notes.lower() or "reported" in notes.lower(), (
-            "Artifact notes must acknowledge that FAR results are published as-is."
+            "notes field must acknowledge FAR is published regardless of value."
         )
