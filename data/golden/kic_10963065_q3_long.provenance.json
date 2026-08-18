@@ -14,7 +14,8 @@
   "flux_unit": "e-/s",
   "access_date": "2026-08-18",
   "sha256": "2848734b0a0ce28c4fd02d7a4bbe73f5df0bce7eb1309310d717be7ba91b2ca8",
-  "row_count_expected": 4140,
+  "row_count": 4140,
+  "source_doi": "10.17909/T9-NMC8-F686",
   "reference_doi": "10.17909/T9-NMC8-F686",
   "reference_citation": "Kepler Mission Archive, MAST",
   "notes": "Quiet-star injection-recovery target. No confirmed planet or KOI in NASA Exoplanet Archive as of 2026-08-18. Kepler Q3 long-cadence."

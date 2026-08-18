@@ -165,7 +165,7 @@ Pipeline stages wired in API queue: 5
 ### Golden target set
 
 <!-- CLAIM:n_golden_targets -->
-Committed golden targets: 2
+Committed golden targets: 7
 <!-- /CLAIM:n_golden_targets -->
 
 *Source: `data/golden/MANIFEST.json` → `len(golden_set)`*

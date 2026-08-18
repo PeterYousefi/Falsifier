@@ -36,7 +36,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -e . --no-deps
-          pip install pydantic numpy pytest
+          pip install pydantic numpy pytest pytest-timeout
 
       - name: Run fast test suite
         run: |
@@ -64,7 +64,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install pytest
-        run: pip install pytest
+        run: |
+          pip install --upgrade pip
+          pip install -e . --no-deps
+          pip install pydantic numpy pytest
 
       - name: Run no-invented-numbers gate
         run: pytest tests/test_no_number_is_invented.py -v
@@ -106,7 +109,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install pytest
-        run: pip install pytest
+        run: |
+          pip install --upgrade pip
+          pip install -e . --no-deps
+          pip install pydantic numpy pytest
 
       - name: Run no-invented-numbers gate against built bundle
         run: |

@@ -35,11 +35,11 @@ try:
     )
     _au_init.add_enabled_units([_ppm_unit])
     del _ppm_unit
-except ValueError:
-    # Already registered — safe to ignore.
-    pass
-finally:
     del _au_init
+except (ValueError, ImportError):
+    # ValueError: already registered — safe to ignore.
+    # ImportError: astropy not installed in this environment (fast CI job).
+    pass
 
 __all__ = [
     "UnitedArray",
