@@ -86,4 +86,5 @@ norecursedirs = ["scripts", ".venv", "node_modules", "frontend", "data", ".git"]
 markers = [
     "no_network: block outbound sockets; any network attempt fails immediately.",
     "timeout: per-test wall-clock budget in seconds.",
+    "requires_astropy: test requires astropy (and optionally pandas/xgboost/lightkurve); excluded from the fast CI job.",
 ]

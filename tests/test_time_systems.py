@@ -50,6 +50,8 @@ from astropy.time import Time
 import astropy.units as u
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.requires_astropy
+
 from falsifier.pipeline.contracts.ingest import LightCurveSegment
 from falsifier.pipeline.contracts.manifest import UnitedArray
 from falsifier.pipeline.ingest.exceptions import HeaderMissingKeyError

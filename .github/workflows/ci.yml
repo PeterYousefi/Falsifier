@@ -19,6 +19,15 @@ jobs:
   #   2. pip install pydantic pytest   satisfies the two deps that --no-deps
   #      withheld.
   #
+  # The boundary is enforced by two layers:
+  #   1. --ignore for files that import astropy/heavydeps at MODULE scope —
+  #      pytest cannot even collect those files without the dep installed.
+  #   2. -m "not requires_astropy" for files where astropy is imported only
+  #      INSIDE test method bodies — pytest can collect those files with numpy
+  #      alone and the marker deselects the heavy tests.  This covers the three
+  #      script-unit test files (test_adversarial_selftest.py etc.) whose pure
+  #      array-manipulation classes stay in the fast job.
+  #
   # Do NOT add a PYTHONPATH env var or conftest.py sys.path hack to this job.
   # ---------------------------------------------------------------------------
   test-fast:
@@ -47,6 +56,7 @@ jobs:
             --ignore=tests/test_time_systems.py \
             --ignore=tests/test_api_deletion.py \
             --ignore=tests/test_chat_layer.py \
+            -m "not requires_astropy" \
             -q
 
   # ---------------------------------------------------------------------------
@@ -192,12 +202,12 @@ jobs:
       - name: Verify XGBoost imports (catches libomp breakage before tests run)
         run: python -c "import xgboost; print('xgboost', xgboost.__version__, 'OK')"
 
-      - name: Run full test suite (excluding golden integration tests)
+      - name: Run full test suite
         run: |
           pytest tests/ \
-            --ignore=tests/test_kepler10_recovery.py \
-            --ignore=tests/test_known_eb_rejected.py \
+            --ignore=tests/test_api_deletion.py \
+            --ignore=tests/test_chat_layer.py \
             -q
-        # Golden integration tests require committed FITS files from
-        # scripts/fetch_golden.py and are excluded until those are committed.
-        # test_chat_layer.py uses pytest-asyncio for async session tests.
+        # test_api_deletion.py and test_chat_layer.py require httpx and
+        # pytest-asyncio extras not installed here; all other tests including
+        # the golden regression tests (requires_astropy marker) run in this job.

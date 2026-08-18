@@ -40,6 +40,7 @@ class TestTrainClassifierDr25:
             "This file must exist to document the feature-skew block."
         )
 
+    @pytest.mark.requires_astropy
     def test_train_flag_raises_not_implemented(self):
         """
         Calling main() with --train must raise NotImplementedError.
@@ -75,6 +76,7 @@ class TestTrainClassifierDr25:
             with pytest.raises(NotImplementedError, match="feature skew"):
                 mod.main()
 
+    @pytest.mark.requires_astropy
     def test_dry_run_does_not_train(self):
         """
         Calling main() without --train must not raise NotImplementedError,

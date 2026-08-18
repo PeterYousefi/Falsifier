@@ -28,6 +28,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+# Committed golden FITS files live here — loaded by TestAdversarialSelftestArtifact.
+_GOLDEN_DIR = Path(__file__).parent.parent / "data" / "golden"
+
 # ---------------------------------------------------------------------------
 # Force BLS fallback — hide transitleastsquares for the whole module.
 #
@@ -236,6 +239,7 @@ class TestRunTrial:
 # Artifact JSON schema + policy
 # ---------------------------------------------------------------------------
 
+@pytest.mark.requires_astropy
 class TestAdversarialSelftestArtifact:
     def test_artifact_has_agents_md_rule3_fields(self, tmp_path):
         """
@@ -247,7 +251,7 @@ class TestAdversarialSelftestArtifact:
             "--seed", "0",
             "--n-trials", "4",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(_GOLDEN_DIR),
             "--no-plot",
         ])
         assert rc == 0
@@ -273,7 +277,7 @@ class TestAdversarialSelftestArtifact:
             "--seed", "99",
             "--n-trials", "2",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(_GOLDEN_DIR),
             "--no-plot",
         ])
         assert rc == 0, (
@@ -287,7 +291,7 @@ class TestAdversarialSelftestArtifact:
             "--seed", "1",
             "--n-trials", "2",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(_GOLDEN_DIR),
             "--no-plot",
         ])
         with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:
@@ -304,7 +308,7 @@ class TestAdversarialSelftestArtifact:
             "--seed", "2",
             "--n-trials", "5",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(_GOLDEN_DIR),
             "--no-plot",
         ])
         with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:
@@ -329,7 +333,7 @@ class TestAdversarialSelftestArtifact:
             "--seed", "3",
             "--n-trials", str(n_trials),
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(_GOLDEN_DIR),
             "--no-plot",
         ])
         with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:
@@ -345,7 +349,7 @@ class TestAdversarialSelftestArtifact:
             "--seed", "4",
             "--n-trials", "2",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(_GOLDEN_DIR),
             "--no-plot",
         ])
         manifest_path = out_dir / "adversarial_selftest.manifest.json"
@@ -365,7 +369,7 @@ class TestAdversarialSelftestArtifact:
             "--seed", "5",
             "--n-trials", "2",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(_GOLDEN_DIR),
             "--no-plot",
         ])
         with open(out_dir / "adversarial_selftest.json", encoding="utf-8") as f:

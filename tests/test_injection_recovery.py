@@ -394,6 +394,7 @@ def _make_data_dir(tmp_path: Path, star_ids: list, seed: int = 0) -> Path:
 from scripts.injection_recovery import DEFAULT_QUIET_STARS as _DEFAULT_QUIET_STARS
 
 
+@pytest.mark.requires_astropy
 class TestInjectionRecoveryArtifact:
     def test_artifact_has_required_fields(self, tmp_path):
         """

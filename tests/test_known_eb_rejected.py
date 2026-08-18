@@ -53,6 +53,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+pytestmark = pytest.mark.requires_astropy
+
 # ---------------------------------------------------------------------------
 # Paths and constants
 # ---------------------------------------------------------------------------
