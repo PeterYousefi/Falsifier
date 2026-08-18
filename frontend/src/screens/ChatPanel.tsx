@@ -1,7 +1,9 @@
 /**
  * src/screens/ChatPanel.tsx
- * Chat panel: messages with artifact-source chips, suggested prompts,
- * offline fallback indicator.
+ * Chat panel in newspaper style.
+ * Answers in serif prose on a tinted panel.
+ * Monospace artifact-source chips beneath each answer.
+ * Suggested prompts as buttons. Model may say "can't distinguish" — correct answer.
  */
 import React, { useState, useRef, useEffect } from 'react'
 import { useStore } from '../store'
@@ -9,26 +11,22 @@ import { dataSource } from '../data/DataSource'
 import type { ChatMessage } from '../data/types'
 
 const SUGGESTED_PROMPTS = [
-  'Why was this rejected?',
   'What would settle it?',
-  'Refit at 2× period',
-  'What is the transit depth?',
+  'Refit at half the period',
+  'Why was this classified as a candidate?',
   'What does the stellar density test show?',
+  'Could the data distinguish this from an eclipsing binary?',
 ]
 
 // ── Source chip ────────────────────────────────────────────────────────────
 function SourceChip({ text, onHighlight }: { text: string; onHighlight: (text: string) => void }) {
   const [active, setActive] = useState(false)
-
   const handleClick = () => {
     setActive(true)
     onHighlight(text)
     setTimeout(() => setActive(false), 1500)
   }
-
-  // Extract clean label from "[source: tool(args)]"
   const label = text.replace(/^\[source:\s*/, '').replace(/\]$/, '')
-
   return (
     <button
       className={`source-chip${active ? ' highlighted' : ''}`}
@@ -46,7 +44,6 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   const { setHighlightedPanel } = useStore()
 
   const handleSourceHighlight = (sourceText: string) => {
-    // Map source tool names to panel keys
     const lower = sourceText.toLowerCase()
     if (lower.includes('vet')) setHighlightedPanel('vet')
     else if (lower.includes('planet') || lower.includes('search')) setHighlightedPanel('search')
@@ -58,8 +55,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
   return (
     <div className={`chat-bubble ${msg.role}${isOffline ? ' offline' : ''}`}>
-      {isOffline && <div className="offline-badge" style={{ marginBottom: 5 }}>⚠ offline mode — no API key configured</div>}
-      <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{msg.content}</div>
+      {isOffline && (
+        <div className="offline-badge">⚠ offline mode — no API key configured</div>
+      )}
+      <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{msg.content}</div>
       {msg.sources && msg.sources.length > 0 && (
         <div className="chat-sources" aria-label="Source citations">
           {msg.sources.map((s, i) => (
@@ -69,9 +68,9 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       )}
       {msg.guardian_verdict && !msg.guardian_verdict.safe && (
         <div style={{
-          marginTop: 5, padding: '3px 7px', background: 'var(--fail-dim)',
-          border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--r)',
-          fontSize: 10, color: 'var(--fail)',
+          marginTop: 6, padding: '4px 8px', background: 'var(--fail-dim)',
+          border: '1px solid rgba(139,26,26,0.2)', borderRadius: 'var(--r)',
+          fontSize: 11, color: 'var(--fail)', fontFamily: 'var(--font-mono)',
         }}>
           Guardian: blocked · {msg.guardian_verdict.risk_label}
         </div>
@@ -88,7 +87,6 @@ export default function ChatPanel() {
   const [loadedFixture, setLoadedFixture] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Load fixture chat history on mount
   useEffect(() => {
     if (!loadedFixture && chatHistory.length === 0) {
       dataSource.getChatFixture().then((fixture) => {
@@ -98,7 +96,6 @@ export default function ChatPanel() {
     }
   }, [])
 
-  // Auto-scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatHistory])
@@ -106,12 +103,10 @@ export default function ChatPanel() {
   const send = async (message: string) => {
     if (!message.trim() || sending) return
     setSending(true)
-
     const userMsg: ChatMessage = { role: 'user', content: message }
     const history = chatHistory.map((m) => ({ role: m.role, content: m.content }))
     setChatHistory([...chatHistory, userMsg])
     setInput('')
-
     try {
       const reply = await dataSource.chat(
         jobId ?? report?.job_id ?? null,
@@ -132,29 +127,42 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="screen chat-layout">
-      <div className="panel-header">
-        Chat
-        <span className="tag">artifact-grounded</span>
-        {jobId && <span className="tag" style={{ color: 'var(--accent)' }}>{jobId}</span>}
-        <span className="spacer" />
-        <span style={{ fontSize: 10, color: 'var(--muted)' }}>
-          Clicking a source chip highlights the value in the detail panel
-        </span>
+    <div className="screen chat-layout" style={{ minHeight: 0 }}>
+      {/* Header strip */}
+      <div style={{
+        padding: '12px 32px', borderBottom: '1px solid var(--np-rule)',
+        background: 'var(--np-surface)', display: 'flex', alignItems: 'center',
+        gap: 12, flexShrink: 0,
+      }}>
+        <div>
+          <h2 style={{ fontSize: 18, marginBottom: 2 }}>Ask the pipeline</h2>
+          <p style={{ fontSize: 13, color: 'var(--np-muted)', fontFamily: 'var(--font-serif)', lineHeight: 1.4 }}>
+            Answers are assembled from committed pipeline artifacts only.
+            The model can say the data cannot distinguish something — treat that as a correct answer.
+          </p>
+        </div>
+        {jobId && (
+          <span className="tag" style={{ marginLeft: 'auto', color: 'var(--rust)', borderColor: 'var(--rust)', flexShrink: 0 }}>
+            {jobId}
+          </span>
+        )}
       </div>
 
       {/* Message history */}
       <div className="chat-messages" aria-live="polite" aria-label="Chat messages">
         {chatHistory.length === 0 && (
-          <div className="no-data" style={{ height: 'auto', padding: '20px 0' }}>
-            Ask about a TCE. Values come only from pipeline artifacts.
+          <div className="no-data" style={{ padding: '32px 0', height: 'auto', fontStyle: 'normal' }}>
+            <div>
+              <p style={{ marginBottom: 10 }}>Ask anything about a target, vetting result, or classification.</p>
+              <p style={{ fontSize: 13 }}>Values come exclusively from pipeline artifacts — never invented.</p>
+            </div>
           </div>
         )}
         {chatHistory.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
         {sending && (
-          <div className="chat-bubble assistant" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="chat-bubble assistant" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="spinner" aria-label="Assistant is responding" />
-            <span style={{ color: 'var(--muted)', fontSize: 11 }}>thinking…</span>
+            <span style={{ color: 'var(--np-muted)', fontStyle: 'italic', fontSize: 14 }}>Thinking…</span>
           </div>
         )}
         <div ref={bottomRef} />

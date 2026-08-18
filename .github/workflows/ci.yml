@@ -68,8 +68,10 @@ jobs:
 
       - name: Run no-invented-numbers gate
         run: pytest tests/test_no_number_is_invented.py -v
-        # Skips build-output check when frontend/dist/ is absent.
-        # The frontend-build job below runs that check against the real bundle.
+        # frontend/dist/ is absent here (not built yet); the source-file scan
+        # still runs.  The frontend-build job below builds first, then runs
+        # test_build_output_floats_are_backed_by_artifacts against the real
+        # bundle.  The gate never silently passes due to a missing dist/.
 
   # ---------------------------------------------------------------------------
   # Frontend build + bundle artifact check.
@@ -92,6 +94,9 @@ jobs:
         working-directory: frontend
 
       - name: Build frontend
+        # manualChunks in vite.config.js splits vendor (node_modules) into
+        # vendor-*.js; the bundle-scan test skips that chunk and only checks
+        # application code in index-*.js.
         run: npm run build
         working-directory: frontend
 

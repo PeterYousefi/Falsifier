@@ -5,9 +5,19 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    // Sourcemaps are generated in CI so the bundle-scan test can
+    // attribute floats to app vs library chunks.
+    sourcemap: true,
     rollupOptions: {
       output: {
+        // Split all node_modules into a single vendor chunk so the
+        // bundle-scan gate can skip library code and only check the
+        // application chunk for hardcoded scientific values.
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor'
+          }
+        },
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',

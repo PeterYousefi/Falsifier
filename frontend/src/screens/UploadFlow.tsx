@@ -1,25 +1,62 @@
 /**
  * src/screens/UploadFlow.tsx
- * Upload flow: drop zone → column mapping → preview plot → submission.
- * Explicit rejection reason shown on malformed input.
+ * Upload flow in newspaper style.
+ * Drop zone → file summary → column-mapping table (no preselection) →
+ * time-system labeled cards → preview plot with orientation hint →
+ * retention policy + submit.
  */
 import React, { useState, useRef, useCallback } from 'react'
 
-// Time scale and format options (user must choose; no default preselected)
-const TIME_SCALES = ['tdb', 'tcb', 'tcg', 'tt', 'ut1', 'utc']
-const TIME_FORMATS = ['bjd', 'btjd', 'bkjd', 'jd', 'mjd', 'isot', 'fits']
+const TIME_SYSTEM_CARDS = [
+  {
+    value: 'bjd',
+    name: 'BJD',
+    desc: 'Barycentric Julian Date — values near 2,458,000, most ground-based software.',
+    match: (v: number) => v > 2400000 && v < 2500000,
+  },
+  {
+    value: 'btjd',
+    name: 'BTJD',
+    desc: 'TESS Barycentric Julian Date — values near 2,000. If this came from the TESS pipeline.',
+    match: (v: number) => v > 1000 && v < 10000,
+  },
+  {
+    value: 'bkjd',
+    name: 'BKJD',
+    desc: 'Barycentric Kepler Julian Date — values near 100–1600. Standard for Kepler data products.',
+    match: (v: number) => v > 100 && v < 2000,
+  },
+  {
+    value: 'mjd',
+    name: 'MJD',
+    desc: 'Modified Julian Date — values near 58,000. Common in general-purpose astronomy software.',
+    match: (v: number) => v > 50000 && v < 70000,
+  },
+  {
+    value: 'jd',
+    name: 'JD',
+    desc: 'Julian Date — values near 2,458,000. The unreduced form of BJD.',
+    match: (v: number) => v > 2400000 && v < 2500000,
+  },
+  {
+    value: 'isot',
+    name: 'ISOT',
+    desc: 'ISO 8601 string (e.g. 2019-06-01T00:00:00). Human-readable calendar time.',
+    match: (_v: number) => false,
+  },
+]
+
 const FLUX_CONVENTIONS = [
-  { value: 'sap', label: 'SAP flux (raw Simple Aperture Photometry)' },
-  { value: 'pdcsap', label: 'PDCSAP flux (Pre-search Data Conditioning)' },
-  { value: 'normalized', label: 'Normalised flux (around 1.0)' },
-  { value: 'relative', label: 'Relative flux (dimensionless)' },
+  { value: 'sap',        label: 'SAP flux',        desc: 'Raw Simple Aperture Photometry counts from the spacecraft.' },
+  { value: 'pdcsap',     label: 'PDCSAP flux',      desc: 'Pre-search Data Conditioning — systematic-corrected counts.' },
+  { value: 'normalized', label: 'Normalised flux',  desc: 'Flux divided by the out-of-transit baseline, centred near 1.0.' },
+  { value: 'relative',   label: 'Relative flux',    desc: 'Dimensionless ratio; values should dip below 1.0 during transit.' },
 ]
 
 type ColMapping = {
   time: string
   flux: string
   flux_err: string
-  time_scale: string
   time_format: string
   flux_convention: string
 }
@@ -30,30 +67,24 @@ type ParsedPreview = {
   n_rows: number
 }
 
-// ── File parser (CSV / TSV heuristic) ──────────────────────────────────────
 async function parseCsv(file: File): Promise<ParsedPreview | { error: string }> {
   const text = await file.text()
   const lines = text.split('\n').filter((l) => l.trim().length > 0)
   if (lines.length < 2) return { error: 'File must have at least one header row and one data row.' }
-
   const sep = lines[0].includes('\t') ? '\t' : ','
   const cols = lines[0].split(sep).map((c) => c.trim().replace(/^"|"$/g, ''))
   if (cols.length < 2) return { error: `Could not detect columns. Expected comma or tab delimiters. Found ${cols.length} column(s).` }
-
   const rows = lines.slice(1, 11).map((l) => {
     const vals = l.split(sep).map((v) => v.trim().replace(/^"|"$/g, ''))
     const row: Record<string, string> = {}
     cols.forEach((c, i) => { row[c] = vals[i] ?? '' })
     return row
   })
-
-  // Basic numeric check on first data row
   for (const [col, val] of Object.entries(rows[0])) {
     if (val !== '' && isNaN(Number(val))) {
       return { error: `Column "${col}" contains non-numeric value "${val}" in the first data row. This upload expects a numeric light curve table.` }
     }
   }
-
   return { columns: cols, rows, n_rows: lines.length - 1 }
 }
 
@@ -63,7 +94,7 @@ function PreviewPlot({ rows, timeCol, fluxCol }: {
   timeCol: string
   fluxCol: string
 }) {
-  const W = 460, H = 100
+  const W = 480, H = 120
   const points = rows
     .map((r) => ({ x: Number(r[timeCol]), y: Number(r[fluxCol]) }))
     .filter((p) => isFinite(p.x) && isFinite(p.y))
@@ -74,28 +105,49 @@ function PreviewPlot({ rows, timeCol, fluxCol }: {
   const ys = points.map((p) => p.y)
   const xMin = Math.min(...xs), xMax = Math.max(...xs)
   const yMin = Math.min(...ys), yMax = Math.max(...ys)
-  const xRng = xMax - xMin || 1, yRng = yMax - yMin || 1
+  const xRng = xMax - xMin || 1
+  const yRng = yMax - yMin || 1
+  const PAD = 8
 
-  const toX = (v: number) => 4 + ((v - xMin) / xRng) * (W - 8)
-  const toY = (v: number) => H - 4 - ((v - yMin) / yRng) * (H - 8)
-
+  const toX = (v: number) => PAD + ((v - xMin) / xRng) * (W - PAD * 2)
+  const toY = (v: number) => H - PAD - ((v - yMin) / yRng) * (H - PAD * 2)
   const pts = points.map((p) => `${toX(p.x).toFixed(1)},${toY(p.y).toFixed(1)}`).join(' ')
 
+  // Does flux spike upward (possible magnitude units)?
+  const yMid = (yMax + yMin) / 2
+  const spikeUp = ys.some((y) => y > yMid * 1.01)
+
   return (
-    <div className="preview-plot-container">
-      <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>
-        Preview (first {points.length} rows) — {timeCol} vs {fluxCol}
-      </div>
-      <svg width={W} height={H} style={{ background: '#0a0c0f', borderRadius: 3, display: 'block' }}>
-        <polyline points={pts} fill="none" stroke="#3b82f6" strokeWidth="1" />
-        <text x={4} y={H - 3} fill="#374151" fontSize="8">{xMin.toFixed(2)}</text>
-        <text x={W - 4} y={H - 3} fill="#374151" fontSize="8" textAnchor="end">{xMax.toFixed(2)}</text>
-      </svg>
+    <div style={{ margin: '12px 0' }}>
+      <figure className="figure-inset">
+        <svg
+          width={W} height={H}
+          style={{ background: 'var(--np-surface)', display: 'block', width: '100%' }}
+          aria-label={`Preview: ${timeCol} vs ${fluxCol}`}
+        >
+          <polyline points={pts} fill="none" stroke="var(--rust)" strokeWidth="1.2" />
+          <text x={PAD} y={H - 2} fill="var(--np-faint)" fontSize="9" fontFamily="var(--font-mono)">
+            {xMin.toFixed(2)}
+          </text>
+          <text x={W - PAD} y={H - 2} fill="var(--np-faint)" fontSize="9" fontFamily="var(--font-mono)" textAnchor="end">
+            {xMax.toFixed(2)}
+          </text>
+        </svg>
+        <figcaption>
+          Preview ({points.length} rows) — {timeCol} vs {fluxCol}.
+          {' '}Flux should dip <em>below</em> the baseline (≤ 1.0 for normalised flux) during a transit.
+          {spikeUp && (
+            <span style={{ color: 'var(--fail)', marginLeft: 4 }}>
+              ⚑ Values appear to spike upward — if these are magnitudes, convert to flux first
+              (fainter object = higher magnitude = smaller flux).
+            </span>
+          )}
+        </figcaption>
+      </figure>
     </div>
   )
 }
 
-// ── Main export ─────────────────────────────────────────────────────────────
 export default function UploadFlow() {
   const [dragOver, setDragOver] = useState(false)
   const [file, setFile] = useState<File | null>(null)
@@ -103,7 +155,7 @@ export default function UploadFlow() {
   const [parseError, setParseError] = useState<string | null>(null)
   const [mapping, setMapping] = useState<ColMapping>({
     time: '', flux: '', flux_err: '',
-    time_scale: '', time_format: '', flux_convention: '',
+    time_format: '', flux_convention: '',
   })
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -113,7 +165,7 @@ export default function UploadFlow() {
     setFile(f)
     setPreview(null)
     setParseError(null)
-    setMapping({ time: '', flux: '', flux_err: '', time_scale: '', time_format: '', flux_convention: '' })
+    setMapping({ time: '', flux: '', flux_err: '', time_format: '', flux_convention: '' })
     setSubmitted(false)
 
     const result = await parseCsv(f)
@@ -121,7 +173,6 @@ export default function UploadFlow() {
       setParseError(result.error)
     } else {
       setPreview(result)
-      // Auto-detect common column names (user still confirms)
       const cols = result.columns.map((c) => c.toLowerCase())
       const guess = (candidates: string[]) => {
         for (const c of candidates) {
@@ -146,35 +197,41 @@ export default function UploadFlow() {
     if (f) handleFile(f)
   }
 
-  const mappingComplete =
-    mapping.time && mapping.flux && mapping.flux_err &&
-    mapping.time_scale && mapping.time_format && mapping.flux_convention
+  const mappingComplete = mapping.time && mapping.flux && mapping.flux_err && mapping.time_format && mapping.flux_convention
 
   const handleSubmit = async () => {
     if (!mappingComplete || !file) return
     setSubmitting(true)
-    // Simulate submission delay
     await new Promise((r) => setTimeout(r, 900))
     setSubmitting(false)
     setSubmitted(true)
   }
 
-  return (
-    <div className="screen upload-layout">
-      <div className="panel-header">
-        Upload
-        <span className="tag">light curve ingestion</span>
-        <span className="spacer" />
-        <span style={{ fontSize: 10, color: 'var(--muted)' }}>
-          Mandatory column mapping before submission · time scale and format must be explicit
-        </span>
-      </div>
+  // Hint about first time value
+  const firstTimeValue = preview && mapping.time && preview.rows[0]
+    ? Number(preview.rows[0][mapping.time])
+    : null
 
-      <div className="upload-body scroll-body">
+  const matchedTimeCard = firstTimeValue != null && isFinite(firstTimeValue)
+    ? TIME_SYSTEM_CARDS.find((c) => c.match(firstTimeValue))
+    : null
+
+  return (
+    <div className="screen" style={{ overflowY: 'auto' }}>
+      <div className="page-body">
+
+        <hr className="rule-double" />
+        <h1 style={{ marginTop: 14, marginBottom: 6 }}>Upload a light curve</h1>
+        <p style={{ fontFamily: 'var(--font-serif)', color: 'var(--np-muted)', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
+          Provide a CSV or TSV file with at least a time column and a flux column.
+          The pipeline requires explicit confirmation of the time system and flux convention —
+          no defaults are preselected, because a wrong choice silently corrupts the analysis.
+        </p>
+        <hr className="rule-hair" />
 
         {/* Step 1 — Drop zone */}
         <div className="step-section">
-          <div className="step-label">Step 1 — Drop light curve file</div>
+          <div className="section-label">I. Drop light curve file</div>
           <div
             className={`drop-zone${dragOver ? ' drag-over' : ''}${file && !parseError ? ' has-file' : ''}`}
             tabIndex={0}
@@ -186,10 +243,27 @@ export default function UploadFlow() {
             onClick={() => fileInputRef.current?.click()}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click() }}
           >
-            {file
-              ? <><strong>{file.name}</strong> — {(file.size / 1024).toFixed(1)} KB</>
-              : <>Drop a CSV or TSV light curve here, or click to browse.<br /><span style={{ fontSize: 11, color: 'var(--muted)' }}>Expected columns: time, flux, flux_err (header row required)</span></>
-            }
+            {file ? (
+              <div>
+                <strong style={{ fontFamily: 'var(--font-mono)' }}>{file.name}</strong>
+                <span style={{ fontFamily: 'var(--font-mono)', marginLeft: 8, color: 'var(--np-muted)' }}>
+                  {(file.size / 1024).toFixed(1)} KB
+                </span>
+                {preview && (
+                  <span style={{ fontFamily: 'var(--font-mono)', marginLeft: 8, color: 'var(--np-muted)' }}>
+                    · {preview.n_rows.toLocaleString()} rows · {preview.columns.length} columns
+                  </span>
+                )}
+              </div>
+            ) : (
+              <>
+                Drop a CSV or TSV light curve here, or click to browse.
+                <br />
+                <span style={{ fontSize: 13, color: 'var(--np-muted)', fontStyle: 'italic' }}>
+                  Expected: a header row followed by numeric rows. Columns: time, flux, flux_err.
+                </span>
+              </>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -199,7 +273,6 @@ export default function UploadFlow() {
             />
           </div>
 
-          {/* Parse error — shown verbatim */}
           {parseError && (
             <div className="rejection-box" role="alert" aria-live="assertive">
               <strong>Rejected:</strong> {parseError}
@@ -210,13 +283,18 @@ export default function UploadFlow() {
         {/* Step 2 — Column mapping */}
         {preview && !parseError && (
           <div className="step-section">
-            <div className="step-label">
-              Step 2 — Confirm column mapping ({preview.n_rows.toLocaleString()} rows detected)
-            </div>
+            <div className="section-label">II. Confirm column mapping</div>
+            <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 10, lineHeight: 1.55 }}>
+              The table below shows each detected column with its first two values.
+              Assign each column a role — or leave it as "ignore" if not needed.
+              No role is preselected.
+            </p>
             <table className="col-map-table" aria-label="Column mapping">
               <thead>
                 <tr>
-                  <th>Detected column</th>
+                  <th>Column name</th>
+                  <th>Value [0]</th>
+                  <th>Value [1]</th>
                   <th>Assign as</th>
                 </tr>
               </thead>
@@ -224,6 +302,12 @@ export default function UploadFlow() {
                 {preview.columns.map((col) => (
                   <tr key={col}>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>{col}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--np-muted)' }}>
+                      {preview.rows[0]?.[col] ?? '—'}
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--np-muted)' }}>
+                      {preview.rows[1]?.[col] ?? '—'}
+                    </td>
                     <td>
                       <select
                         value={
@@ -264,77 +348,99 @@ export default function UploadFlow() {
           </div>
         )}
 
-        {/* Step 3 — Time metadata (no default preselected) */}
+        {/* Step 3 — Time system */}
         {preview && !parseError && (
           <div className="step-section">
-            <div className="step-label">Step 3 — Time system (no default — explicit selection required)</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>Time scale</div>
-                <select
-                  value={mapping.time_scale}
-                  onChange={(e) => setMapping((m) => ({ ...m, time_scale: e.target.value }))}
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r)', color: 'var(--text)', font: 'inherit', fontSize: 12, padding: '4px 7px', width: '100%' }}
-                  aria-label="Time scale"
+            <div className="section-label">III. Time system — select one (no default)</div>
+            <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 10, lineHeight: 1.55 }}>
+              Each card describes what values to expect. No system is preselected — you must choose.
+            </p>
+            <div className="time-cards">
+              {TIME_SYSTEM_CARDS.map((card) => (
+                <div
+                  key={card.value}
+                  className={`time-card${mapping.time_format === card.value ? ' selected' : ''}`}
+                  onClick={() => setMapping((m) => ({ ...m, time_format: card.value }))}
+                  role="radio"
+                  aria-checked={mapping.time_format === card.value}
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setMapping((m) => ({ ...m, time_format: card.value })) }}
                 >
-                  <option value="">— select time scale —</option>
-                  {TIME_SCALES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>Time format</div>
-                <select
-                  value={mapping.time_format}
-                  onChange={(e) => setMapping((m) => ({ ...m, time_format: e.target.value }))}
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r)', color: 'var(--text)', font: 'inherit', fontSize: 12, padding: '4px 7px', width: '100%' }}
-                  aria-label="Time format"
-                >
-                  <option value="">— select time format —</option>
-                  {TIME_FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </select>
-              </div>
+                  <div className="time-card-name">{card.name}</div>
+                  <div className="time-card-desc">{card.desc}</div>
+                </div>
+              ))}
             </div>
+            {/* Hint from actual first value */}
+            {firstTimeValue != null && isFinite(firstTimeValue) && (
+              <p style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: 13, color: 'var(--np-muted)', marginTop: 10, lineHeight: 1.5 }}>
+                Your first time value is{' '}
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{firstTimeValue.toFixed(3)}</span>.
+                {matchedTimeCard
+                  ? ` This looks like ${matchedTimeCard.name} — but please verify before selecting.`
+                  : ' This value range does not match any common format — check your time column carefully.'
+                }
+                {' '}This is a hint only, not an auto-selection.
+              </p>
+            )}
 
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>Flux convention</div>
-              <select
-                value={mapping.flux_convention}
-                onChange={(e) => setMapping((m) => ({ ...m, flux_convention: e.target.value }))}
-                style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r)', color: 'var(--text)', font: 'inherit', fontSize: 12, padding: '4px 7px', width: '100%' }}
-                aria-label="Flux convention"
-              >
-                <option value="">— select flux convention —</option>
-                {FLUX_CONVENTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-              </select>
+            {/* Flux convention */}
+            <div style={{ marginTop: 20 }}>
+              <div className="section-label">Flux convention</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+                {FLUX_CONVENTIONS.map((fc) => (
+                  <div
+                    key={fc.value}
+                    className={`time-card${mapping.flux_convention === fc.value ? ' selected' : ''}`}
+                    style={{ flex: '1 1 180px', minWidth: 160 }}
+                    onClick={() => setMapping((m) => ({ ...m, flux_convention: fc.value }))}
+                    role="radio"
+                    aria-checked={mapping.flux_convention === fc.value}
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setMapping((m) => ({ ...m, flux_convention: fc.value })) }}
+                  >
+                    <div className="time-card-name">{fc.label}</div>
+                    <div className="time-card-desc">{fc.desc}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Step 4 — Confirm and submit */}
+        {/* Step 4 — Submit */}
         {preview && !parseError && (
           <div className="step-section">
-            <div className="step-label">Step 4 — Confirm and submit</div>
+            <hr className="rule-hair" />
+            <div className="section-label">IV. Confirm and submit</div>
             {!mappingComplete && (
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>
-                Complete all column assignments and time system selections before submitting.
-              </div>
+              <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 10, lineHeight: 1.55 }}>
+                Complete all column assignments and select a time system and flux convention before submitting.
+              </p>
             )}
             {submitted ? (
-              <div style={{ color: 'var(--pass)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+              <div style={{ color: 'var(--pass)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
                 ✓ Upload accepted — job queued
               </div>
             ) : (
-              <button
-                className="primary-btn"
-                onClick={handleSubmit}
-                disabled={!mappingComplete || submitting}
-                aria-label="Submit light curve upload"
-              >
-                {submitting ? <><span className="spinner" /> Submitting…</> : 'Submit'}
-              </button>
+              <div>
+                <p style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+                  Uploaded files are held only for the duration of your analysis session and are not retained
+                  after the browser window is closed. No light curve data is stored on remote servers.
+                </p>
+                <button
+                  className="btn-primary"
+                  onClick={handleSubmit}
+                  disabled={!mappingComplete || submitting}
+                  aria-label="Submit light curve upload"
+                >
+                  {submitting ? <><span className="spinner" /> Submitting…</> : 'Submit'}
+                </button>
+              </div>
             )}
           </div>
         )}
+
       </div>
     </div>
   )

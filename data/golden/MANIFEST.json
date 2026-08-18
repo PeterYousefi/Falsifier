@@ -39,6 +39,81 @@
         "secondary_eclipse_depth": 0.0209,
         "depth_ratio_primary_over_secondary": 6.68
       }
+    },
+    {
+      "kic_id": "KIC 3425851",
+      "common_name": "KIC 3425851",
+      "quarter": 3,
+      "cadence": "long",
+      "mast_product_id": "kplr003425851-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0034/003425851/kplr003425851-2009350155506_llc.fits",
+      "pipeline_version": "SOC 9.3",
+      "flux_column": "SAP_FLUX",
+      "fits_filename": "kic_3425851_q3_long.fits",
+      "provenance_filename": "kic_3425851_q3_long.provenance.json",
+      "reference_doi": "10.17909/T9-NMC8-F686",
+      "reference_citation": "Kepler Mission Archive, MAST",
+      "notes": "Quiet-star injection-recovery target. No confirmed planet or KOI in NASA Exoplanet Archive as of 2026-08-18. Kepler Q3 long-cadence."
+    },
+    {
+      "kic_id": "KIC 5514383",
+      "common_name": "KIC 5514383",
+      "quarter": 3,
+      "cadence": "long",
+      "mast_product_id": "kplr005514383-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0055/005514383/kplr005514383-2009350155506_llc.fits",
+      "pipeline_version": "SOC 9.3",
+      "flux_column": "SAP_FLUX",
+      "fits_filename": "kic_5514383_q3_long.fits",
+      "provenance_filename": "kic_5514383_q3_long.provenance.json",
+      "reference_doi": "10.17909/T9-NMC8-F686",
+      "reference_citation": "Kepler Mission Archive, MAST",
+      "notes": "Quiet-star injection-recovery target. No confirmed planet or KOI in NASA Exoplanet Archive as of 2026-08-18. Kepler Q3 long-cadence."
+    },
+    {
+      "kic_id": "KIC 7272437",
+      "common_name": "KIC 7272437",
+      "quarter": 3,
+      "cadence": "long",
+      "mast_product_id": "kplr007272437-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0072/007272437/kplr007272437-2009350155506_llc.fits",
+      "pipeline_version": "SOC 9.3",
+      "flux_column": "SAP_FLUX",
+      "fits_filename": "kic_7272437_q3_long.fits",
+      "provenance_filename": "kic_7272437_q3_long.provenance.json",
+      "reference_doi": "10.17909/T9-NMC8-F686",
+      "reference_citation": "Kepler Mission Archive, MAST",
+      "notes": "Quiet-star injection-recovery target. No confirmed planet or KOI in NASA Exoplanet Archive as of 2026-08-18. Kepler Q3 long-cadence."
+    },
+    {
+      "kic_id": "KIC 9410930",
+      "common_name": "KIC 9410930",
+      "quarter": 3,
+      "cadence": "long",
+      "mast_product_id": "kplr009410930-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0094/009410930/kplr009410930-2009350155506_llc.fits",
+      "pipeline_version": "SOC 9.3",
+      "flux_column": "SAP_FLUX",
+      "fits_filename": "kic_9410930_q3_long.fits",
+      "provenance_filename": "kic_9410930_q3_long.provenance.json",
+      "reference_doi": "10.17909/T9-NMC8-F686",
+      "reference_citation": "Kepler Mission Archive, MAST",
+      "notes": "Quiet-star injection-recovery target. No confirmed planet or KOI in NASA Exoplanet Archive as of 2026-08-18. Kepler Q3 long-cadence."
+    },
+    {
+      "kic_id": "KIC 10963065",
+      "common_name": "KIC 10963065",
+      "quarter": 3,
+      "cadence": "long",
+      "mast_product_id": "kplr010963065-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0109/010963065/kplr010963065-2009350155506_llc.fits",
+      "pipeline_version": "SOC 9.3",
+      "flux_column": "SAP_FLUX",
+      "fits_filename": "kic_10963065_q3_long.fits",
+      "provenance_filename": "kic_10963065_q3_long.provenance.json",
+      "reference_doi": "10.17909/T9-NMC8-F686",
+      "reference_citation": "Kepler Mission Archive, MAST",
+      "notes": "Quiet-star injection-recovery target. No confirmed planet or KOI in NASA Exoplanet Archive as of 2026-08-18. Kepler Q3 long-cadence."
     }
   ]
 }

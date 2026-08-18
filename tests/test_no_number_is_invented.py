@@ -100,7 +100,7 @@ _FRAMEWORK_EXEMPT = frozenset({
   '0.055', '0.060', '0.040', '0.035', '0.045',
 })
 
-# Floats that are explicitly physics-formula coefficients in physics.js
+# Floats that are explicitly physics-formula coefficients in physics.ts
 # (Kopparapu+2013 coefficients) — these are fundamental constants, not
 # measured planetary values.  They appear in source only, not in UI renders.
 _PHYSICS_FORMULA_COEFFICIENTS = frozenset({
@@ -110,6 +110,7 @@ _PHYSICS_FORMULA_COEFFICIENTS = frozenset({
   '0.00465047', # R_sun in AU
   # Kopparapu+2013 S_eff solar flux coefficients (Table 1)
   '1.0140',     # S_eff_sun for runaway greenhouse (inner HZ edge, 0th order)
+  '1.014',      # same constant without trailing zero (minifier strips it)
   '0.3438',     # S_eff_sun for maximum greenhouse (outer HZ edge, 0th order)
   '8.1774',
   '1.7063',
@@ -164,9 +165,16 @@ def _load_artifact_corpus() -> set[str]:
     # vet.py  (no floats expected, but sweep it)
     _add_floats(_read(VET_PY))
 
-    # Fixture files themselves are part of the corpus
+    # API fixture files (tests/fixtures/api/) are part of the corpus
     if FIXTURES_DIR.exists():
         for p in sorted(FIXTURES_DIR.glob("*.json")):
+            _add_floats(_read(p))
+
+    # Frontend bundled fixture files (frontend/src/fixtures/) are committed
+    # source data — their values are backed by these files, not invented.
+    src_fixtures_dir = REPO_ROOT / "frontend" / "src" / "fixtures"
+    if src_fixtures_dir.exists():
+        for p in sorted(src_fixtures_dir.glob("*.json")):
             _add_floats(_read(p))
 
     # explanations.json
@@ -302,9 +310,9 @@ def test_physics_js_coefficients_are_declared():
     appear in the _PHYSICS_FORMULA_COEFFICIENTS exemption set in this test.
     This test fails if new undeclared coefficients are added to physics.js.
     """
-    physics_path = SRC_DIR / "physics.js"
+    physics_path = SRC_DIR / "physics.ts"
     if not physics_path.exists():
-        pytest.skip("frontend/src/physics.js does not exist yet")
+        pytest.skip("frontend/src/physics.ts does not exist yet")
 
     text = physics_path.read_text(encoding="utf-8", errors="replace")
     # Remove comment lines
@@ -431,10 +439,18 @@ def test_build_output_floats_are_backed_by_artifacts():
     # Primary check: committed source tree (always runs)
     violations = _scan_src_dir(SRC_DIR)
 
-    # Optional additional check: built bundle (only when dist/ is present)
+    # Optional additional check: built bundle (only when dist/ is present).
+    # Only scan application chunks — skip vendor-*.js which contains minified
+    # Three.js / recharts / React internals with thousands of library constants
+    # that are not scientific values.  The manualChunks split in vite.config.js
+    # routes all node_modules into vendor-*.js, so index-*.js contains only
+    # application code.  Source-map files (*.map) are also skipped.
     if DIST_DIR.exists():
         corpus = _load_artifact_corpus()
-        js_files = sorted(DIST_DIR.glob("assets/*.js"))
+        js_files = [
+            f for f in sorted(DIST_DIR.glob("assets/*.js"))
+            if not f.name.startswith("vendor-") and not f.name.endswith(".map")
+        ]
         for js_file in js_files:
             text = js_file.read_text(encoding="utf-8", errors="replace")
             for f in sorted(_extract_sci_floats(text)):

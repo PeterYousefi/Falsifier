@@ -1,7 +1,8 @@
 /**
  * src/screens/LiveConsole.tsx
- * Full-screen live console: SSE stage events with real endpoint names and
- * response times. Replays from fixture events when no live job is running.
+ * Full-screen live console in newspaper style.
+ * SSE stage events with timestamps and elapsed times.
+ * Replays from fixture events when no live job is running.
  */
 import React, { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
@@ -14,15 +15,21 @@ function formatElapsed(s: number | null | undefined): string {
   return `${s.toFixed(2)} s`
 }
 
-function eventBadge(evt: string): { label: string; color: string } {
-  switch (evt) {
-    case 'stage_start': return { label: 'START', color: 'var(--accent)' }
-    case 'stage_done':  return { label: 'DONE',  color: 'var(--pass)' }
-    case 'stage_error': return { label: 'ERROR', color: 'var(--fail)' }
-    case 'job_done':    return { label: 'JOB OK', color: 'var(--pass)' }
-    case 'job_failed':  return { label: 'JOB ERR', color: 'var(--fail)' }
-    default:            return { label: evt,    color: 'var(--muted)' }
-  }
+const STAGE_COLORS: Record<string, string> = {
+  ingest:   'var(--rust)',
+  detrend:  'var(--np-muted)',
+  search:   'var(--pass)',
+  vet:      'var(--warn)',
+  classify: 'var(--fail)',
+  pipeline: 'var(--np-faint)',
+}
+
+const EVENT_COLORS: Record<string, string> = {
+  stage_start: 'var(--np-muted)',
+  stage_done:  'var(--pass)',
+  stage_error: 'var(--fail)',
+  job_done:    'var(--pass)',
+  job_failed:  'var(--fail)',
 }
 
 export default function LiveConsole() {
@@ -31,14 +38,12 @@ export default function LiveConsole() {
   const [replaying, setReplaying] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Load fixture events on mount
   useEffect(() => {
     import('../fixtures/events.json').then((m) => {
       setFixtureEvents(m.default as StageEvent[])
     })
   }, [])
 
-  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [stageEvents, fixtureEvents])
@@ -50,8 +55,6 @@ export default function LiveConsole() {
     if (replaying) return
     setReplaying(true)
     setFixtureEvents([])
-    dataSource.getChatFixture().then(() => {}).catch(() => {})
-    // Re-import and replay
     import('../fixtures/events.json').then((m) => {
       const events = m.default as StageEvent[]
       let i = 0
@@ -65,64 +68,78 @@ export default function LiveConsole() {
   }
 
   return (
-    <div className="screen console-full">
-      <div className="panel-header">
-        Live Console
-        <span className="tag">{isLive ? 'live SSE' : 'fixture replay'}</span>
-        {jobId && <span className="tag" style={{ color: 'var(--accent)' }}>{jobId}</span>}
-        <span className="spacer" />
-        <span style={{ fontSize: 10, color: 'var(--muted)', marginRight: 8 }}>
-          {eventsToShow.length} events
-        </span>
+    <div className="screen" style={{ overflowY: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+
+      {/* Header */}
+      <div style={{
+        padding: '10px 32px', borderBottom: '2px solid var(--np-rule)',
+        background: 'var(--np-surface)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+      }}>
+        <div>
+          <h2 style={{ fontSize: 16, marginBottom: 2 }}>Pipeline Console</h2>
+          <p style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.4 }}>
+            {isLive ? 'Live SSE events from the running job.' : 'Fixture replay — no live job running.'}
+            {' '}{eventsToShow.length} events.
+          </p>
+        </div>
+        {jobId && (
+          <span className="tag" style={{ color: 'var(--rust)', borderColor: 'var(--rust)' }}>{jobId}</span>
+        )}
         {!isLive && (
           <button
-            style={{
-              background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--r)',
-              color: 'var(--muted)', cursor: replaying ? 'default' : 'pointer',
-              font: 'inherit', fontSize: 10, padding: '1px 8px',
-            }}
+            className="btn-secondary"
+            style={{ marginLeft: 'auto', fontSize: 12, padding: '4px 12px' }}
             onClick={replayFixture}
             disabled={replaying}
             aria-label="Replay fixture events"
           >
-            {replaying ? <><span className="spinner" /> replaying…</> : '⟳ replay fixture'}
+            {replaying ? <><span className="spinner" style={{ width: 10, height: 10 }} /> Replaying…</> : '⟳ Replay fixture'}
           </button>
         )}
       </div>
 
       {/* Column headers */}
       <div style={{
-        display: 'flex', gap: 8, padding: '3px 10px',
-        borderBottom: '1px solid var(--border)',
-        fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)',
+        display: 'flex', gap: 10, padding: '4px 32px',
+        borderBottom: '1px solid var(--np-border)',
+        fontFamily: 'var(--font-mono)', fontSize: 10,
+        color: 'var(--np-faint)', letterSpacing: '0.07em', flexShrink: 0,
+        background: 'var(--np-surface)',
       }}>
-        <span style={{ minWidth: 80 }}>timestamp</span>
-        <span style={{ minWidth: 90 }}>stage</span>
-        <span style={{ minWidth: 80 }}>event</span>
-        <span style={{ flex: 1 }}>detail</span>
-        <span style={{ minWidth: 64, textAlign: 'right' }}>elapsed</span>
+        <span style={{ minWidth: 80 }}>TIMESTAMP</span>
+        <span style={{ minWidth: 90 }}>STAGE</span>
+        <span style={{ minWidth: 90 }}>EVENT</span>
+        <span style={{ flex: 1 }}>DETAIL</span>
+        <span style={{ minWidth: 70, textAlign: 'right' }}>ELAPSED</span>
       </div>
 
-      <div className="console-inner" style={{ flex: 1, overflowY: 'auto' }}>
+      <div className="console-inner" style={{ flex: 1, overflowY: 'auto', padding: '4px 32px' }}>
         {eventsToShow.length === 0 && (
-          <div style={{ color: 'var(--muted)', padding: '8px 0' }}>
-            No events yet. Submit a job from the System screen, or click "replay fixture".
+          <div style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'var(--np-muted)', padding: '16px 0' }}>
+            No events yet. Submit a job from the Investigate screen, or click "Replay fixture".
           </div>
         )}
-        {eventsToShow.map((evt, i) => {
-          const badge = eventBadge(evt.event)
-          return (
-            <div key={i} className="event-row">
-              <span className="evt-ts">{evt.ts ?? '—'}</span>
-              <span className={`evt-stage ${evt.stage}`}>{evt.stage}</span>
-              <span className="evt-event">
-                <span style={{ color: badge.color, fontWeight: 500 }}>{badge.label}</span>
-              </span>
-              <span className="evt-detail">{evt.detail}</span>
-              <span className="evt-elapsed">{formatElapsed(evt.elapsed_seconds)}</span>
-            </div>
-          )
-        })}
+        {eventsToShow.map((evt, i) => (
+          <div key={i} className="console-line">
+            <span className="con-ts">{evt.ts ?? '—'}</span>
+            <span style={{
+              minWidth: 90, flexShrink: 0,
+              color: STAGE_COLORS[evt.stage] ?? 'var(--np-muted)',
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+            }}>
+              {evt.stage}
+            </span>
+            <span style={{
+              minWidth: 90, flexShrink: 0,
+              color: EVENT_COLORS[evt.event] ?? 'var(--np-muted)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
+            }}>
+              {evt.event.replace(/_/g, ' ')}
+            </span>
+            <span className="con-url">{evt.detail}</span>
+            <span className="con-ms">{formatElapsed(evt.elapsed_seconds)}</span>
+          </div>
+        ))}
         <div ref={bottomRef} />
       </div>
     </div>

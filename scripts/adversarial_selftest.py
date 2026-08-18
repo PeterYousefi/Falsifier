@@ -207,41 +207,73 @@ def wilson_score_interval(k: int, n: int, z: float = 1.0) -> tuple[float, float]
 def load_light_curve(
     star_id: str,
     data_dir: Path,
-    rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Load a real light curve or generate a synthetic one.
+    Load a real light curve from a committed FITS file.
 
     Returns (time_days, flux_norm, flux_err_norm).
-    Flux is normalised to unit median.  Time is in days.
+    Flux is normalised to unit median.  Time is in days (BKJD).
+
+    Design constraints
+    ------------------
+    1. **No wrong-star substitution.** Raises ``FileNotFoundError`` if no FITS
+       file matches the exact KIC tag.  Never substitutes another star.
+    2. **No synthetic noise fallback.** A false-alarm rate measured on
+       fabricated noise describes detector noise peak statistics, not the
+       pipeline's response to astrophysical systematics.  If the FITS is
+       absent, raise; do not generate data.
+
+    Uses ``astropy.io.fits`` directly — the same path as the golden regression
+    tests.  ``lightkurve.read()`` is not used because it fails on the golden
+    FITS format ("No reference time found").
+
+    Raises
+    ------
+    FileNotFoundError
+        If no FITS file matching *star_id* is found in *data_dir*.
     """
+    from astropy.io import fits as _fits
+
     star_tag = star_id.replace(" ", "_").lower()
+    pattern = f"{star_tag}*.fits"
+    fits_files = sorted(data_dir.glob(pattern))
 
-    try:
-        import lightkurve as lk
-        fits_files = sorted(data_dir.glob(f"{star_tag}*.fits"))
-        if not fits_files:
-            fits_files = sorted(data_dir.glob("*.fits"))[:1]
-        if fits_files:
-            lc = lk.read(str(fits_files[0]))
-            lc = lc.remove_nans().remove_outliers(sigma=5)
-            t = np.asarray(lc.time.value, dtype=np.float64)
-            f = np.asarray(lc.flux.value, dtype=np.float64)
-            e = np.asarray(lc.flux_err.value, dtype=np.float64)
-            med = float(np.median(f))
-            if abs(med) > 0:
-                f = f / med
-                e = e / abs(med)
-            return t, f, e
-    except (ImportError, Exception):
-        pass
+    if not fits_files:
+        available = [p.name for p in sorted(data_dir.glob("*.fits"))]
+        raise FileNotFoundError(
+            f"No FITS file found for '{star_id}' in {data_dir}.\n"
+            f"  Pattern searched: {pattern}\n"
+            f"  Files present   : {available}\n"
+            "Never substitute a different star. "
+            "Add this target to data/golden/MANIFEST.json and re-run "
+            "scripts/fetch_golden.py."
+        )
 
-    # Synthetic fallback
-    n = 1800
-    t = np.linspace(0.0, 90.0, n)
-    noise = INSTRUMENT_NOISE_FLOOR_PPM * 1e-6
-    f = 1.0 + rng.normal(0.0, noise, n)
-    e = np.full(n, noise)
+    fits_path = fits_files[0]
+    log.debug("Loading %s from %s", star_id, fits_path.name)
+
+    with _fits.open(fits_path) as hdul:
+        table = hdul[1].data
+        t = table["TIME"].astype(np.float64)
+        f = table["FLUX"].astype(np.float64)
+        e = table["FLUX_ERR"].astype(np.float64)
+        q = table["QUALITY"].astype(np.int32)
+
+    mask = np.isfinite(t) & np.isfinite(f) & (q == 0)
+    t, f, e = t[mask], f[mask], e[mask]
+
+    med = float(np.median(f))
+    if med == 0.0:
+        raise ValueError(
+            f"Median flux is zero for '{star_id}' — FITS file may be corrupt."
+        )
+    f = f / med
+    e = e / abs(med)
+
+    log.info(
+        "Loaded %s: %d cadences, baseline %.1f d, noise %.1f ppm rms",
+        star_id, len(t), float(t[-1] - t[0]), float(np.std(f)) * 1e6,
+    )
     return t, f, e
 
 
@@ -610,7 +642,7 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------
     lc_cache: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
     for star_id in quiet_stars:
-        lc_cache[star_id] = load_light_curve(star_id, args.data_dir, rng)
+        lc_cache[star_id] = load_light_curve(star_id, args.data_dir)
         log.debug("Loaded %d cadences for %s", len(lc_cache[star_id][0]), star_id)
 
     # ------------------------------------------------------------------

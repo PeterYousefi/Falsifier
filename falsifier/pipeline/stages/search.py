@@ -25,8 +25,10 @@ Rule 1: no scientific values hardcoded; all parameters come from ``SearchInput``
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import multiprocessing
+import multiprocessing.pool
 import sys
 import time
 import uuid
@@ -60,12 +62,54 @@ __all__ = ["run_search"]
 _SDE_THRESHOLD = 7.0
 
 # Maximum number of planets to search per star.
-# Set to 1: a single TLS pass typically takes ~25–30 s on Kepler long-cadence
-# data with a 1–10 d period range.  The 60-second test budget (golden tests)
-# cannot accommodate more than one full pass.  The iterative masking loop is
-# structurally present for multi-planet support; increase this constant only
-# when the compute budget allows.
+#
+# _MAX_PLANETS = 1 is a **known limitation**: iterative masking is inert and
+# multi-planet systems cannot be found.  This constant is kept at 1 because:
+#   - A single TLS pass takes ~25–30 s on Kepler long-cadence data with a
+#     1–10 d period range; the 60-second test budget (golden tests) cannot
+#     accommodate more than one full pass.
+#   - Raising this to >1 requires a per-star compute budget and an integration
+#     test with a known 2-planet system.
+#
+# Declared explicitly here and in README dead-code table per AGENTS.md Rule 6.
 _MAX_PLANETS = 1
+
+
+@contextlib.contextmanager
+def _tls_fork_pool_ctx():
+    """
+    Context manager that makes TLS's internal multiprocessing.Pool use the
+    'fork' start method for the duration of one TLS call.
+
+    TLS calls ``multiprocessing.Pool(use_threads)`` directly.  We monkey-patch
+    ``multiprocessing.pool.Pool`` with a subclass whose constructor forces a
+    fork-context pool, then restore the original class on exit.
+
+    This is intentionally narrow in scope: it does not call
+    ``multiprocessing.set_start_method()`` (which is process-wide and
+    permanently affects every subsequent Pool, including those created by the
+    FastAPI server's async workers where fork is unsafe).
+
+    Fork is required on macOS/Python 3.12 because TLS's spawn workers run a
+    fresh interpreter that lacks the distutils shim already loaded in the
+    parent; batman (which TLS imports) fails to import in spawn workers.
+    """
+    original_pool = multiprocessing.pool.Pool
+
+    class _ForkPool(original_pool):  # type: ignore[valid-type, misc]
+        def __init__(self, *args, **kwargs):
+            kwargs.setdefault("context", multiprocessing.get_context("fork"))
+            super().__init__(*args, **kwargs)
+
+    multiprocessing.pool.Pool = _ForkPool  # type: ignore[assignment]
+    # TLS accesses multiprocessing.Pool (not multiprocessing.pool.Pool) in some
+    # versions; patch both to be safe.
+    multiprocessing.Pool = _ForkPool  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        multiprocessing.pool.Pool = original_pool  # type: ignore[assignment]
+        multiprocessing.Pool = original_pool  # type: ignore[assignment]
 
 
 def _compute_odd_even_excess(results, depth_ppm: float) -> float:
@@ -175,29 +219,34 @@ def run_search(
     # between iterations to prevent the same signal from re-triggering.
     flux_work = flux_arr.copy()
 
-    # TLS uses multiprocessing.Pool.  On macOS/Python 3.12 the default start
-    # method is 'spawn'; spawned workers run fresh Python processes that do not
-    # inherit sys.modules, so the distutils stub installed above is not present
-    # in them.  'fork' workers inherit the parent's memory including sys.modules,
-    # so the stub (and any already-imported batman symbols) are available.
-    # We set the start method once, guarding against repeated calls.
-    try:
-        multiprocessing.set_start_method('fork', force=True)
-    except ValueError:
-        pass  # already set to fork by a previous call
-
     for planet_index in range(_MAX_PLANETS):
         if len(time_arr) < 10:
             break
 
         n_threads = max(1, multiprocessing.cpu_count())
         model = TLS(time_arr, flux_work)
-        results = model.power(
-            period_min=period_min,
-            period_max=period_max,
-            use_threads=n_threads,
-            show_progress_bar=False,
-        )
+        # TLS uses multiprocessing.Pool internally.  On macOS/Python 3.12 the
+        # default start method is 'spawn'; spawned workers run fresh interpreter
+        # processes that do not inherit sys.modules, so the distutils stub and
+        # already-imported batman symbols are absent in them.  'fork' workers
+        # inherit the parent's memory space including sys.modules.
+        #
+        # We must NOT call multiprocessing.set_start_method() at module scope
+        # or in run_search() body — that would affect every importer, including
+        # the threaded FastAPI server where fork is unsafe (open sockets are
+        # duplicated into children, leading to fd corruption).
+        #
+        # Instead we temporarily replace the Pool class TLS will instantiate
+        # with a subclass that forces the fork context, restoring the original
+        # afterwards.  This is scoped to a single TLS call and does not touch
+        # the global start-method state.
+        with _tls_fork_pool_ctx():
+            results = model.power(
+                period_min=period_min,
+                period_max=period_max,
+                use_threads=n_threads,
+                show_progress_bar=False,
+            )
 
         if results.SDE < sde_threshold:
             break  # no more significant signals

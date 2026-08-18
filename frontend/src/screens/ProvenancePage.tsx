@@ -1,7 +1,8 @@
 /**
  * src/screens/ProvenancePage.tsx
- * Provenance: data versions, DOIs, access dates,
- * wired-vs-aspirational module table, locked non-claim prominently displayed.
+ * Provenance page in newspaper style.
+ * Data versions, DOIs, access dates, wired-vs-aspirational module table,
+ * locked non-claims prominently displayed.
  */
 import React, { useEffect } from 'react'
 import { useStore } from '../store'
@@ -15,49 +16,60 @@ export default function ProvenancePage() {
 
   if (!provenance) {
     return (
-      <div className="screen prov-layout">
-        <div className="panel-header">Provenance <span className="tag">loading…</span></div>
-        <div className="no-data"><span className="spinner" /></div>
+      <div className="screen" style={{ overflowY: 'auto' }}>
+        <div className="page-body no-data">
+          <span className="spinner" aria-label="Loading provenance" />
+          <span style={{ marginLeft: 10 }}>Loading provenance…</span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="screen prov-layout">
-      <div className="panel-header">
-        Provenance
-        <span className="tag">data lineage + module wiring</span>
-        <span className="spacer" />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)' }}>
-          falsifier {provenance.falsifier_version}
-        </span>
-      </div>
+    <div className="screen" style={{ overflowY: 'auto' }}>
+      <div className="page-body">
 
-      <div className="prov-body scroll-body">
+        {/* Masthead for this section */}
+        <hr className="rule-double" />
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginTop: 14, marginBottom: 4, flexWrap: 'wrap' }}>
+          <h1>Data Provenance</h1>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--np-muted)' }}>
+            falsifier {provenance.falsifier_version}
+          </span>
+        </div>
+        <p style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--np-muted)', marginBottom: 20, lineHeight: 1.6 }}>
+          Every dataset ingested by this pipeline is recorded below with its citable DOI,
+          access date, and row count at ingest time. Module wiring status distinguishes
+          code that is reachable from a live path from code that is written but not yet connected.
+        </p>
+        <hr className="rule-hair" />
 
-        {/* Locked non-claim — displayed prominently */}
-        <div className="prov-section">
+        {/* Immutable non-claims */}
+        <div className="panel-section">
+          <div className="section-label">Immutable non-claims</div>
           <div className="non-claim-block" role="note" aria-label="Immutable non-claims">
-            <div className="nc-locked">Immutable Non-Claims (AGENTS.md)</div>
+            <div className="nc-locked">Locked claims (AGENTS.md)</div>
             <ul>
               {provenance.non_claims.map((c, i) => <li key={i}>{c}</li>)}
             </ul>
           </div>
         </div>
 
+        <hr className="rule-hair" />
+
         {/* Data versions */}
-        <div className="prov-section">
-          <h2>Data versions</h2>
+        <div className="panel-section">
+          <div className="section-label">Dataset versions</div>
           {provenance.data_versions.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+            <p style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'var(--np-muted)', fontSize: 14 }}>
               No provenance sidecars found in data/golden/. Run the pipeline to generate them.
-            </div>
+            </p>
           ) : (
-            <table className="prov-table" aria-label="Data versions">
+            <table className="prov-table" aria-label="Dataset versions">
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Source DOI</th>
+                  <th>DOI</th>
                   <th>Access date</th>
                   <th>Rows</th>
                   <th>Description</th>
@@ -72,27 +84,33 @@ export default function ProvenancePage() {
                         href={`https://doi.org/${dv.source_doi}`}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: 'var(--accent)', textDecoration: 'none' }}
                       >
                         {dv.source_doi}
                       </a>
                     </td>
                     <td className="mono">{dv.access_date}</td>
                     <td className="mono">{dv.row_count?.toLocaleString() ?? '—'}</td>
-                    <td>{dv.description}</td>
+                    <td style={{ fontFamily: 'var(--font-serif)' }}>{dv.description}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-          <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted)' }}>
-            Golden manifest entries: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{provenance.golden_manifest_entry_count}</span>
+          <div style={{ marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-muted)' }}>
+            Golden manifest entries: {provenance.golden_manifest_entry_count}
           </div>
         </div>
 
+        <hr className="rule-hair" />
+
         {/* Module wiring */}
-        <div className="prov-section">
-          <h2>Module wiring status</h2>
+        <div className="panel-section">
+          <div className="section-label">Pipeline module wiring status</div>
+          <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+            <em>Wired</em> modules are reachable from the live code path.
+            <em> Aspirational</em> modules are written and listed here per AGENTS.md Rule 6,
+            but are not yet connected to any live execution path.
+          </p>
           <table className="prov-table" aria-label="Pipeline module wiring status">
             <thead>
               <tr>
@@ -111,24 +129,26 @@ export default function ProvenancePage() {
                       : <span className="aspir-chip">aspirational</span>
                     }
                   </td>
-                  <td style={{ fontSize: 11, color: 'var(--muted)' }}>{m.note}</td>
+                  <td style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)' }}>{m.note}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Pipeline version */}
-        <div className="prov-section">
-          <h2>Build</h2>
-          <table className="prov-table" aria-label="Build information">
+        <hr className="rule-hair" />
+
+        {/* Build info */}
+        <div className="panel-section">
+          <div className="section-label">Build</div>
+          <table className="prov-table" style={{ maxWidth: 420 }} aria-label="Build information">
             <tbody>
               <tr>
-                <td style={{ color: 'var(--muted)' }}>falsifier version</td>
+                <td style={{ color: 'var(--np-muted)', fontFamily: 'var(--font-serif)' }}>falsifier version</td>
                 <td className="mono">{provenance.falsifier_version}</td>
               </tr>
               <tr>
-                <td style={{ color: 'var(--muted)' }}>golden manifest entries</td>
+                <td style={{ color: 'var(--np-muted)', fontFamily: 'var(--font-serif)' }}>golden manifest entries</td>
                 <td className="mono">{provenance.golden_manifest_entry_count}</td>
               </tr>
             </tbody>

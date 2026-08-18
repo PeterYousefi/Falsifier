@@ -1,7 +1,7 @@
 /**
  * src/App.tsx
- * Root application shell: top nav, screen router, page footer with locked non-claim.
- * All screens render with fixture data by default (VITE_DATA_SOURCE=fixture).
+ * Root application shell: newspaper masthead, dateline, nav, screens, locked footer.
+ * All scientific values flow from the data layer — no literals here.
  */
 import React, { useEffect } from 'react'
 import { useStore } from './store'
@@ -14,13 +14,13 @@ import ProvenancePage from './screens/ProvenancePage'
 import LiveConsole from './screens/LiveConsole'
 
 const SCREENS = [
-  { id: 'system',     label: 'System',    title: 'Orbital system browse' },
-  { id: 'detail',     label: 'Candidate', title: 'Candidate detail' },
-  { id: 'chat',       label: 'Chat',      title: 'Pipeline chat' },
-  { id: 'upload',     label: 'Upload',    title: 'Light curve upload' },
-  { id: 'training',   label: 'Training',  title: 'Training sandbox' },
-  { id: 'provenance', label: 'Provenance', title: 'Data provenance' },
-  { id: 'console',    label: 'Console',   title: 'Live console' },
+  { id: 'system',     label: 'Investigate',  title: 'Landing / investigate a target' },
+  { id: 'detail',     label: 'Report',        title: 'Full candidate report' },
+  { id: 'chat',       label: 'Ask',           title: 'Pipeline chat' },
+  { id: 'upload',     label: 'Upload',        title: 'Light curve upload' },
+  { id: 'training',   label: 'Training',      title: 'Training sandbox' },
+  { id: 'provenance', label: 'Provenance',    title: 'Data provenance' },
+  { id: 'console',    label: 'Console',       title: 'Live console' },
 ]
 
 const LOCKED_NON_CLAIM =
@@ -30,7 +30,6 @@ const LOCKED_NON_CLAIM =
 export default function App() {
   const { activeScreen, setActiveScreen, loadProvenance, loadFixtureJob } = useStore()
 
-  // Load provenance and fixture job on mount so all screens have data
   useEffect(() => {
     loadProvenance()
     loadFixtureJob()
@@ -51,11 +50,26 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {/* Top navigation */}
+      {/* Newspaper masthead */}
+      <header className="masthead" role="banner">
+        <div className="masthead-title" aria-label="Falsifier">FALSIFIER</div>
+        <hr className="masthead-rule" />
+        <hr className="masthead-rule-bottom" />
+      </header>
+
+      {/* Dateline strip */}
+      <div className="dateline" role="doc-subtitle">
+        <span>DISEQUILIBRIUM SCREENING &amp; FALSE-POSITIVE TRIAGE</span>
+        <span className="dateline-divider">·</span>
+        <span>KEPLER · TESS · K2</span>
+        <span className="dateline-divider">·</span>
+        <span>NO API KEYS REQUIRED</span>
+        <span className="dateline-divider">·</span>
+        <span>OPEN PIPELINE ARTIFACTS</span>
+      </div>
+
+      {/* Navigation */}
       <nav className="top-nav" role="navigation" aria-label="Main navigation">
-        <div className="logo">
-          <span>Falsifier</span>
-        </div>
         {SCREENS.map((s) => (
           <button
             key={s.id}
@@ -70,7 +84,7 @@ export default function App() {
       </nav>
 
       {/* Active screen */}
-      <main className="screen" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <main className="screen" role="main">
         {renderScreen()}
       </main>
 

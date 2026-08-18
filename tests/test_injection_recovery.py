@@ -353,20 +353,66 @@ class TestRunSingleInjection:
 # Artifact JSON schema
 # ---------------------------------------------------------------------------
 
+def _write_synthetic_fits(path: Path, n: int = 3800, noise_ppm: float = 300.0, seed: int = 0) -> None:
+    """
+    Write a minimal FITS file in the golden format (TIME, FLUX, FLUX_ERR, QUALITY)
+    with a baseline long enough to satisfy MIN_BASELINE_DAYS.
+
+    n=3800 cadences at ~30-min cadence → ~80 days (just above 60-day minimum).
+    Quality is all-zero (all cadences good).
+    """
+    from astropy.io import fits as _fits
+    from astropy.table import Table as _Table
+
+    rng = np.random.default_rng(seed)
+    t = np.linspace(0.0, n * (30.0 / 1440.0), n)   # 30-min cadence in days
+    sigma = noise_ppm * 1e-6
+    f = (1.0 + rng.normal(0.0, sigma, n)) * 200_000.0  # e-/s raw flux
+    e = np.full(n, sigma * 200_000.0)
+    q = np.zeros(n, dtype=np.int32)
+
+    tbl = _Table([t, f, e, q], names=["TIME", "FLUX", "FLUX_ERR", "QUALITY"])
+    primary_hdu = _fits.PrimaryHDU()
+    table_hdu = _fits.BinTableHDU(tbl, name="LIGHTCURVE")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _fits.HDUList([primary_hdu, table_hdu]).writeto(str(path), overwrite=True)
+
+
+def _make_data_dir(tmp_path: Path, star_ids: list, seed: int = 0) -> Path:
+    """
+    Create a data directory containing one FITS file per star_id, named
+    according to the load_quiet_star convention.
+    """
+    data_dir = tmp_path / "golden"
+    for i, star_id in enumerate(star_ids):
+        tag = star_id.replace(" ", "_").lower()
+        _write_synthetic_fits(data_dir / f"{tag}_q3_long.fits", seed=seed + i)
+    return data_dir
+
+
+# The DEFAULT_QUIET_STARS list drives which stars main() looks for.
+from scripts.injection_recovery import DEFAULT_QUIET_STARS as _DEFAULT_QUIET_STARS
+
+
 class TestInjectionRecoveryArtifact:
     def test_artifact_has_required_fields(self, tmp_path):
         """
         Run the script end-to-end with minimal settings and verify the
         output artifact has the mandatory AGENTS.md Rule 3 fields.
+
+        Provides synthetic FITS files in the golden format — no network,
+        no lightkurve, no TLS.  The BLS fallback is forced by the module-level
+        _force_bls_fallback fixture.
         """
+        data_dir = _make_data_dir(tmp_path, _DEFAULT_QUIET_STARS, seed=0)
         out_dir = tmp_path / "artifacts"
         result = ir_main([
             "--seed", "0",
             "--n-per-cell", "2",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "nonexistent"),  # triggers synthetic fallback
+            "--data-dir", str(data_dir),
             "--no-plot",
-            "--n-bls-periods", "50",  # coarse grid — test verifies artifact schema, not recovery accuracy
+            "--n-bls-periods", "50",  # coarse grid — verifies artifact schema, not recovery accuracy
         ])
         assert result == 0
 
@@ -396,14 +442,15 @@ class TestInjectionRecoveryArtifact:
 
     def test_manifest_sidecar_written(self, tmp_path):
         """A .manifest.json sidecar must be co-located with the artifact."""
+        data_dir = _make_data_dir(tmp_path, _DEFAULT_QUIET_STARS, seed=10)
         out_dir = tmp_path / "artifacts"
         ir_main([
             "--seed", "1",
             "--n-per-cell", "1",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "nonexistent"),
+            "--data-dir", str(data_dir),
             "--no-plot",
-            "--n-bls-periods", "50",  # coarse grid — test verifies sidecar schema, not recovery accuracy
+            "--n-bls-periods", "50",  # coarse grid — verifies sidecar schema
         ])
         manifest_path = out_dir / "injection_recovery.manifest.json"
         assert manifest_path.exists(), "Manifest sidecar not written"
@@ -417,12 +464,13 @@ class TestInjectionRecoveryArtifact:
 
     def test_row_count_matches_results(self, tmp_path):
         """row_count must equal n_injections_attempted."""
+        data_dir = _make_data_dir(tmp_path, _DEFAULT_QUIET_STARS, seed=20)
         out_dir = tmp_path / "artifacts"
         ir_main([
             "--seed", "2",
             "--n-per-cell", "3",
             "--output-dir", str(out_dir),
-            "--data-dir", str(tmp_path / "none"),
+            "--data-dir", str(data_dir),
             "--no-plot",
             "--n-bls-periods", "50",  # coarse grid — sufficient for a count test
         ])

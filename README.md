@@ -291,8 +291,13 @@ Period-match tolerance for recovery: 2%
 **Depth grid**: 200, 400, 800, 1500, 3000, 6000, 12000 ppm
 *(read from `scripts/injection_recovery.py → DEPTH_GRID_PPM`)*
 
-**Period grid**: 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0 days
+**Period grid**: 0.5, 1.0, 2.0, 5.0, 10.0, 20.0 days
 *(read from `scripts/injection_recovery.py → PERIOD_GRID_DAYS`)*
+
+**Baseline constraint**: Kepler Q3 is ~89 days. With `MIN_TRANSITS_REQUIRED = 3`,
+the maximum grid period is ⌊89 / 3⌋ ≈ 29 days → 20.0 d is the longest grid point.
+Injecting at P = 40 d on a single quarter yields only ~2 transit windows,
+insufficient for reliable TLS recovery.
 
 **Transit shape**: box (conservative — broader ingress than limb-darkened,
 harder to detect than a perfect trapezoid).
@@ -475,6 +480,7 @@ unreachable from `scripts/reproduce.sh` is a policy violation (AGENTS.md Rule 6)
 | `falsifier/pipeline/stages/retrieve.py` | **Exploratory** — wired only via `scripts/run_batch.py` | Requires petitRADTRANS + dynesty; not part of the real-time pipeline |
 | `falsifier/pipeline/stages/disequilibrium.py` | **Exploratory** — wired only via `scripts/run_batch.py` | Requires FastChem + VULCAN; not part of the real-time pipeline |
 | `falsifier/pipeline/batch/runner.py` | **Exploratory** — CLI only via `scripts/run_batch.py` | Offline batch process; no API route calls it |
+| `falsifier/pipeline/stages/search.py` `_MAX_PLANETS = 1` | **Known limitation** — iterative masking is structurally present but inert | `_MAX_PLANETS = 1` means only the strongest signal is returned; multi-planet systems cannot be found. Increasing requires a per-star compute budget and a 2-planet integration test; the current 60 s golden-test budget does not permit a second full TLS pass. |
 
 ---
 

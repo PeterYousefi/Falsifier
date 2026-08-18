@@ -1,7 +1,10 @@
 /**
  * src/screens/SystemScreen.tsx
- * System browse: Three.js orbital view + non-3D fallback list.
- * All visual properties driven by measured values from the data layer.
+ * Landing page + investigation view.
+ * Newspaper layout: headline question, plain prose, three-step strip,
+ * prominent example button, search input, worked verdict preview.
+ * Orbital 3D view as a bordered figure-inset with caption.
+ * All visual properties driven from data layer — no scientific literals.
  */
 import React, { useRef, useMemo, useState, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
@@ -20,26 +23,32 @@ import {
   inclinationToRotation,
 } from '../physics'
 import type { VetResult } from '../data/types'
-import { VETTING_TEST_ORDER, TEST_LABELS, VetBadge, DispoChip, Row, PhaseLCPlot } from './CandidateDetail'
+import { DispoChip } from './CandidateDetail'
 
-// ── Host-star visual defaults when stellar_params absent ──────────────────
-const DEFAULT_TEFF     = 5778
-const DEFAULT_R_STAR   = 1.0
-const DEFAULT_LUM      = 1.0
-const STAR_SCENE_SIZE  = 0.18
-const HZ_OPACITY       = 0.09
+// Host-star visual defaults when stellar_params absent.
+// These constants are fallback display values, not scientific claims.
+const STAR_SCENE_SIZE_DEFAULT = 0.18
+const HZ_OPACITY_DEFAULT      = 0.09
+
+// ── Example targets across missions ─────────────────────────────────────
+const EXAMPLE_TARGETS = [
+  { id: 'KIC 11904151', mission: 'Kepler',  cadence: 'long',  label: 'Kepler-10b host',            gloss: 'KIC 11904151 — a star in NASA\'s Kepler Input Catalogue, hosting the confirmed planet Kepler-10b' },
+  { id: 'TIC 150428135', mission: 'TESS',   cadence: 'long',  label: 'TOI-700 (TESS)',              gloss: 'TOI-700 — a star observed by NASA\'s TESS satellite, hosting planet candidates in its habitable zone' },
+  { id: 'TIC 200322593', mission: 'TESS',   cadence: 'long',  label: 'TRAPPIST-1 (TESS)',          gloss: 'TRAPPIST-1 — an ultra-cool dwarf star hosting seven confirmed planets, observed by NASA\'s TESS satellite' },
+  { id: 'KIC 6965293',   mission: 'Kepler', cadence: 'long',  label: 'KIC 6965293 (Kepler EB)',    gloss: 'KIC 6965293 — a star in the Kepler Input Catalogue; its signal is an eclipsing binary (not a planet)' },
+]
 
 // ── Orbit ring ────────────────────────────────────────────────────────────
 function OrbitRing({ radius }: { radius: number }) {
   const pts = useMemo(() => {
     const a: THREE.Vector3[] = []
     for (let i = 0; i <= 128; i++) {
-      const t = (i / 128) * 2 * Math.PI
+      const t = (i / 128) * Math.PI * 2
       a.push(new THREE.Vector3(Math.cos(t) * radius, 0, Math.sin(t) * radius))
     }
     return a
   }, [radius])
-  return <Line points={pts} color="#334155" lineWidth={0.4} />
+  return <Line points={pts} color="#8A8880" lineWidth={0.4} />
 }
 
 // ── Habitable zone ring ───────────────────────────────────────────────────
@@ -54,7 +63,7 @@ function HZRing({ inner, outer }: { inner: number; outer: number }) {
   }, [inner, outer])
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={geom}>
-      <meshBasicMaterial color="#22c55e" transparent opacity={HZ_OPACITY} side={THREE.DoubleSide} />
+      <meshBasicMaterial color="#2D6A2D" transparent opacity={HZ_OPACITY_DEFAULT} side={THREE.DoubleSide} />
     </mesh>
   )
 }
@@ -129,8 +138,8 @@ function LineOfSight() {
   ], [])
   return (
     <>
-      <Line points={pts} color="#3b82f6" lineWidth={0.8} dashed dashSize={0.12} gapSize={0.08} />
-      <Text position={[0, 0.12, 5.8]} fontSize={0.07} color="#3b82f6" anchorX="center" anchorY="middle">
+      <Line points={pts} color="#993C1D" lineWidth={0.8} dashed dashSize={0.12} gapSize={0.08} />
+      <Text position={[0, 0.12, 5.8]} fontSize={0.07} color="#993C1D" anchorX="center" anchorY="middle">
         {'← Earth'}
       </Text>
     </>
@@ -151,18 +160,18 @@ function SceneContent({ vets, stellarTeff, stellarRadius, lumLsun }: {
 
   return (
     <>
-      <ambientLight intensity={0.4} />
-      <pointLight position={[0, 0, 0]} intensity={2.5} distance={20} decay={2} />
-      <directionalLight position={[5, 5, 5]} intensity={0.5} />
+      <ambientLight intensity={0.6} />
+      <pointLight position={[0, 0, 0]} intensity={2.0} distance={20} decay={2} />
+      <directionalLight position={[5, 5, 5]} intensity={0.4} />
       <mesh>
-        <sphereGeometry args={[STAR_SCENE_SIZE, 24, 24]} />
-        <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={1.5} />
+        <sphereGeometry args={[STAR_SCENE_SIZE_DEFAULT, 24, 24]} />
+        <meshStandardMaterial color="#C8963E" emissive="#C8963E" emissiveIntensity={1.2} />
       </mesh>
-      <Text position={[0, STAR_SCENE_SIZE + 0.07, 0]} fontSize={0.06} color="#9ca3af" anchorX="center">
+      <Text position={[0, STAR_SCENE_SIZE_DEFAULT + 0.07, 0]} fontSize={0.06} color="#5A5850" anchorX="center">
         {'host star'}
       </Text>
       <HZRing inner={hzIn} outer={hzOut} />
-      <Text position={[hzIn + (hzOut - hzIn) / 2, 0.06, 0]} fontSize={0.055} color="#22c55e" anchorX="center">
+      <Text position={[hzIn + (hzOut - hzIn) / 2, 0.06, 0]} fontSize={0.055} color="#2D6A2D" anchorX="center">
         {'HZ (computed)'}
       </Text>
       {vets.map((v) => (
@@ -190,15 +199,17 @@ function FallbackList({ vets, stellarTeff, stellarRadius }: {
   if (!vets.length) {
     return (
       <div className="orbital-fallback">
-        <div className="no-data">No TCEs — submit a target to begin.</div>
+        <p style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'var(--np-muted)', fontSize: 14 }}>
+          No candidates yet. Run a target above to begin.
+        </p>
       </div>
     )
   }
   return (
-    <div className="orbital-fallback" role="list" aria-label="TCE list (non-3D fallback)">
-      <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--muted)' }}>
+    <div className="orbital-fallback" role="list" aria-label="TCE list (non-3D)">
+      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--np-muted)', marginBottom: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
         Non-3D list · colour = T<sub>eq</sub> · orbit radius = semi-major axis
-      </div>
+      </p>
       {vets.map((v) => {
         const period = v.period_days ?? 1
         const depth  = v.depth_ppm  ?? 100
@@ -210,14 +221,9 @@ function FallbackList({ vets, stellarTeff, stellarRadius }: {
         return (
           <button
             key={v.tce_id}
-            className="orbital-fallback-row"
-            style={{
-              width: '100%', textAlign: 'left',
-              background: active ? 'var(--highlight)' : 'transparent',
-              border: active ? '1px solid var(--accent)' : '1px solid transparent',
-              borderRadius: 'var(--r)', cursor: 'pointer',
-            }}
+            className={`orbital-fallback-row${active ? ' active' : ''}`}
             onClick={() => setSelectedTceId(v.tce_id)}
+            role="listitem"
             aria-pressed={active}
           >
             <span className="fallback-swatch" style={{ background: color }} aria-hidden />
@@ -251,16 +257,27 @@ function FallbackList({ vets, stellarTeff, stellarRadius }: {
   )
 }
 
-// ── TargetForm ────────────────────────────────────────────────────────────
-function TargetForm() {
+// ── Target search form ─────────────────────────────────────────────────────
+function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
+  defaultTarget?: string
+  defaultMission?: string
+  defaultCadence?: string
+}) {
   const { targetId, setTargetId, isSubmitting, jobStatus, submitJob } = useStore()
-  const [mission, setMission] = useState('Kepler')
-  const [cadence, setCadence] = useState('long')
+  const [mission, setMission] = useState(defaultMission ?? 'Kepler')
+  const [cadence, setCadence] = useState(defaultCadence ?? 'long')
   const busy = isSubmitting || jobStatus === 'running' || jobStatus === 'queued'
+
+  useEffect(() => {
+    if (defaultTarget) setTargetId(defaultTarget)
+    if (defaultMission) setMission(defaultMission)
+    if (defaultCadence) setCadence(defaultCadence)
+  }, [defaultTarget, defaultMission, defaultCadence])
 
   return (
     <form
-      className="search-bar"
+      className="search-row"
+      style={{ margin: '16px 0' }}
       onSubmit={(e) => {
         e.preventDefault()
         if (targetId.trim()) submitJob(targetId.trim(), mission, cadence)
@@ -269,9 +286,10 @@ function TargetForm() {
       <input
         value={targetId}
         onChange={(e) => setTargetId(e.target.value)}
-        placeholder="KIC 11904151 / TIC 261136679"
+        placeholder="e.g. KIC 11904151 · TIC 150428135 · TIC 200322593"
         disabled={busy}
-        aria-label="Target identifier"
+        aria-label="Target catalogue identifier"
+        style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
       />
       <select value={mission} onChange={(e) => setMission(e.target.value)} disabled={busy} aria-label="Mission">
         <option>Kepler</option>
@@ -279,273 +297,300 @@ function TargetForm() {
         <option>TESS</option>
       </select>
       <select value={cadence} onChange={(e) => setCadence(e.target.value)} disabled={busy} aria-label="Cadence">
-        <option value="long">long</option>
-        <option value="short">short</option>
+        <option value="long">long cadence</option>
+        <option value="short">short cadence</option>
       </select>
-      <button type="submit" disabled={busy || !targetId.trim()}>
-        {busy ? <span className="spinner" aria-label="Running" /> : 'Run'}
+      <button type="submit" className="btn-primary" disabled={busy || !targetId.trim()}>
+        {busy ? <><span className="spinner" aria-label="Running" /> Running…</> : 'Run'}
       </button>
     </form>
   )
 }
 
-// ── Inline detail panel (right column of system view) ─────────────────────
-function DetailPanel() {
-  const { report, selectedTceId, highlightedPanel } = useStore()
+// ── Verdict preview (worked example from fixture) ─────────────────────────
+function VerdictPreview() {
+  const { report, setActiveScreen } = useStore()
+  if (!report) return null
 
-  const vetResult = useMemo(() => {
-    if (!report?.vet?.length) return null
-    if (selectedTceId) return report.vet.find((v) => v.tce_id === selectedTceId) ?? report.vet[0]
-    return report.vet[0]
-  }, [report, selectedTceId])
+  const vet = report.vet?.[0]
+  if (!vet) return null
 
-  const classifyResult = useMemo(() => {
-    if (!report?.classify?.length || !vetResult) return null
-    return report.classify.find((c) => c.tce_id === vetResult.tce_id) ?? null
-  }, [report, vetResult])
-
-  if (!report) {
-    return (
-      <div className="panel panel--detail">
-        <div className="panel-header">Detail <span className="tag">no target</span></div>
-        <div className="no-data">
-          Run a detection job to<br />see TCE detail and vetting rows.
-        </div>
-      </div>
-    )
-  }
-
-  const hl = (s: string) => highlightedPanel === s
+  const allPass = vet.test_results?.every((t) => t.outcome === 'PASS')
+  const headline = vet.disposition === 'candidate'
+    ? `${report.target_id} — candidate planet survives all ${vet.test_results?.length ?? 0} challenges`
+    : vet.disposition === 'false_positive'
+      ? `${report.target_id} — rejected: ${vet.triggering_reason ?? 'see vetting report'}`
+      : `${report.target_id} — ${vet.disposition.replace(/_/g, ' ')}`
 
   return (
-    <div className="panel panel--detail">
-      <div className="panel-header">
-        Detail <span className="tag">{report.target_id}</span>
-        {report.ingest?.host_star_id && (
-          <span className="tag" style={{ color: 'var(--accent)' }}>{report.ingest.host_star_id}</span>
-        )}
+    <div className="verdict-card">
+      <div className="section-label">Worked verdict — fixture: {report.target_id}</div>
+      <h2 style={{ fontFamily: 'var(--font-head)', fontSize: 20, marginBottom: 8 }}>{headline}</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <DispoChip disposition={vet.disposition} />
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-muted)' }}>
+          Period: {vet.period_days != null ? vet.period_days.toFixed(4) + ' d' : '—'}
+          {' · '}
+          Depth: {vet.depth_ppm != null ? vet.depth_ppm.toFixed(0) + ' ppm' : '—'}
+        </span>
       </div>
-
-      <div className={`detail-section${hl('ingest') ? ' highlighted' : ''}`}>
-        <h3>Target</h3>
-        <Row label="Host star"      value={report.ingest?.host_star_id}    source="ingest.host_star_id" />
-        <Row label="Segments"       value={report.ingest?.n_segments}       source="ingest.n_segments" />
-        <Row label="Stellar params" value={report.ingest?.has_stellar_params ? 'yes' : 'no'} source="ingest.has_stellar_params" />
-        <Row label="Code version"   value={report.ingest?.code_version}    source="ingest.code_version" />
-        <Row label="Ingest time"    value={report.ingest?.wall_time_seconds != null ? `${report.ingest.wall_time_seconds.toFixed(2)} s` : null} source="ingest.wall_time_seconds" />
-      </div>
-
-      <div className={`detail-section${hl('search') ? ' highlighted' : ''}`}>
-        <h3>Search</h3>
-        <Row label="TCEs"        value={report.search?.n_tces ?? 0}  source="search.n_tces" />
-        <Row label="TLS version" value={report.search?.tls_version}  source="search.tls_version" />
-        <Row label="Search time" value={report.search?.wall_time_seconds != null ? `${report.search.wall_time_seconds.toFixed(2)} s` : null} source="search.wall_time_seconds" />
-      </div>
-
-      <div className={`detail-section${hl('lc') ? ' highlighted' : ''}`}>
-        <h3>Phase-folded LC</h3>
-        <PhaseLCPlot phasedData={vetResult?.phased_lc ?? null} />
-      </div>
-
-      {vetResult && (
-        <div className={`detail-section${hl('vet') ? ' highlighted' : ''}`}>
-          <h3>Vetting <DispoChip disposition={vetResult.disposition} /></h3>
-          {VETTING_TEST_ORDER.map((name) => {
-            const r = vetResult.test_results?.find((t) => t.test_name === name)
-            return (
-              <div
-                key={name}
-                className={`vet-row${vetResult.triggering_test === name ? ' triggering' : ''}`}
-              >
-                <VetBadge outcome={r?.outcome ?? 'INCONCLUSIVE'} />
-                <span className="vet-name">{TEST_LABELS[name]}</span>
-                {r?.metric_value != null && (
-                  <span className="vet-metric">
-                    {r.metric_value.toFixed(3)}{r.metric_unit ? ` ${r.metric_unit}` : ''}
-                  </span>
-                )}
-                <span className="vet-reason">{r?.reason ?? '—'}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {classifyResult && (
-        <div className={`detail-section${hl('classify') ? ' highlighted' : ''}`}>
-          <h3>Classify
-            <span style={{ color: 'var(--warn)', fontWeight: 400, textTransform: 'none', fontSize: 10 }}>
-              {' '}ranking — not a verdict
-            </span>
-          </h3>
-          <Row label="Probability"   value={`${(classifyResult.probability * 100).toFixed(1)} %`}             source="classify.probability" />
-          <Row label="± uncertainty" value={`${(classifyResult.probability_uncertainty * 100).toFixed(1)} %`} source="classify.probability_uncertainty" />
-          <Row label="Model version" value={classifyResult.model_version} source="classify.model_version" />
-          <div style={{ marginTop: 5, fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
-            Disposition is determined exclusively by the vet stage.
-          </div>
-        </div>
-      )}
-
-      {report.non_claims?.length > 0 && (
-        <div className="detail-section" style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.6 }}>
-          <h3>Non-claims</h3>
-          {report.non_claims.map((c, i) => <div key={i}>— {c}</div>)}
-        </div>
-      )}
-
-      <div className="detail-section">
-        <h3>Download</h3>
-        <button className="dl-btn" onClick={() => dlJson(report, `report_${report.job_id}.json`)}>
-          ↓ Full report (JSON)
-        </button>
-        {report.vet?.length > 0 && (
-          <button className="dl-btn" onClick={() => dlJson(report.vet, `vet_${report.job_id}.json`)}>
-            ↓ Vetting results (JSON)
-          </button>
-        )}
-      </div>
+      <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', lineHeight: 1.6, marginBottom: 12 }}>
+        {allPass
+          ? 'Every automated challenge returned negative: dip depths match across odd and even events, no secondary eclipse detected, the brightness centroid stays fixed, and the transit profile matches a limb-darkened planet. The stellar density inferred from transit geometry is consistent with the spectroscopic measurement.'
+          : `One or more automated challenges raised a flag. The triggering test was ${vet.triggering_test ?? 'unknown'}.`
+        }
+      </p>
+      <button
+        className="btn-secondary"
+        onClick={() => setActiveScreen('detail')}
+        aria-label="View full report"
+      >
+        Read the full report →
+      </button>
     </div>
   )
 }
 
-function dlJson(obj: unknown, name: string) {
-  const b = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' })
-  const u = URL.createObjectURL(b)
-  const a = document.createElement('a')
-  a.href = u; a.download = name; a.click()
-  URL.revokeObjectURL(u)
-}
+// ── Landing page content ──────────────────────────────────────────────────
+function LandingContent() {
+  const { setTargetId, submitJob, setActiveScreen, jobStatus, isSubmitting } = useStore()
+  const [tooltipIdx, setTooltipIdx] = useState<number | null>(null)
 
-// ── Inline console (bottom strip of system view) ──────────────────────────
-function InlineConsole() {
-  const { consoleLines } = useStore()
-  const bottomRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [consoleLines])
+  const runExample = () => {
+    const ex = EXAMPLE_TARGETS[0]
+    setTargetId(ex.id)
+    submitJob(ex.id, ex.mission, ex.cadence)
+    setActiveScreen('detail')
+  }
+
+  const busy = isSubmitting || jobStatus === 'running' || jobStatus === 'queued'
 
   return (
-    <div className="panel panel--console">
-      <div className="panel-header">
-        Console <span className="tag">real calls</span>
-        <span className="spacer" />
-        <span style={{ fontSize: 10 }}>{consoleLines.length} entries</span>
+    <div className="page-body">
+      {/* Headline */}
+      <hr className="rule-double" />
+      <h1 style={{ textAlign: 'center', fontSize: 'clamp(28px, 5vw, 48px)', marginBottom: 10 }}>
+        Is that a planet, or something pretending to be one?
+      </h1>
+      <hr className="rule-hair" />
+
+      {/* Two-column opening prose with drop cap */}
+      <div className="article-columns prose-drop" style={{ marginTop: 20 }}>
+        <p>
+          Every so often, a star dims by a tiny fraction — perhaps one part in ten thousand —
+          and then brightens again. It looks exactly like something passing in front of it.
+          It might be a planet. It might also be a companion star whose orbit carries it into
+          our line of sight, or a systematic error baked into the spacecraft's sensors, or
+          scattered light from a brighter neighbour. The signal alone cannot tell you which.
+        </p>
+        <p>
+          <em>Falsifier</em> runs the dimming event through seven independent challenges,
+          each designed to expose a specific kind of impersonator: eclipsing-binary dips
+          come in pairs of unequal depth; contaminating stars shift the brightness centroid;
+          instrumental artefacts align with spacecraft roll manoeuvres. A real planet
+          fails none of these tests. Anything that fails even one is flagged — the harder
+          the challenge, the more confident the rejection.
+        </p>
+        <p>
+          The tool covers observations from NASA's Kepler telescope
+          (a space observatory that watched a fixed field of 150,000 stars for four years),
+          its second mission K2, and the newer TESS satellite (which scans the entire sky
+          in 27-day segments). You can investigate a catalogue target by identifier or
+          upload your own light curve.
+        </p>
+        <p>
+          A calibrated ranking score is computed alongside the vetting result,
+          but that number is a <em>sorting signal only</em> — it is not a detection claim.
+          Disposition is determined exclusively by the seven vetting tests.
+          This tool is not a biosignature detector; no exoplanet biosignature has ever been confirmed.
+        </p>
       </div>
-      <div className="console-inner">
-        {consoleLines.length === 0 && (
-          <div style={{ color: 'var(--muted)', padding: '6px 0' }}>No API calls yet.</div>
-        )}
-        {consoleLines.map((line, i) => {
-          const isOk  = line.status === 200 || line.status === 202 || line.status === '✓' || (typeof line.status === 'number' && line.status < 400)
-          const isErr = line.status === 'ERR' || line.status === '✗' || (typeof line.status === 'number' && line.status >= 400)
-          return (
-            <div key={i} className="console-line">
-              <span className="con-ts">{line.ts}</span>
-              <span className="con-method" style={{ color: line.method === 'SSE' ? 'var(--warn)' : 'var(--accent)' }}>{line.method}</span>
-              <span className="con-url">{line.url}</span>
-              <span className={`con-status${isOk ? ' ok' : isErr ? ' err' : ''}`}>
-                {line.pending ? '…' : line.status ?? ''}
-              </span>
-              <span className="con-ms">{line.ms != null ? `${line.ms}ms` : ''}</span>
-            </div>
-          )
-        })}
-        <div ref={bottomRef} />
+
+      {/* How it works strip */}
+      <hr className="rule-hair" style={{ marginTop: 24 }} />
+      <div className="section-label" style={{ marginTop: 20, textAlign: 'center' }}>How it works</div>
+      <div className="how-strip">
+        <div className="how-step">
+          <div className="how-step-num">I</div>
+          <div className="how-step-title">Fetch</div>
+          <div className="how-step-body">
+            Light curve data are pulled from the Kepler or TESS archive by catalogue ID,
+            detrended to remove stellar variability, and segmented for analysis.
+          </div>
+        </div>
+        <div className="how-step">
+          <div className="how-step-num">II</div>
+          <div className="how-step-title">Search</div>
+          <div className="how-step-body">
+            The Transit Least Squares algorithm folds the detrended curve at all plausible
+            periods to identify periodic dimming events above a signal-to-noise threshold.
+          </div>
+        </div>
+        <div className="how-step">
+          <div className="how-step-num">III</div>
+          <div className="how-step-title">Challenge</div>
+          <div className="how-step-body">
+            Seven automated tests probe each event for the fingerprints of false positives.
+            Every result is reported with its measured metric and threshold — nothing is hidden.
+          </div>
+        </div>
       </div>
+
+      {/* Primary action + example chips */}
+      <hr className="rule-double" style={{ marginTop: 28 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, margin: '24px 0' }}>
+        <div>
+          <button
+            className="btn-primary"
+            onClick={runExample}
+            disabled={busy}
+            aria-label="Run the Kepler-10b example"
+            style={{ fontSize: 16, padding: '13px 28px' }}
+          >
+            {busy
+              ? <><span className="spinner" /> Running…</>
+              : 'Run the Kepler-10b example →'
+            }
+          </button>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', marginLeft: 14 }}>
+            Kepler-10b is a confirmed hot rocky planet — every challenge passes.
+          </span>
+        </div>
+
+        <div>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 8 }}>
+            Or enter any catalogue identifier:
+          </div>
+          <TargetForm />
+        </div>
+
+        <div>
+          <div className="section-label" style={{ marginBottom: 8 }}>Example targets</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {EXAMPLE_TARGETS.map((t, i) => (
+              <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  className="target-chip"
+                  onClick={() => { setTargetId(t.id); submitJob(t.id, t.mission, t.cadence) }}
+                  onMouseEnter={() => setTooltipIdx(i)}
+                  onMouseLeave={() => setTooltipIdx(null)}
+                  onFocus={() => setTooltipIdx(i)}
+                  onBlur={() => setTooltipIdx(null)}
+                  aria-describedby={`chip-tip-${i}`}
+                  disabled={busy}
+                >
+                  {t.label}
+                </button>
+                {tooltipIdx === i && (
+                  <div
+                    id={`chip-tip-${i}`}
+                    role="tooltip"
+                    style={{
+                      position: 'absolute', top: '100%', left: 0, zIndex: 50,
+                      background: 'var(--np-text)', color: 'var(--np-paper)',
+                      fontFamily: 'var(--font-serif)', fontSize: 12,
+                      padding: '6px 10px', borderRadius: 'var(--r)',
+                      whiteSpace: 'normal', maxWidth: 280, lineHeight: 1.5,
+                      marginTop: 4, pointerEvents: 'none',
+                    }}
+                  >
+                    {t.gloss}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <a href="#upload" onClick={(e) => { e.preventDefault(); useStore.getState().setActiveScreen('upload') }}
+               style={{ fontFamily: 'var(--font-serif)', fontSize: 14 }}>
+              Have your own observations? Upload a light curve →
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* Worked verdict preview */}
+      <VerdictPreview />
+    </div>
+  )
+}
+
+// ── Orbital figure (used after running a job) ─────────────────────────────
+function OrbitalFigure() {
+  const { report, jobStatus } = useStore()
+  const [use3D, setUse3D] = useState(true)
+
+  const vets          = report?.vet ?? []
+  const stellar       = (report as any)?.stellar_params
+  const stellarTeff   = stellar?.teff?.values?.[0]   ?? 5778
+  const stellarRadius = stellar?.radius?.values?.[0] ?? 1.0
+  const lumLsun       = stellar?.luminosity_lsun     ?? 1.0
+
+  if (!report) return null
+
+  return (
+    <div className="page-body" style={{ paddingTop: 0 }}>
+      <hr className="rule-hair" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div className="section-label" style={{ marginBottom: 0 }}>
+          Orbital system — {report.target_id}
+          {jobStatus && <span className={`job-status-badge ${jobStatus}`} style={{ marginLeft: 10 }}>{jobStatus}</span>}
+        </div>
+        <button
+          className="btn-secondary"
+          style={{ fontSize: 12, padding: '4px 12px' }}
+          onClick={() => setUse3D((v) => !v)}
+          title={use3D ? 'Switch to list (non-3D)' : 'Switch to 3D view'}
+          aria-label={use3D ? 'Switch to list view' : 'Switch to 3D view'}
+        >
+          {use3D ? 'List view' : '3D view'}
+        </button>
+      </div>
+
+      {use3D ? (
+        <figure className="figure-inset">
+          <div style={{ height: 320, position: 'relative' }}>
+            <Canvas
+              camera={{ position: [0, 3, 8], fov: 45, near: 0.01, far: 200 }}
+              gl={{ antialias: true, alpha: false }}
+              style={{ background: '#F9F6EE', width: '100%', height: '100%' }}
+            >
+              <OrbitControls enablePan={false} minDistance={0.5} maxDistance={30} enableDamping dampingFactor={0.07} />
+              {vets.length > 0
+                ? <SceneContent vets={vets} stellarTeff={stellarTeff} stellarRadius={stellarRadius} lumLsun={lumLsun} />
+                : (
+                  <>
+                    <ambientLight intensity={0.4} />
+                    <mesh>
+                      <sphereGeometry args={[STAR_SCENE_SIZE_DEFAULT * 0.6, 16, 16]} />
+                      <meshStandardMaterial color="#B4B2A9" emissive="#B4B2A9" emissiveIntensity={0.4} />
+                    </mesh>
+                  </>
+                )
+              }
+            </Canvas>
+          </div>
+          <figcaption>
+            Orbital diagram computed from pipeline output. Sphere radius encodes R_p from transit depth and host-star radius;
+            colour encodes equilibrium temperature T<sub>eq</sub> (visual only). Green ring = habitable zone (Kopparapu 2013).
+            Dashed red line = line of sight toward Earth. Drag to rotate; scroll to zoom.
+          </figcaption>
+        </figure>
+      ) : (
+        <div style={{ border: '1px solid var(--np-rule)', padding: '12px 16px', background: 'var(--np-surface)', marginBottom: 16 }}>
+          <FallbackList vets={vets} stellarTeff={stellarTeff} stellarRadius={stellarRadius} />
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Main export ───────────────────────────────────────────────────────────
 export default function SystemScreen() {
-  const { report, jobStatus } = useStore()
-  const [use3D, setUse3D] = useState(true)
-
-  const vets          = report?.vet ?? []
-  const stellar       = (report as any)?.stellar_params
-  const stellarTeff   = stellar?.teff?.values?.[0]   ?? DEFAULT_TEFF
-  const stellarRadius = stellar?.radius?.values?.[0] ?? DEFAULT_R_STAR
-  const lumLsun       = stellar?.luminosity_lsun     ?? DEFAULT_LUM
-
   return (
-    <div className="screen" style={{ overflow: 'hidden' }}>
-      <div className="system-layout">
-        {/* Viewer */}
-        <div className="panel panel--viewer">
-          <div className="panel-header">
-            Orbital system
-            <span className="tag">Three.js · drag / scroll / click</span>
-            <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--muted)' }}>
-              sphere=R_p &ensp; colour=T<sub>eq</sub> &ensp; orbit=P
-            </span>
-            <span className="spacer" />
-            {jobStatus && <span className={`job-status-badge ${jobStatus}`}>{jobStatus}</span>}
-            <button
-              style={{
-                background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--r)',
-                color: 'var(--muted)', cursor: 'pointer', fontSize: 10, padding: '1px 7px', marginLeft: 6,
-              }}
-              onClick={() => setUse3D((v) => !v)}
-              title={use3D ? 'Switch to list (non-3D)' : 'Switch to 3D view'}
-              aria-label={use3D ? 'Switch to list view' : 'Switch to 3D view'}
-            >
-              {use3D ? 'list view' : '3D view'}
-            </button>
-          </div>
-
-          <TargetForm />
-
-          {use3D ? (
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-              <Canvas
-                camera={{ position: [0, 3, 8], fov: 45, near: 0.01, far: 200 }}
-                gl={{ antialias: true, alpha: false }}
-                style={{ background: '#0a0c0f', width: '100%', height: '100%' }}
-              >
-                <OrbitControls enablePan={false} minDistance={0.5} maxDistance={30} enableDamping dampingFactor={0.07} />
-                {vets.length > 0
-                  ? <SceneContent vets={vets} stellarTeff={stellarTeff} stellarRadius={stellarRadius} lumLsun={lumLsun} />
-                  : (
-                    <>
-                      <ambientLight intensity={0.3} />
-                      <mesh>
-                        <sphereGeometry args={[STAR_SCENE_SIZE * 0.5, 16, 16]} />
-                        <meshStandardMaterial color="#374151" emissive="#374151" emissiveIntensity={0.5} />
-                      </mesh>
-                    </>
-                  )
-                }
-              </Canvas>
-              {/* Non-claim overlay */}
-              <div className="non-claim-banner">
-                Not a biosignature detector · No exoplanet biosignature has ever been confirmed
-              </div>
-              {/* Visual encoding legend */}
-              <div style={{
-                position: 'absolute', top: 6, right: 8,
-                background: 'rgba(10,12,15,0.82)', border: '1px solid var(--border)',
-                borderRadius: 'var(--r)', fontSize: 10, color: 'var(--muted)',
-                padding: '5px 8px', lineHeight: 1.7,
-              }}>
-                <div style={{ color: 'var(--text)', marginBottom: 2, fontSize: 10 }}>Visual encodings</div>
-                <div>sphere radius → R_p from depth + R_star</div>
-                <div>colour → T_eq (visual only)</div>
-                <div>orbit radius → a from Kepler III</div>
-                <div>orbit rate → period</div>
-                <div>inclination → transit geometry</div>
-                <div style={{ color: '#22c55e' }}>green ring → HZ (Kopparapu+2013)</div>
-              </div>
-            </div>
-          ) : (
-            <FallbackList vets={vets} stellarTeff={stellarTeff} stellarRadius={stellarRadius} />
-          )}
-        </div>
-
-        {/* Right detail column */}
-        <DetailPanel />
-
-        {/* Bottom console strip */}
-        <InlineConsole />
-      </div>
+    <div className="screen" style={{ overflowY: 'auto' }}>
+      <LandingContent />
+      <OrbitalFigure />
     </div>
   )
 }

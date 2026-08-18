@@ -68,5 +68,5 @@
     "No detection rate, false-positive rate, or model score is reported here unless it is produced by scripts/reproduce.sh.",
     "The output of this pipeline is a triage list, not a detection claim."
   ],
-  "golden_manifest_entry_count": 3
+  "golden_manifest_entry_count": 7
 }

@@ -1,14 +1,16 @@
 /**
  * src/screens/CandidateDetail.tsx
- * Full candidate detail screen: phase-folded LC, all 7 vetting rows,
- * disposition, calibrated probability as separate ranking signal.
+ * Full candidate detail — result page styled as a news report.
+ * Headline states the physical finding. Standfirst names the deciding test.
+ * Two-column body with phase LC as a bordered figure-inset.
+ * All 7 tests always shown; metrics behind "Show the numbers" expander.
+ * Calibrated probability labelled a ranking signal only.
  *
- * Also exports shared helpers (VetBadge, DispoChip, Row, PhaseLCPlot,
- * VETTING_TEST_ORDER, TEST_LABELS) used by the inline system detail panel.
+ * Also exports shared helpers used by other screens.
  */
-import React, { useMemo, useRef } from 'react'
+import React, { useMemo, useState, useRef } from 'react'
 import { useStore } from '../store'
-import type { VettingTestOutcome, Disposition, PhasedLC } from '../data/types'
+import type { VettingTestOutcome, Disposition, PhasedLC, VetResult, ClassifyResult } from '../data/types'
 
 export const VETTING_TEST_ORDER = [
   'odd_even_depth',
@@ -20,19 +22,58 @@ export const VETTING_TEST_ORDER = [
   'systematics_coincidence',
 ] as const
 
-export const TEST_LABELS: Record<string, string> = {
-  odd_even_depth:           'Odd / even depth',
-  secondary_eclipse:        'Secondary eclipse',
-  centroid_shift:           'Centroid shift',
-  transit_shape:            'Transit shape',
-  stellar_density:          'Stellar density',
-  gaia_ruwe:                'Gaia RUWE',
-  systematics_coincidence:  'Systematics coincidence',
+export const TEST_LABELS: Record<string, { short: string; headline: string; why: string }> = {
+  odd_even_depth: {
+    short:    'Odd / even depth',
+    headline: 'Every dip is the same depth',
+    why:      'An eclipsing binary produces alternating deep and shallow dips as each star passes in front of the other. Equal depths rule that out.',
+  },
+  secondary_eclipse: {
+    short:    'Secondary eclipse',
+    headline: 'No secondary event at half-orbit',
+    why:      'Two stars produce a second dimming half an orbit away, when the fainter star is eclipsed. Absence of this event is a key test.',
+  },
+  centroid_shift: {
+    short:    'Centroid shift',
+    headline: 'The star\'s position did not move during the dip',
+    why:      'If the signal comes from a background star rather than the target, the pixel centroid shifts during the dimming. A fixed centroid points back to the target.',
+  },
+  transit_shape: {
+    short:    'Transit shape',
+    headline: 'The dip is flat-bottomed, not V-shaped',
+    why:      'A planet crossing a much larger star produces a characteristic flat bottom. A V-shape suggests a stellar companion of comparable size.',
+  },
+  stellar_density: {
+    short:    'Stellar density',
+    headline: 'Transit geometry matches the star',
+    why:      'The transit duration and depth together imply a stellar density. Agreement with the spectroscopic value confirms the geometry is self-consistent.',
+  },
+  gaia_ruwe: {
+    short:    'Gaia RUWE',
+    headline: 'Single-star astrometric solution',
+    why:      'Gaia\'s astrometric fit residuals diagnose unresolved binaries. A high RUWE indicates a second source whose light could mimic a transit.',
+  },
+  systematics_coincidence: {
+    short:    'Systematics coincidence',
+    headline: 'Dips don\'t align with spacecraft events',
+    why:      'Known instrumental artefacts — thruster firings, attitude tweaks — occur at predictable times. Overlap would flag an instrumental origin.',
+  },
+}
+
+const OUTCOME_ICONS: Record<string, string> = {
+  PASS:        '✓',
+  FAIL:        '✗',
+  FLAG:        '⚑',
+  INCONCLUSIVE: '?',
 }
 
 // ── VetBadge ──────────────────────────────────────────────────────────────
 export function VetBadge({ outcome }: { outcome: VettingTestOutcome | string }) {
-  return <span className={`vet-badge ${outcome}`}>{outcome}</span>
+  return (
+    <div className={`vet-badge ${outcome}`} aria-label={outcome}>
+      {OUTCOME_ICONS[outcome] ?? outcome[0]}
+    </div>
+  )
 }
 
 // ── DispoChip ─────────────────────────────────────────────────────────────
@@ -60,12 +101,17 @@ export function Row({ label, value, source }: { label: string; value: unknown; s
 
 // ── Phase-folded light curve (SVG) ────────────────────────────────────────
 export function PhaseLCPlot({ phasedData }: { phasedData: PhasedLC | null | undefined }) {
-  const W = 296, H = 90
+  const W = 320, H = 100
+
   if (!phasedData?.phase?.length) {
     return (
       <div className="lc-container">
-        <svg width={W} height={H} style={{ background: '#0a0c0f', borderRadius: 3, display: 'block' }}>
-          <text x={W / 2} y={H / 2} fill="#374151" textAnchor="middle" dominantBaseline="middle" fontSize="11">
+        <svg
+          width={W} height={H}
+          style={{ background: 'var(--np-surface)', borderRadius: 'var(--r)', display: 'block', border: '1px solid var(--np-border)' }}
+        >
+          <text x={W / 2} y={H / 2} fill="var(--np-faint)" textAnchor="middle" dominantBaseline="middle" fontSize="12"
+            fontFamily="var(--font-serif)" fontStyle="italic">
             No light curve data
           </text>
         </svg>
@@ -78,8 +124,9 @@ export function PhaseLCPlot({ phasedData }: { phasedData: PhasedLC | null | unde
   const maxF = Math.max(...flux)
   const rng  = maxF - minF || 1
 
-  const toX = (p: number) => ((p + 0.5)) * W           // phase ∈ [-0.5, 0.5]
-  const toY = (f: number) => H - 2 - ((f - minF) / rng) * (H - 6)
+  const PAD = 6
+  const toX = (p: number) => PAD + (p + 0.5) * (W - PAD * 2)
+  const toY = (f: number) => H - PAD - ((f - minF) / rng) * (H - PAD * 3)
 
   const pts = phase.map((p, i) => `${toX(p).toFixed(1)},${toY(flux[i]).toFixed(1)}`).join(' ')
 
@@ -87,22 +134,136 @@ export function PhaseLCPlot({ phasedData }: { phasedData: PhasedLC | null | unde
     <div className="lc-container">
       <svg
         width={W} height={H}
-        style={{ background: '#0a0c0f', borderRadius: 3, display: 'block' }}
+        style={{ background: 'var(--np-surface)', borderRadius: 'var(--r)', display: 'block', border: '1px solid var(--np-border)' }}
         aria-label="Phase-folded light curve"
         role="img"
       >
-        {/* Axis labels */}
-        <text x={2} y={H - 2} fill="#374151" fontSize="9">−0.5</text>
-        <text x={W - 22} y={H - 2} fill="#374151" fontSize="9">+0.5</text>
-        <text x={W / 2} y={H - 2} fill="#374151" fontSize="9" textAnchor="middle">phase</text>
-        {/* Mid-transit line */}
-        <line x1={W / 2} y1="0" x2={W / 2} y2={H} stroke="#334155" strokeWidth="0.5" strokeDasharray="2,2" />
-        {/* Light curve */}
-        <polyline points={pts} fill="none" stroke="#3b82f6" strokeWidth="0.9" />
-        {/* Baseline */}
-        <line x1="0" y1={toY(maxF)} x2={W} y2={toY(maxF)} stroke="#1e2329" strokeWidth="0.5" />
+        <text x={PAD} y={H - 2} fill="var(--np-faint)" fontSize="8" fontFamily="var(--font-mono)">−0.5</text>
+        <text x={W - PAD - 16} y={H - 2} fill="var(--np-faint)" fontSize="8" fontFamily="var(--font-mono)">+0.5</text>
+        <text x={W / 2} y={H - 2} fill="var(--np-faint)" fontSize="8" fontFamily="var(--font-mono)" textAnchor="middle">phase</text>
+        <line x1={W / 2} y1="0" x2={W / 2} y2={H} stroke="var(--np-border)" strokeWidth="0.5" strokeDasharray="2,2" />
+        <line x1={PAD} y1={toY(maxF)} x2={W - PAD} y2={toY(maxF)} stroke="var(--np-border)" strokeWidth="0.5" />
+        <polyline points={pts} fill="none" stroke="var(--rust)" strokeWidth="1.2" />
       </svg>
     </div>
+  )
+}
+
+// ── Number expander row ────────────────────────────────────────────────────
+function MetricExpander({ metric_value, metric_unit, threshold }: {
+  metric_value: number | null | undefined
+  metric_unit: string | null | undefined
+  threshold?: string
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        className="expander-btn"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {open ? 'Hide the numbers ▲' : 'Show the numbers ▼'}
+      </button>
+      {open && (
+        <div className="expander-panel">
+          <div>Metric: <span style={{ color: 'var(--np-text)' }}>
+            {metric_value != null ? `${metric_value}${metric_unit ? ' ' + metric_unit : ''}` : '—'}
+          </span></div>
+          {threshold && <div>Threshold: <span style={{ color: 'var(--np-text)' }}>{threshold}</span></div>}
+          <div style={{ fontSize: 11, marginTop: 3, color: 'var(--np-faint)' }}>Source: report.vet[].test_results</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Vetting test row ───────────────────────────────────────────────────────
+function VetTestRow({ name, vetResult }: { name: string; vetResult: VetResult }) {
+  const r = vetResult.test_results?.find((t) => t.test_name === name)
+  const outcome = r?.outcome ?? 'INCONCLUSIVE'
+  const isTriggering = vetResult.triggering_test === name
+  const label = TEST_LABELS[name]
+
+  return (
+    <div
+      className={`vet-row${isTriggering ? ' triggering' : ''}`}
+      aria-label={`${label?.short}: ${outcome}`}
+    >
+      <VetBadge outcome={outcome} />
+      <div className="vet-body">
+        <div className="vet-headline">
+          {label?.headline ?? label?.short ?? name}
+          {isTriggering && <span className="vet-trigger-label">◀ deciding test</span>}
+        </div>
+        <div className="vet-why">{r?.reason ?? label?.why ?? '—'}</div>
+        <MetricExpander
+          metric_value={r?.metric_value}
+          metric_unit={r?.metric_unit}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Headline generator (physical finding, not status code) ────────────────
+function reportHeadline(vet: VetResult, targetId: string): string {
+  const count = vet.test_results?.length ?? 0
+  if (vet.disposition === 'candidate') {
+    return `${targetId} survives every challenge`
+  }
+  if (vet.disposition === 'false_positive') {
+    const tl = vet.triggering_test ? TEST_LABELS[vet.triggering_test]?.short : null
+    return tl
+      ? `Not a planet: rejected by the ${tl} test`
+      : 'Not a planet: rejected by automated vetting'
+  }
+  if (vet.disposition === 'candidate_with_caveats') {
+    return `${targetId} passes most tests but carries caveats`
+  }
+  return `${targetId} — ${vet.disposition.replace(/_/g, ' ')}`
+}
+
+function reportStandfirst(vet: VetResult, classify: ClassifyResult | null): string {
+  if (vet.disposition === 'candidate') {
+    const n = vet.test_results?.length ?? 0
+    const prob = classify ? ` Ranking score ${(classify.probability * 100).toFixed(1)}% (signal only, not a verdict).` : ''
+    return `All ${n} automated tests returned negative.${prob}`
+  }
+  if (vet.disposition === 'false_positive' && vet.triggering_test) {
+    const label = TEST_LABELS[vet.triggering_test]?.short ?? vet.triggering_test
+    return `The deciding test was "${label}". ${vet.triggering_reason ?? ''}`
+  }
+  return vet.triggering_reason ?? 'See full vetting results below.'
+}
+
+// ── Download helper ────────────────────────────────────────────────────────
+function dlJson(obj: unknown, name: string) {
+  const b = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' })
+  const u = URL.createObjectURL(b)
+  const a = document.createElement('a')
+  a.href = u; a.download = name; a.click()
+  URL.revokeObjectURL(u)
+}
+
+// ── TCE selector ──────────────────────────────────────────────────────────
+function TceSelector({ tce_id, disposition }: { tce_id: string; disposition: Disposition | string }) {
+  const { selectedTceId, setSelectedTceId } = useStore()
+  const active = selectedTceId === tce_id || !selectedTceId
+  return (
+    <button
+      style={{
+        background: active ? 'var(--rust-dim)' : 'var(--np-surface)',
+        border: `1px solid ${active ? 'var(--rust)' : 'var(--np-rule)'}`,
+        borderRadius: 'var(--r)', color: active ? 'var(--rust)' : 'var(--np-muted)',
+        cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11,
+        padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}
+      onClick={() => setSelectedTceId(tce_id)}
+      aria-pressed={active}
+    >
+      {tce_id} <DispoChip disposition={disposition} />
+    </button>
   )
 }
 
@@ -123,166 +284,137 @@ export default function CandidateDetail() {
 
   if (!report) {
     return (
-      <div className="screen" style={{ overflow: 'auto' }}>
-        <div className="no-data" style={{ height: '100%' }}>
-          No report available. Run a target from the System screen.
+      <div className="screen" style={{ overflowY: 'auto' }}>
+        <div className="page-body">
+          <div className="no-data">
+            No report available. Run a target from the Investigate screen first,<br />
+            or try the "Run the Kepler-10b example" button on that screen.
+          </div>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="screen" style={{ overflow: 'auto' }}>
-      <div style={{ maxWidth: 780, padding: '14px 16px' }}>
+  const headline = vetResult ? reportHeadline(vetResult, report.target_id) : report.target_id
+  const standfirst = vetResult ? reportStandfirst(vetResult, classifyResult) : ''
 
-        {/* TCE selector */}
+  return (
+    <div className="screen" style={{ overflowY: 'auto' }}>
+      <div className="page-body">
+
+        {/* TCE selector (multiple TCEs) */}
         {report.vet.length > 1 && (
-          <div style={{ marginBottom: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+            <span className="section-label" style={{ marginBottom: 0, alignSelf: 'center' }}>Select TCE:</span>
             {report.vet.map((v) => (
               <TceSelector key={v.tce_id} tce_id={v.tce_id} disposition={v.disposition} />
             ))}
           </div>
         )}
 
+        {/* Headline + standfirst */}
+        <hr className="rule-double" />
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
+          <h1 style={{ marginBottom: 0 }}>{headline}</h1>
+          {vetResult && <DispoChip disposition={vetResult.disposition} />}
+        </div>
+        <div className="standfirst">{standfirst}</div>
+        <hr className="rule-hair" />
+
         {vetResult ? (
-          <>
-            {/* Header */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <h1 style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--text)' }}>
-                  {vetResult.tce_id}
-                </h1>
-                <DispoChip disposition={vetResult.disposition} />
-                {vetResult.triggering_test && (
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    triggered by <span style={{ color: 'var(--text)' }}>{TEST_LABELS[vetResult.triggering_test]}</span>
-                  </span>
-                )}
+          <div className="article-columns" style={{ marginTop: 20 }}>
+
+            {/* Phase-folded LC figure */}
+            <figure className="figure-inset" style={{ breakInside: 'avoid' }}>
+              <PhaseLCPlot phasedData={vetResult.phased_lc} />
+              <figcaption>
+                Phase-folded light curve for <span style={{ fontFamily: 'var(--font-mono)' }}>{vetResult.tce_id}</span>.
+                The star's brightness (vertical axis) is plotted against orbital phase.
+                A genuine planet transit appears as a symmetric, flat-bottomed dip centred at phase zero.
+                Source: <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
+              </figcaption>
+            </figure>
+
+            {/* TCE parameters */}
+            <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
+              <div className="section-label">Orbital parameters</div>
+              <div style={{ background: 'var(--np-surface)', border: '1px solid var(--np-rule)', padding: '10px 14px' }}>
+                <Row label="Period"      value={vetResult.period_days != null ? `${vetResult.period_days.toFixed(6)} d` : null}      source="vet.period_days" />
+                <Row label="Depth"       value={vetResult.depth_ppm != null ? `${vetResult.depth_ppm.toFixed(0)} ppm` : null}         source="vet.depth_ppm" />
+                <Row label="Duration"    value={vetResult.duration_hours != null ? `${vetResult.duration_hours.toFixed(3)} h` : null}  source="vet.duration_hours" />
+                <Row label="Epoch"       value={vetResult.epoch_bkjd != null ? `${vetResult.epoch_bkjd.toFixed(4)} BKJD` : null}       source="vet.epoch_bkjd" />
+                <Row label="Inclination" value={vetResult.inclination_deg != null ? `${vetResult.inclination_deg.toFixed(1)} °` : null} source="vet.inclination_deg" />
+                <Row label="TCE ID"      value={vetResult.tce_id}                                                                       source="vet.tce_id" />
               </div>
-              {vetResult.triggering_reason && (
-                <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic' }}>
-                  "{vetResult.triggering_reason}"
-                </div>
-              )}
             </div>
 
-            {/* Two-column layout: LC + metrics */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-
-              {/* Phase-folded LC */}
-              <section aria-label="Phase-folded light curve">
-                <div className="step-label">Phase-folded light curve</div>
-                <PhaseLCPlot phasedData={vetResult.phased_lc} />
-                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
-                  Data from: report.vet[].phased_lc
-                </div>
-              </section>
-
-              {/* TCE parameters */}
-              <section aria-label="TCE parameters">
-                <div className="step-label">TCE parameters</div>
-                <div className="detail-section" style={{ borderBottom: 'none' }}>
-                  <Row label="Period"   value={vetResult.period_days != null ? `${vetResult.period_days.toFixed(6)} d` : null}   source="vet.period_days" />
-                  <Row label="Depth"    value={vetResult.depth_ppm != null ? `${vetResult.depth_ppm.toFixed(0)} ppm` : null}       source="vet.depth_ppm" />
-                  <Row label="Duration" value={vetResult.duration_hours != null ? `${vetResult.duration_hours.toFixed(3)} h` : null} source="vet.duration_hours" />
-                  <Row label="Epoch"    value={vetResult.epoch_bkjd != null ? `${vetResult.epoch_bkjd.toFixed(4)} BKJD` : null}   source="vet.epoch_bkjd" />
-                  <Row label="Inclination" value={vetResult.inclination_deg != null ? `${vetResult.inclination_deg.toFixed(1)} °` : null} source="vet.inclination_deg" />
-                  <Row label="Vet time" value={vetResult.wall_time_seconds != null ? `${vetResult.wall_time_seconds.toFixed(2)} s` : null} source="vet.wall_time_seconds" />
-                </div>
-              </section>
-            </div>
-
-            {/* Calibrated probability — clearly separate from disposition */}
+            {/* Classifier ranking score */}
             {classifyResult && (
-              <section aria-label="Classifier ranking score" style={{ marginBottom: 14 }}>
-                <div className="step-label">Classifier ranking score</div>
+              <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
+                <div className="section-label">Ranking score — not a verdict</div>
                 <div style={{
-                  background: 'var(--surface2)', border: '1px solid var(--border)',
-                  borderLeft: '3px solid var(--warn)', borderRadius: 'var(--r)', padding: '10px 12px',
+                  background: 'var(--np-surface)', border: '1px solid var(--np-rule)',
+                  borderLeft: '3px solid var(--warn)', padding: '12px 14px',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: 'var(--text)' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 26, fontWeight: 500, color: 'var(--np-text)' }}>
                       {(classifyResult.probability * 100).toFixed(1)} %
                     </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--muted)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--np-muted)' }}>
                       ± {(classifyResult.probability_uncertainty * 100).toFixed(1)} %
                     </span>
-                    <span style={{ fontSize: 11, color: 'var(--warn)' }}>ranking only</span>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-                    Model: <span style={{ fontFamily: 'var(--font-mono)' }}>{classifyResult.model_version}</span>
-                    {' · '}Source: <span style={{ fontFamily: 'var(--font-mono)' }}>classify.probability</span>
-                  </div>
-                  <div style={{ marginTop: 5, fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-                    This probability is a ranking signal only. It carries no disposition.
-                    Disposition is determined exclusively by the vet stage above.
+                  <p style={{ fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.55, marginBottom: 4 }}>
+                    This is a ranking signal — it helps prioritise follow-up observations, not decide disposition.
+                    Disposition is determined exclusively by the vetting tests above.
+                  </p>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-faint)' }}>
+                    Model: {classifyResult.model_version}
+                    {' · '}Source: classify.probability
                   </div>
                 </div>
-              </section>
+              </div>
             )}
 
-            {/* All 7 vetting rows */}
-            <section aria-label="Vetting tests">
-              <div className="step-label">Vetting tests — all 7</div>
-              <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
-                <div style={{ padding: '4px 10px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 7, fontSize: 10, color: 'var(--muted)' }}>
-                  <span style={{ width: 80 }}>Outcome</span>
-                  <span style={{ minWidth: 160 }}>Test</span>
-                  <span style={{ minWidth: 80, textAlign: 'right' }}>Metric</span>
-                  <span style={{ flex: 1 }}>Reason</span>
-                </div>
-                {VETTING_TEST_ORDER.map((name) => {
-                  const r = vetResult.test_results?.find((t) => t.test_name === name)
-                  const outcome = r?.outcome ?? 'INCONCLUSIVE'
-                  const isTriggering = vetResult.triggering_test === name
-                  return (
-                    <div
-                      key={name}
-                      className={`vet-row${isTriggering ? ' triggering' : ''}`}
-                      style={{ padding: '5px 10px' }}
-                      aria-label={`${TEST_LABELS[name]}: ${outcome}`}
-                    >
-                      <VetBadge outcome={outcome} />
-                      <span className="vet-name" style={{ minWidth: 160 }}>
-                        {TEST_LABELS[name]}
-                        {isTriggering && <span style={{ color: 'var(--fail)', marginLeft: 4, fontSize: 10 }}>◀ trigger</span>}
-                      </span>
-                      <span className="vet-metric">
-                        {r?.metric_value != null
-                          ? `${r.metric_value.toFixed(3)}${r.metric_unit ? ` ${r.metric_unit}` : ''}`
-                          : '—'}
-                      </span>
-                      <span className="vet-reason">{r?.reason ?? '—'}</span>
-                    </div>
-                  )
-                })}
+            {/* Vetting tests narrative */}
+            <div style={{ columnSpan: 'all', marginTop: 4 } as React.CSSProperties}>
+              <hr className="rule-double" />
+              <div className="section-label" style={{ marginTop: 16 }}>
+                Vetting tests — all {VETTING_TEST_ORDER.length}
+                <span style={{ fontFamily: 'var(--font-serif)', textTransform: 'none', letterSpacing: 0, color: 'var(--np-muted)', marginLeft: 8, fontSize: 12 }}>
+                  (Metrics hidden by default — click "Show the numbers" on any row to expand)
+                </span>
               </div>
-            </section>
-          </>
+              <div style={{ background: 'var(--np-surface)', border: '1px solid var(--np-rule)', padding: '4px 16px' }}>
+                {VETTING_TEST_ORDER.map((name) => (
+                  <VetTestRow key={name} name={name} vetResult={vetResult} />
+                ))}
+              </div>
+            </div>
+
+            {/* Downloads */}
+            <div style={{ columnSpan: 'all', marginTop: 20 } as React.CSSProperties}>
+              <hr className="rule-hair" />
+              <div className="section-label" style={{ marginBottom: 10 }}>Download pipeline artifacts</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="dl-btn" style={{ width: 'auto', flex: 'none', padding: '7px 16px' }}
+                  onClick={() => dlJson(report, `report_${report.job_id}.json`)}>
+                  ↓ Full report (JSON)
+                </button>
+                {report.vet?.length > 0 && (
+                  <button className="dl-btn" style={{ width: 'auto', flex: 'none', padding: '7px 16px' }}
+                    onClick={() => dlJson(report.vet, `vet_${report.job_id}.json`)}>
+                    ↓ Vetting results (JSON)
+                  </button>
+                )}
+              </div>
+            </div>
+
+          </div>
         ) : (
           <div className="no-data">No TCE selected.</div>
         )}
       </div>
     </div>
-  )
-}
-
-function TceSelector({ tce_id, disposition }: { tce_id: string; disposition: Disposition | string }) {
-  const { selectedTceId, setSelectedTceId } = useStore()
-  const active = selectedTceId === tce_id || (!selectedTceId)
-  return (
-    <button
-      style={{
-        background: active ? 'var(--accent-dim)' : 'var(--surface2)',
-        border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-        borderRadius: 'var(--r)', color: active ? 'var(--accent)' : 'var(--muted)',
-        cursor: 'pointer', font: 'inherit', fontFamily: 'var(--font-mono)', fontSize: 11,
-        padding: '2px 10px',
-      }}
-      onClick={() => setSelectedTceId(tce_id)}
-      aria-pressed={active}
-    >
-      {tce_id} <DispoChip disposition={disposition} />
-    </button>
   )
 }

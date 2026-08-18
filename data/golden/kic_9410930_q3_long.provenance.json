@@ -1,0 +1,21 @@
+{
+  "target": "KIC 9410930",
+  "common_name": "KIC 9410930",
+  "mission": "Kepler",
+  "quarter": 3,
+  "cadence": "long",
+  "mast_product_id": "kplr009410930-2009350155506_llc",
+  "mast_uri": "mast:Kepler/url/public/lightcurves/0094/009410930/kplr009410930-2009350155506_llc.fits",
+  "pipeline_version": "SOC 9.3",
+  "time_system": "BKJD",
+  "time_scale": "TDB",
+  "time_reference": "BJD - 2454833.0",
+  "flux_column": "SAP_FLUX",
+  "flux_unit": "e-/s",
+  "access_date": "2026-08-18",
+  "sha256": "de00f70653649f4dc88f5a4fa0360a9e587b43e779cd4f39b010173664ed2a94",
+  "row_count_expected": 4140,
+  "reference_doi": "10.17909/T9-NMC8-F686",
+  "reference_citation": "Kepler Mission Archive, MAST",
+  "notes": "Quiet-star injection-recovery target. No confirmed planet or KOI in NASA Exoplanet Archive as of 2026-08-18. Kepler Q3 long-cadence."
+}
