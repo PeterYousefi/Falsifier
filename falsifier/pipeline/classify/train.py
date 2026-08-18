@@ -150,7 +150,6 @@ _XGBOOST_PARAMS: dict[str, Any] = {
     "colsample_bytree": 0.8,
     "min_child_weight": 5,
     "scale_pos_weight": 1,   # will be overridden from class counts
-    "use_label_encoder": False,
     "eval_metric": "logloss",
     "random_state": 42,
     "n_jobs": -1,

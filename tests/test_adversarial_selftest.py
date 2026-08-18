@@ -22,10 +22,28 @@ from __future__ import annotations
 
 import json
 import sys
+import unittest.mock
 from pathlib import Path
 
 import numpy as np
 import pytest
+
+# ---------------------------------------------------------------------------
+# Force BLS fallback — hide transitleastsquares for the whole module.
+#
+# These tests are documented as "run without transitleastsquares; use the
+# internal BLS fallback."  TLS may be installed in the venv, but its
+# multiprocessing path takes >30 s per call — far beyond the 30 s per-test
+# budget.  We patch sys.modules so that `import transitleastsquares` raises
+# ImportError, triggering the fast pure-Python BLS branch in run_detection().
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _force_bls_fallback(monkeypatch):
+    """Hide transitleastsquares so run_detection() uses the BLS fallback."""
+    monkeypatch.setitem(sys.modules, "transitleastsquares", None)
+    yield
+
 
 # ---------------------------------------------------------------------------
 # Import module under test

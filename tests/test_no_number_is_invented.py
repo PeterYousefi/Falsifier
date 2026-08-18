@@ -96,6 +96,8 @@ _FRAMEWORK_EXEMPT = frozenset({
   '0.007', '0.006', '0.85', '0.45', '0.15', '0.10', '0.12', '0.08',
   # gzip/source-map markers
   '0.000',
+  # R3F / Three.js scene-unit font sizes (SystemScreen.tsx, OrbitalViewer.jsx)
+  '0.055', '0.060', '0.040', '0.035', '0.045',
 })
 
 # Floats that are explicitly physics-formula coefficients in physics.js
@@ -217,6 +219,49 @@ def _extract_sci_floats(text: str) -> set[str]:
     return {m for m in _SCI_FLOAT_RE.findall(clean) if _is_scientific_float(m)}
 
 
+# ── Source-file scan helpers ──────────────────────────────────────────────
+
+# Python's pathlib.Path.glob() does not support brace expansion {a,b}.
+# Use separate globs per extension and combine the results.
+_SRC_EXTENSIONS = ("*.js", "*.jsx", "*.ts", "*.tsx")
+
+
+def _strip_js_comments(text: str) -> str:
+    """Remove single-line comments from JS/TS source to avoid false positives."""
+    lines = text.split('\n')
+    out = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith('//') or stripped.startswith('*'):
+            out.append('')
+        else:
+            out.append(re.sub(r'//.*$', '', line))
+    return '\n'.join(out)
+
+
+def _scan_src_dir(src_dir: pathlib.Path) -> list[str]:
+    """
+    Scan all JS/TS source files under *src_dir* for scientific floats not
+    backed by any committed artifact.  Returns a list of violation strings.
+    """
+    corpus = _load_artifact_corpus()
+    violations: list[str] = []
+    seen: set[pathlib.Path] = set()
+    for ext in _SRC_EXTENSIONS:
+        for src_file in sorted(src_dir.rglob(ext)):
+            if src_file in seen:
+                continue
+            seen.add(src_file)
+            text = src_file.read_text(encoding="utf-8", errors="replace")
+            code_text = _strip_js_comments(text)
+            for f in sorted(_extract_sci_floats(code_text)):
+                if f in _PHYSICS_FORMULA_COEFFICIENTS:
+                    continue
+                if f not in corpus:
+                    violations.append(f"  {src_file.relative_to(src_dir.parent)}  →  {f}")
+    return violations
+
+
 # ── Source-file scan ──────────────────────────────────────────────────────
 
 @pytest.mark.no_network
@@ -224,41 +269,18 @@ def test_frontend_source_files_contain_no_hardcoded_scientific_measurements():
     """
     AGENTS.md Rule 1: no hardcoded scientific values in UI code.
 
-    Scans all frontend/src/*.{js,jsx} files for scientific floats that are
-    NOT:
+    Scans all frontend/src/*.{js,jsx,ts,tsx} files recursively for scientific
+    floats that are NOT:
       - Physics-formula coefficients (Kopparapu constants, AU conversions)
-      - Default fallback values clearly labelled with a comment
-      - Numbers in comments or string literals describing units/formulas
+      - Rendering/framework constants listed in _FRAMEWORK_EXEMPT
+      - Numbers in comment lines
+
+    This test always runs (no skip guard other than src/ missing).
     """
     if not SRC_DIR.exists():
         pytest.skip("frontend/src/ does not exist yet")
 
-    # Load corpus for cross-checking
-    corpus = _load_artifact_corpus()
-
-    violations: list[str] = []
-
-    for src_file in sorted(SRC_DIR.glob("*.{js,jsx}")):
-        text = src_file.read_text(encoding="utf-8", errors="replace")
-        # Strip comment lines (// ...) to avoid flagging documented constants
-        lines = text.split('\n')
-        code_lines = []
-        for line in lines:
-            stripped = line.lstrip()
-            # Skip pure comment lines
-            if stripped.startswith('//') or stripped.startswith('*'):
-                code_lines.append('')
-            else:
-                # Remove inline comments
-                code_lines.append(re.sub(r'//.*$', '', line))
-        code_text = '\n'.join(code_lines)
-
-        floats = _extract_sci_floats(code_text)
-        for f in sorted(floats):
-            if f in _PHYSICS_FORMULA_COEFFICIENTS:
-                continue
-            if f not in corpus:
-                violations.append(f"  {src_file.name}  →  {f}")
+    violations = _scan_src_dir(SRC_DIR)
 
     assert not violations, (
         "Frontend source files contain scientific floats not backed by any "
@@ -266,6 +288,8 @@ def test_frontend_source_files_contain_no_hardcoded_scientific_measurements():
         + "\n".join(violations)
         + "\n\nIf these are physics-formula coefficients, add them to "
           "_PHYSICS_FORMULA_COEFFICIENTS in this test file.\n"
+          "If they are rendering constants (Three.js font sizes, scene units), "
+          "add them to _FRAMEWORK_EXEMPT.\n"
           "If they are measured values, they must come from the API response, "
           "not be hardcoded in source."
     )
@@ -376,56 +400,60 @@ def _find_float_near_key(text: str, key: str) -> set[str]:
 @pytest.mark.no_network
 def test_build_output_floats_are_backed_by_artifacts():
     """
-    Parse the built frontend JS bundles and assert that every scientific
-    float is backed by a committed pipeline artifact.
+    Assert that every scientific float in the frontend is backed by a
+    committed pipeline artifact (AGENTS.md Rule 1).
 
-    SKIPPED if frontend/dist/ does not exist (build not run yet).
+    Strategy
+    --------
+    Always scan ``frontend/src/`` (committed source, always present).
+    If ``frontend/dist/`` also exists (built by CI), additionally scan the
+    minified JS bundles.
 
-    This test catches regressions where a developer hardcodes a measured
-    value in JSX (e.g. period_days=0.83749070) rather than reading it from
-    the API response.
+    Scanning source rather than only the minified bundle:
+      - Removes the skip-when-no-build path that disabled this gate entirely.
+      - Minified bundles contain Three.js internals (WebGL constants, shader
+        coefficients) that are not scientific values and cannot all be
+        pre-enumerated.  Source files are easier to reason about.
+      - ``frontend/dist/`` is in ``.gitignore`` and is built fresh in CI
+        before the test suite runs, so the bundle scan is still exercised in
+        CI.
 
-    Exclusions applied before the check:
-      - Three.js / WebGL constants (integers and common floats)
-      - React fibre internals (large integer literals)
-      - Source map references
-      - CSS hex values
-      - DOIs
-      - ISO dates
-      - The physics.js formula coefficients
+    Comment stripping is applied to source files; the minified-bundle scan
+    skips comment stripping (there are no meaningful comments after minification).
+
+    The existing ``test_frontend_source_files_contain_no_hardcoded_scientific_
+    measurements`` test is a strict subset of this one; this test additionally
+    covers the built output when dist/ is present.
     """
-    if not DIST_DIR.exists():
-        pytest.skip(
-            "frontend/dist/ does not exist — run 'npm run build' inside "
-            "frontend/ first.  Build-output check skipped."
-        )
+    if not SRC_DIR.exists():
+        pytest.skip("frontend/src/ does not exist — nothing to scan")
 
-    corpus = _load_artifact_corpus()
+    # Primary check: committed source tree (always runs)
+    violations = _scan_src_dir(SRC_DIR)
 
-    js_files = list(DIST_DIR.glob("assets/*.js"))
-    if not js_files:
-        pytest.skip("No JS bundles found in frontend/dist/assets/")
-
-    violations: list[str] = []
-
-    for js_file in sorted(js_files):
-        text = js_file.read_text(encoding="utf-8", errors="replace")
-        floats = _extract_sci_floats(text)
-
-        for f in sorted(floats):
-            if f in _PHYSICS_FORMULA_COEFFICIENTS:
-                continue
-            if f not in corpus:
-                violations.append(f"  {js_file.name}  →  {f}")
+    # Optional additional check: built bundle (only when dist/ is present)
+    if DIST_DIR.exists():
+        corpus = _load_artifact_corpus()
+        js_files = sorted(DIST_DIR.glob("assets/*.js"))
+        for js_file in js_files:
+            text = js_file.read_text(encoding="utf-8", errors="replace")
+            for f in sorted(_extract_sci_floats(text)):
+                if f in _PHYSICS_FORMULA_COEFFICIENTS:
+                    continue
+                if f not in corpus:
+                    violations.append(f"  dist/{js_file.name}  →  {f}")
 
     assert not violations, (
-        "Built JS bundle contains scientific floats not backed by any "
-        "committed artifact (AGENTS.md Rule 1):\n"
+        "Frontend contains scientific floats not backed by any committed "
+        "artifact (AGENTS.md Rule 1):\n"
         + "\n".join(violations[:40])
-        + (f"\n  ... and {len(violations)-40} more" if len(violations) > 40 else "")
+        + (f"\n  ... and {len(violations) - 40} more" if len(violations) > 40 else "")
         + "\n\nThese values must originate from the API response, not be "
           "hardcoded in source files.  Run the pipeline, get the report, "
-          "and bind UI properties to report fields."
+          "and bind UI properties to report fields.\n"
+          "Rendering constants (Three.js font sizes, scene units) belong in "
+          "_FRAMEWORK_EXEMPT; physics-formula coefficients belong in "
+          "_PHYSICS_FORMULA_COEFFICIENTS."
     )
 
 

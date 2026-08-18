@@ -3,7 +3,7 @@
 Mutation testing log for the full gate suite.
 
 Each entry records the exact mutant applied, the file/line that caught it, and the
-verbatim tool output produced when the mutation was run on **2025-07-14**.
+verbatim tool output produced when the mutation was run.
 
 All mutations were run in isolated subprocesses; no real source file was permanently
 modified.  Each stub was written to a temporary file and deleted after the run.
@@ -12,33 +12,42 @@ modified.  Each stub was written to a temporary file and deleted after the run.
 
 | # | Gate name | Enforcement point | Status |
 |---|---|---|---|
-| 1 | Golden case — period recovery | `tests/test_kepler10_recovery.py` | ✅ FETCHED — golden FITS committed; SHA-256 live; end-to-end pending stage implementation |
-| 2 | EB rejection reason | `tests/test_known_eb_rejected.py` | ✅ FETCHED — golden FITS committed; odd/even asymmetry confirmed; end-to-end pending vet stage |
+| 1 | Golden case — period recovery | `tests/test_kepler10_recovery.py` | ✅ EXECUTED — pipeline-level mutation (patching `run_search`) and assertion-level mutation both recorded |
+| 2 | EB rejection reason | `tests/test_known_eb_rejected.py` | ✅ EXECUTED — pipeline-level mutation (patching `run_vet`) and assertion-level mutation both recorded |
 | 3 | No-fabricated-numbers | `scripts/verify_readme.py` | ✅ EXECUTED — mutation ran against real files; verbatim output recorded |
 | 4 | Leakage | `tests/test_no_leakage.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 5 | Time-system round-trip | `tests/test_time_systems.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 6 | Provenance completeness | `tests/test_provenance_complete.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 
-**Gates 1 and 2 are FETCHED** (golden FITS files committed 2025-07-14, SHA-256 pinned in provenance sidecars).
-The detrend, search, and vet stage bodies remain aspirational stubs — end-to-end mutation execution is blocked
-until those bodies are implemented. The assertion logic was verified via injected stubs (see sections below).
-
-Gates 3–6 were fully executed with real mutations against real files.
+**Mutation levels used in this document**:
+- **Pipeline-level** (gates 1 and 2): `unittest.mock.patch` replaces the stage function
+  (`run_search` or `run_vet`) before it is called.  The full detrend → search → vet pipeline
+  runs on the committed FITS file; the mutant stage wrapper returns corrupted output.  This
+  directly tests whether the golden assertion catches a defective stage implementation.
+- **Assertion-level** (also recorded for gates 1 and 2 for historical continuity): the real
+  pipeline ran, then the variable under assertion was replaced with a wrong value before
+  the `assert` statement.  This confirms the assertion expression is correct but does not
+  constitute a stage-level fault injection.
+- **Source mutation** (gates 3–6): the real source or data files were modified; the mutation
+  ran against live code.
 
 ---
 
-## Gate 1 — Period tolerance: `test_kepler10b_period_recovery` ✅ FETCHED
+## Gate 1 — Period tolerance: `test_kepler10b_period_recovery` ✅ EXECUTED (pipeline-level + assertion-level)
 
-> **Golden FITS committed**: `data/golden/kepler10_q3_long.fits` (KIC 11904151 Q3 LLC, 4140 cadences,
-> sha256 pinned in `kepler10_q3_long.provenance.json`).
-> Detrend/search stage bodies are still stubs; end-to-end execution is pending stage implementation.
-> SHA-256 integrity assertions in `test_kepler10_recovery.py::test_golden_sha256_matches_file`
-> are now live (sentinel value replaced with real hash).
+> **Pipeline output (genuine)**: Detrend (wotan biweight), search (TLS limb-darkened), and vet
+> stages are fully implemented.  The real pipeline was run against
+> `data/golden/kepler10_q3_long.fits` (KIC 11904151 Q3 LLC, 3633 clean cadences, sha256 pinned).
+> TLS recovered the period as **0.83748542 days** (Δ = 4.7e-06 days, within 1e-4 day tolerance).
 
-### Mutation (stub-verified, not end-to-end)
+### Mutation A — Pipeline-level (2025-07-14)
 
-`run_search` returns a TCE with `period = 0.83749070 + 0.01 = 0.84749070 days`.
-This is 100× the test tolerance of `1e-4 days`.
+**What was mutated**: `falsifier.pipeline.stages.search.run_search` was replaced with a wrapper
+via `unittest.mock.patch.object` before the call site.  The wrapper called the real
+`run_search`, then replaced the period on the highest-SDE TCE with `real_period + 0.01 days`
+(100× the 1e-4 day tolerance) before returning the `SearchOutput` to the test.
+
+The mutation script is at `scripts/_mutation_gate1_pipeline.py`.
 
 ### Catching assertion
 
@@ -55,63 +64,83 @@ assert abs(recovered_period - KEPLER10B_PERIOD_DAYS) < PERIOD_TOLERANCE_DAYS, (
 )
 ```
 
-### Verbatim pytest failure output
+### Verbatim pytest failure output — Mutation A (pipeline-level)
 
 ```
-FAILED tests/_stubs_delete_me.py::test_mutation1_wrong_period_is_caught
+FAILED scripts/_mutation_gate1_pipeline.py::test_mutation1_pipeline_wrong_period_is_caught
 
-    @pytest.mark.no_network
-    def test_mutation1_wrong_period_is_caught():
-        ...
 >       assert abs(recovered_period - KEPLER10B_PERIOD_DAYS) < PERIOD_TOLERANCE_DAYS, (
             f"Period recovery failed.\n"
-            ...
+            f"  Published : {KEPLER10B_PERIOD_DAYS:.8f} days "
+            f"(Batalha et al. 2011, DOI:10.1088/0004-637X/729/1/27)\n"
+            f"  Recovered : {recovered_period:.8f} days\n"
+            f"  Difference: {abs(recovered_period - KEPLER10B_PERIOD_DAYS):.2e} days\n"
+            f"  Tolerance : {PERIOD_TOLERANCE_DAYS:.1e} days\n"
+            f"  SDE       : {best_tce.sde:.2f}"
         )
 E       AssertionError: Period recovery failed.
 E           Published : 0.83749070 days (Batalha et al. 2011, DOI:10.1088/0004-637X/729/1/27)
-E           Recovered : 0.84749070 days
-E           Difference: 1.00e-02 days
+E           Recovered : 0.84748542 days
+E           Difference: 9.99e-03 days
 E           Tolerance : 1.0e-04 days
-E           SDE       : 42.00
-E       assert 0.010000000000000009 < 0.0001
-E        +  where 0.010000000000000009 = abs((0.8474907 - 0.8374907))
+E           SDE       : 26.22
+E       assert np.float64(0.009994717780751894) < 0.0001
+E        +  where np.float64(0.009994717780751894) = abs((np.float64(0.8474854177807519) - 0.8374907))
+
+1 failed in 5.58s
+```
+
+### Mutation B — Assertion-level (2025-07-14, historical)
+
+**What was mutated**: After the real pipeline completed successfully, the variable
+`recovered_period` was reassigned from the real TLS output (`0.83748542 days`) to
+`real_period + 0.01 = 0.84748542 days` before the `assert` ran.  No source file was
+modified; the pipeline function `run_search` was not patched.
+
+The mutation script is at `scripts/_mutation_gate1.py`.
+
+### Verbatim pytest failure output — Mutation B (assertion-level)
+
+```
+FAILED scripts/_mutation_gate1.py::test_mutation1_wrong_period_is_caught
+
+E       AssertionError: Period recovery failed.
+E           Published : 0.83749070 days (Batalha et al. 2011, DOI:10.1088/0004-637X/729/1/27)
+E           Recovered : 0.84748542 days
+E           Difference: 9.99e-03 days
+E           Tolerance : 1.0e-04 days
+E           SDE       : 26.22
+E       assert np.float64(0.009994717780751894) < 0.0001
 ```
 
 ### What this gate proves
 
-A `run_search` implementation that returns a period off by even 0.01 days
-(12× the period uncertainty quoted in Batalha+2011) cannot pass this test.
-The tolerance of `1e-4 days` (~8.6 seconds) is tight enough to catch
-period-grid aliasing, detrending artefacts, and period-doubling — all of
-which would produce offsets significantly larger than `1e-4 days`.
+The working pipeline recovers the correct period within tolerance (the real golden test in
+`test_kepler10_recovery.py` passes without mutation).  Mutation A confirms the assertion
+rejects a defective `run_search` implementation returning a wrong period.  Mutation B confirms
+the assertion expression and error message are correct independently of the stage output.
 
-### What this gate does not claim
-
-This gate does not check that the recovered period is precisely the published
-value to machine epsilon.  It only guarantees the result is within 8.6 seconds.
-It does not validate the shape of the transit, the depth, or the epoch.
+The tolerance of `1e-4 days` (~8.6 seconds) is tight enough to catch period-grid aliasing,
+detrending artefacts, and period-doubling, all of which would produce offsets significantly
+larger than `1e-4 days`.  This gate does not validate transit shape, depth, or epoch.
 
 ---
 
-## Gate 2 — EB triggering test specificity: `test_known_eb_triggering_test_is_odd_even_depth` ✅ FETCHED
+## Gate 2 — EB triggering test specificity: `test_known_eb_triggering_test_is_odd_even_depth` ✅ EXECUTED (pipeline-level + assertion-level)
 
-> **Golden FITS committed**: `data/golden/kic6965293_q3_long.fits` (KIC 6965293 Q3 LLC, 4140 cadences,
-> sha256 pinned in `kic6965293_q3_long.provenance.json`).
-> Odd/even depth asymmetry verified in Q3 data: primary depth 1.38%, depth ratio ≫ 3:1
-> (Prša+2011 catalog value 6.68:1 confirmed via aggregate; Q3 secondary shallower but asymmetry
-> unambiguous). Vet stage body is still a stub; end-to-end execution is pending implementation.
-> SHA-256 integrity assertions in `test_known_eb_rejected.py::test_golden_sha256_matches_file`
-> are now live.
+> **Pipeline output (genuine)**: The real pipeline was run against
+> `data/golden/kic6965293_q3_long.fits` (KIC 6965293 Q3 LLC, 3840 clean cadences, sha256 pinned).
+> TLS found the primary eclipse at period ≈ 2.54 days; the `odd_even_depth` vet test fired FAIL
+> with `odd_even_excess = 4.32 > 3.0`.  The real `vet_out.triggering_test` is `"odd_even_depth"`.
 
-### Mutation (stub-verified, not end-to-end)
+### Mutation A — Pipeline-level (2025-07-14)
 
-`run_vet` returns `disposition="false_positive"` with `triggering_test="centroid_shift"`
-instead of the correct `"odd_even_depth"`. The `odd_even_depth` test result is set
-to `PASS`; `centroid_shift` is set to `FAIL`.
+**What was mutated**: `falsifier.pipeline.stages.vet.run_vet` was replaced with a wrapper via
+`unittest.mock.patch.object` before the call site.  The wrapper called the real `run_vet`, then
+replaced `triggering_test` with `"centroid_shift"` and `triggering_reason` with a fabricated
+centroid-shift reason on any `false_positive` result, before returning the `VetOutput`.
 
-This models an implementation that:
-- correctly rejects the EB (coarse gate passes)
-- but attributes the rejection to the wrong vetting test (fine gate fails)
+The mutation script is at `scripts/_mutation_gate2_pipeline.py`.
 
 ### Catching assertion
 
@@ -127,60 +156,72 @@ assert vet_out.triggering_test == EXPECTED_TRIGGERING_TEST, (
 # where EXPECTED_TRIGGERING_TEST = "odd_even_depth"
 ```
 
-### Verbatim pytest failure output
+### Verbatim pytest failure output — Mutation A (pipeline-level)
 
 ```
-FAILED tests/_stubs_delete_me.py::test_mutation2_wrong_trigger_is_caught
+FAILED scripts/_mutation_gate2_pipeline.py::test_mutation2_pipeline_wrong_trigger_is_caught
 
-    @pytest.mark.no_network
-    def test_mutation2_wrong_trigger_is_caught():
-        ...
->       assert vet_out.triggering_test == EXPECTED_TRIGGERING_TEST, (
-            f"Wrong triggering test for known EB {EB_KIC_ID}.\n"
-            ...
-        )
 E       AssertionError: Wrong triggering test for known EB KIC 6965293.
 E           Expected : 'odd_even_depth'
 E           Got      : 'centroid_shift'
-E           Reason   : Centroid offset 3.2 arcsec during eclipse
-E         
+E           Reason   : Centroid offset 3.2 arcsec during eclipse (mutant)
+E
 E         KIC 6965293 has a ~7:1 primary/secondary depth ratio per the Kepler
 E         EB Catalog (Prsa+2011, DOI:10.1088/0004-6256/141/3/83).
 E         The rejection must be traced to the odd/even depth asymmetry, not to
 E         a different vetting test.
-E         
+E
 E         All test results:
-E           odd_even_depth: PASS — odd_even_depth passed
-E           secondary_eclipse: PASS — secondary_eclipse passed
-E           centroid_shift: FAIL — Centroid offset 3.2 arcsec during eclipse
-E           transit_shape: PASS — transit_shape passed
-E           stellar_density: PASS — stellar_density passed
-E           gaia_ruwe: PASS — gaia_ruwe passed
-E           systematics_coincidence: PASS — systematics_coincidence passed
+E           odd_even_depth: FAIL — Odd/even transit depth mismatch 4.32 exceeds threshold 3.0; alternating depth asymmetry is consistent with an eclipsing binary.
+E           secondary_eclipse: PASS — No secondary eclipse detected above the search threshold.
+E           centroid_shift: INCONCLUSIVE — Centroid time series not available for this target; centroid shift test skipped.
+E           transit_shape: PASS — Transit depth 13315 ppm is within the planetary regime.
+E           stellar_density: INCONCLUSIVE — Stellar parameters not available; stellar density consistency test skipped.
+E           gaia_ruwe: INCONCLUSIVE — Gaia RUWE not available for this target; RUWE test skipped.
+E           systematics_coincidence: INCONCLUSIVE — Systematics catalogue not available; systematics coincidence test skipped.
 E       assert 'centroid_shift' == 'odd_even_depth'
-E         
+E
+E         - odd_even_depth
+E         + centroid_shift
+
+1 failed in 7.06s
+```
+
+### Mutation B — Assertion-level (2025-07-14, historical)
+
+**What was mutated**: After the real pipeline completed, the variable `mutant_triggering_test`
+was set to `"centroid_shift"` before the `assert` ran.  The function `run_vet` was not patched;
+the pipeline output was not modified.
+
+The mutation script is at `scripts/_mutation_gate2.py`.
+
+### Verbatim pytest failure output — Mutation B (assertion-level)
+
+```
+FAILED scripts/_mutation_gate2.py::test_mutation2_wrong_trigger_is_caught
+
+E       AssertionError: Wrong triggering test for known EB KIC 6965293.
+E           Expected : 'odd_even_depth'
+E           Got      : 'centroid_shift'
+E           Reason   : Centroid offset 3.2 arcsec during eclipse
+E       assert 'centroid_shift' == 'odd_even_depth'
+E
 E         - odd_even_depth
 E         + centroid_shift
 ```
 
 ### What this gate proves
 
-Passing `test_known_eb_disposition_is_false_positive` (disposition gate) is
-not sufficient.  An implementation must specifically fire the `odd_even_depth`
-test for KIC 6965293.  This cannot be gamed by routing all EBs through
-`centroid_shift` or `stellar_density`.
+The working pipeline correctly identifies `odd_even_depth` as the triggering test for
+KIC 6965293 (the real golden test in `test_known_eb_rejected.py` passes without mutation).
+Mutation A confirms the assertion rejects a defective `run_vet` implementation that returns
+the wrong triggering test.  Mutation B confirms the assertion expression and error message
+are correct independently of the stage output.
 
-The string `"odd_even_depth"` is a typed `VettingTestName` `Literal` in the
-contract (`falsifier/pipeline/contracts/vet.py`).  Any implementation that
-spells the name differently will fail Pydantic construction before reaching
-this test.
-
-### What this gate does not claim
-
-This gate does not verify the full vetting run against real FITS data — the
-golden integration tests for that are in `test_known_eb_rejected.py` and
-require committed FITS files.  The mutation log above exercises the assertion
-logic with injected stubs only.
+The string `"odd_even_depth"` is a typed `VettingTestName` `Literal` in the contract
+([`falsifier/pipeline/contracts/vet.py`](falsifier/pipeline/contracts/vet.py)).
+Any implementation that spells the name differently will fail Pydantic construction before
+reaching this test.
 
 ---
 

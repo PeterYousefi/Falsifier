@@ -33,7 +33,9 @@ class TestUnitedArray:
     def test_from_quantity_roundtrip(self):
         u = pytest.importorskip("astropy.units")
         import numpy as np
-        q = np.array([10.0, 20.0]) * u.ppm
+        # astropy does not expose u.ppm as an attribute; use u.Unit("ppm").
+        ppm = u.Unit("ppm")
+        q = np.array([10.0, 20.0]) * ppm
         ua = UnitedArray.from_quantity(q)
         assert ua.unit == "ppm"
         assert ua.values == pytest.approx([10.0, 20.0])

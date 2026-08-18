@@ -14,7 +14,8 @@
   "flux_unit": "e-/s",
   "access_date": "2026-08-17",
   "sha256": "663de348b4eb5fc0d4a0c348c7911d8afed87a28b833039973a82544b6da1a4a",
-  "row_count_expected": 4140,
+  "row_count": 4140,
+  "source_doi": "10.1088/0004-637X/729/1/27",
   "reference_doi": "10.1088/0004-637X/729/1/27",
   "reference_citation": "Batalha et al. 2011, ApJ 729, 27",
   "notes": "Golden file for period recovery regression. Published Kepler-10b period 0.83749070 +/- 0.00000020 days."

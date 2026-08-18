@@ -140,9 +140,21 @@ jobs:
   #
   # pip install -e ".[dev]"  installs falsifier plus every optional dep
   # declared in [project.optional-dependencies.dev] in pyproject.toml.
+  #
+  # libomp note
+  # -----------
+  # XGBoost's Linux wheel links against libgomp (GNU OpenMP), which ships as
+  # part of libgomp1 / libomp-dev on Ubuntu and is present in the default
+  # GitHub Actions ubuntu-latest image.  No extra apt step is needed on Ubuntu.
+  #
+  # On macOS, XGBoost's wheel uses @rpath/libomp.dylib with rpath pointing at
+  # /opt/homebrew/opt/libomp/lib.  This requires Homebrew's libomp keg.
+  # CI runs on ubuntu-latest only; macOS developers must run:
+  #   brew install libomp
+  # See the "Install prerequisites" section of README.md for details.
   # ---------------------------------------------------------------------------
   test-full:
-    name: Full tests (astropy required)
+    name: Full tests (astropy + xgboost required)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -152,14 +164,25 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install OpenMP runtime (required by XGBoost on Ubuntu)
+        # libgomp1 is usually pre-installed on ubuntu-latest; this step is
+        # explicit so the dependency is documented and any future runner change
+        # does not silently break XGBoost imports.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libomp-dev
+
       - name: Install package with full dev dependencies
         run: |
           pip install --upgrade pip
           pip install -e ".[dev]"
+          pip install pytest-asyncio
+
+      - name: Verify XGBoost imports (catches libomp breakage before tests run)
+        run: python -c "import xgboost; print('xgboost', xgboost.__version__, 'OK')"
 
       - name: Run full test suite (excluding golden integration tests)
         run: |
-          pip install pytest-asyncio
           pytest tests/ \
             --ignore=tests/test_kepler10_recovery.py \
             --ignore=tests/test_known_eb_rejected.py \

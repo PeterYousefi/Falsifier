@@ -28,6 +28,7 @@ not have separate DOIs.
 
 from __future__ import annotations
 
+import functools
 import logging
 import warnings
 from typing import Any
@@ -64,6 +65,30 @@ def _guard_table(adql: str) -> None:
             )
 
 
+def _tap_with_retry(fn):
+    """
+    Thin wrapper that retries the TAP call once on transient HTTP errors.
+
+    Uses ``functools.wraps`` so ``fn.__wrapped__`` is accessible.  This
+    allows ``tests/pipeline/stages/test_ingest.py::TestTapTableGuard::
+    test_invalid_table_arg_raises`` to call the underlying function directly
+    (bypassing the retry logic) without hitting the network.
+    """
+    @functools.wraps(fn)
+    def _wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            from ..exceptions import TapFetchError
+            # Re-raise immediately for non-network errors (ValueError, etc.)
+            if not isinstance(exc, TapFetchError):
+                raise
+            log.debug("TAP retry after transient error: %s", exc)
+            return fn(*args, **kwargs)
+    return _wrapper
+
+
+@_tap_with_retry
 def fetch_planet_params(
     target_id: str,
     *,

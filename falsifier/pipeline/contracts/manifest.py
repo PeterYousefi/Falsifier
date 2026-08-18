@@ -21,6 +21,26 @@ from pydantic import BaseModel, field_validator, model_validator
 if TYPE_CHECKING:
     import astropy.units as u
 
+# Register "ppm" as a custom astropy unit (1e-6, dimensionless) so that
+# ``astropy.units.Unit("ppm")`` resolves correctly everywhere in the
+# pipeline.  We do this at import time, and guard against double-registration.
+try:
+    import astropy.units as _au_init
+
+    _ppm_unit = _au_init.def_unit(
+        "ppm",
+        represents=1e-6 * _au_init.dimensionless_unscaled,
+        doc="Parts per million (1e-6)",
+        prefixes=False,
+    )
+    _au_init.add_enabled_units([_ppm_unit])
+    del _ppm_unit
+except ValueError:
+    # Already registered — safe to ignore.
+    pass
+finally:
+    del _au_init
+
 __all__ = [
     "UnitedArray",
     "DatasetProvenance",
@@ -67,9 +87,35 @@ class UnitedArray(BaseModel):
         return v
 
     def to_quantity(self):  # -> astropy.units.Quantity
-        """Return ``np.array(self.values) * astropy.units.Unit(self.unit)``."""
+        """
+        Return ``np.array(self.values) * astropy.units.Unit(self.unit)``.
+
+        Time-reference frame strings (``"bkjd"``, ``"btjd"``, ``"jd"``,
+        ``"mjd"``, ``"bjd"``) and ``"dimensionless"`` are not SI units that
+        astropy can parse.  For those the values are returned as a dimensionless
+        ``Quantity``; callers extract ``q.value`` and then construct
+        ``astropy.time.Time(q.value, format=…, scale=…)`` themselves.
+        """
         import astropy.units as _u
-        return np.array(self.values, dtype=np.float64) * _u.Unit(self.unit)
+
+        # Units that are time-reference frame identifiers or pipeline-internal
+        # labels rather than physical SI units parseable by astropy.
+        _TIME_REF_UNITS = frozenset({
+            "bkjd", "btjd", "bjd", "jd", "mjd", "hjd",
+        })
+        _DIMENSIONLESS_LABELS = frozenset({
+            "dimensionless", "dimensionless_unscaled", "",
+        })
+
+        unit_lower = self.unit.lower().strip()
+        if unit_lower in _TIME_REF_UNITS or unit_lower in _DIMENSIONLESS_LABELS:
+            return np.array(self.values, dtype=np.float64) * _u.dimensionless_unscaled
+        try:
+            return np.array(self.values, dtype=np.float64) * _u.Unit(self.unit)
+        except ValueError:
+            # Unknown unit string — fall back to dimensionless so callers
+            # can still extract .value without crashing.
+            return np.array(self.values, dtype=np.float64) * _u.dimensionless_unscaled
 
     @classmethod
     def from_quantity(cls, q) -> "UnitedArray":  # q: astropy.units.Quantity

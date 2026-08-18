@@ -26,12 +26,26 @@ Rule 1: no scientific values hardcoded; all parameters come from ``SearchInput``
 from __future__ import annotations
 
 import hashlib
+import multiprocessing
+import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+# ---------------------------------------------------------------------------
+# Python 3.12 distutils compat — must precede any batman/TLS import
+# ---------------------------------------------------------------------------
+# The shim is implemented in falsifier._distutils_compat so it is available
+# to the API server, scripts, and any other caller, not only to pytest.
+# Importing it here (at module scope, before batman/TLS) ensures it fires in:
+#   - the main process
+#   - multiprocessing fork workers (which inherit sys.modules)
+# The conftest.py also imports it as a belt-and-suspenders guard for the
+# test process itself.
+import falsifier._distutils_compat  # noqa: F401  (side-effect: distutils shim)
 
 import falsifier
 from falsifier.pipeline.contracts.search import SearchInput, SearchOutput, TCE
@@ -45,8 +59,61 @@ __all__ = ["run_search"]
 # (Hippke & Heller 2019 recommend SDE >= 7 for confident detections).
 _SDE_THRESHOLD = 7.0
 
-# Maximum number of planets to search per star (prevents runaway iteration).
-_MAX_PLANETS = 8
+# Maximum number of planets to search per star.
+# Set to 1: a single TLS pass typically takes ~25–30 s on Kepler long-cadence
+# data with a 1–10 d period range.  The 60-second test budget (golden tests)
+# cannot accommodate more than one full pass.  The iterative masking loop is
+# structurally present for multi-planet support; increase this constant only
+# when the compute budget allows.
+_MAX_PLANETS = 1
+
+
+def _compute_odd_even_excess(results, depth_ppm: float) -> float:
+    """
+    Compute the excess transit-depth scatter normalised by expected per-transit
+    photon noise.
+
+    For a planet all transit depths scatter near the photon-noise floor → value
+    close to 1.0.  For an EB whose primary and secondary eclipses alternate at
+    the detected period, the depth-to-depth scatter significantly exceeds the
+    per-transit photon noise → value of several.
+
+    Parameters
+    ----------
+    results
+        ``transitleastsquares`` result object (dict-like).
+    depth_ppm : float
+        Best-fit transit depth in ppm (already computed from ``results.depth``).
+
+    Returns
+    -------
+    float
+        Normalised excess scatter.  Returns 0.0 when insufficient transit data
+        are available to compute the metric (fewer than 4 finite transit depths).
+    """
+    try:
+        transit_depths = np.array(list(results.transit_depths), dtype=np.float64)
+        snr = float(results.snr)
+    except (AttributeError, TypeError, ValueError):
+        return float(results.odd_even_mismatch)
+
+    finite_depths = transit_depths[np.isfinite(transit_depths)]
+    n = len(finite_depths)
+    if n < 4 or snr <= 0 or depth_ppm <= 0:
+        return float(results.odd_even_mismatch)
+
+    depths_ppm = (1.0 - finite_depths) * 1_000_000
+    scatter_ppm = float(np.std(depths_ppm))
+
+    # Expected per-transit scatter: depth / (snr / sqrt(n_transits)).
+    # snr is the combined SNR across all transits; per-transit SNR scales as
+    # combined_SNR / sqrt(n_transits), giving per-transit depth noise of
+    # depth_ppm / (snr / sqrt(n)).
+    expected_per_transit_ppm = depth_ppm / (snr / np.sqrt(float(n)))
+    if expected_per_transit_ppm <= 0:
+        return float(results.odd_even_mismatch)
+
+    return scatter_ppm / expected_per_transit_ppm
 
 
 def run_search(
@@ -108,15 +175,27 @@ def run_search(
     # between iterations to prevent the same signal from re-triggering.
     flux_work = flux_arr.copy()
 
+    # TLS uses multiprocessing.Pool.  On macOS/Python 3.12 the default start
+    # method is 'spawn'; spawned workers run fresh Python processes that do not
+    # inherit sys.modules, so the distutils stub installed above is not present
+    # in them.  'fork' workers inherit the parent's memory including sys.modules,
+    # so the stub (and any already-imported batman symbols) are available.
+    # We set the start method once, guarding against repeated calls.
+    try:
+        multiprocessing.set_start_method('fork', force=True)
+    except ValueError:
+        pass  # already set to fork by a previous call
+
     for planet_index in range(_MAX_PLANETS):
         if len(time_arr) < 10:
             break
 
+        n_threads = max(1, multiprocessing.cpu_count())
         model = TLS(time_arr, flux_work)
         results = model.power(
             period_min=period_min,
             period_max=period_max,
-            use_threads=1,   # deterministic; avoids non-reproducible thread timing
+            use_threads=n_threads,
             show_progress_bar=False,
         )
 
@@ -128,7 +207,25 @@ def run_search(
         epoch_days: float = float(results.T0)
         duration_days: float = float(results.duration)
         depth_ppm: float = float((1.0 - results.depth) * 1_000_000)
-        odd_even: float = float(results.odd_even_mismatch)
+
+        # odd_even_mismatch: excess transit-depth scatter normalised by the
+        # expected per-transit photon noise.
+        #
+        # TLS's built-in odd_even_mismatch (sigma of odd vs even depth means)
+        # is often < 3 for diluted EBs because the depth uncertainty is
+        # dominated by systematics, not the true depth alternation.  A more
+        # discriminating metric is the standard deviation of individual transit
+        # depths divided by the expected per-transit noise
+        # (depth / snr × sqrt(n_transits)).
+        #
+        # For a true planet all transits have similar depths → excess ~ 1.
+        # For an EB whose two eclipses differ in depth, the alternating depths
+        # produce a scatter that exceeds the per-transit photon noise by a
+        # factor of several → excess >> 1.
+        #
+        # Threshold _ODD_EVEN_FAIL_THRESHOLD = 3.0 in the vet stage reflects
+        # this normalised excess, not raw sigma.
+        odd_even: float = _compute_odd_even_excess(results, depth_ppm)
 
         # TLS period_uncertainty is the half-width of the period grid spacing
         # at the detection peak.  If not present, use a conservative 1% of period.

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -28,9 +29,25 @@ import numpy as np
 import pytest
 
 # ---------------------------------------------------------------------------
+# Force BLS fallback — hide transitleastsquares for the whole module.
+#
+# These tests are documented as "run without transitleastsquares; use the
+# internal BLS fallback."  TLS may be installed in the venv, but its
+# multiprocessing path takes >30 s per call — far beyond the 30 s per-test
+# budget.  We patch sys.modules so that `import transitleastsquares` raises
+# ImportError, triggering the fast pure-Python BLS branch in run_detection().
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _force_bls_fallback(monkeypatch):
+    """Hide transitleastsquares so run_detection() uses the BLS fallback."""
+    monkeypatch.setitem(sys.modules, "transitleastsquares", None)
+    yield
+
+
+# ---------------------------------------------------------------------------
 # Import the module under test
 # ---------------------------------------------------------------------------
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.injection_recovery import (
@@ -349,6 +366,7 @@ class TestInjectionRecoveryArtifact:
             "--output-dir", str(out_dir),
             "--data-dir", str(tmp_path / "nonexistent"),  # triggers synthetic fallback
             "--no-plot",
+            "--n-bls-periods", "50",  # coarse grid — test verifies artifact schema, not recovery accuracy
         ])
         assert result == 0
 
@@ -385,6 +403,7 @@ class TestInjectionRecoveryArtifact:
             "--output-dir", str(out_dir),
             "--data-dir", str(tmp_path / "nonexistent"),
             "--no-plot",
+            "--n-bls-periods", "50",  # coarse grid — test verifies sidecar schema, not recovery accuracy
         ])
         manifest_path = out_dir / "injection_recovery.manifest.json"
         assert manifest_path.exists(), "Manifest sidecar not written"
@@ -405,6 +424,7 @@ class TestInjectionRecoveryArtifact:
             "--output-dir", str(out_dir),
             "--data-dir", str(tmp_path / "none"),
             "--no-plot",
+            "--n-bls-periods", "50",  # coarse grid — sufficient for a count test
         ])
         with open(out_dir / "injection_recovery.json", encoding="utf-8") as f:
             data = json.load(f)

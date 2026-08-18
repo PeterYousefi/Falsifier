@@ -15,6 +15,28 @@ The result is a statement of what this pipeline can and cannot see, with
 uncertainty.  It is NOT a performance boast.  Low completeness at small
 depths or long periods must be published as-is.
 
+Search algorithm
+----------------
+``run_detection()`` uses **TransitLeastSquares (TLS)** as the primary search.
+TLS fits a physical limb-darkened transit profile (Hippke & Heller 2019) and
+is the same algorithm the main Falsifier pipeline ships.  The completeness
+curve produced by this script is therefore directly comparable to pipeline
+performance on real targets.
+
+The script contains a pure-Python BLS fallback that activates only when
+``transitleastsquares`` is not importable (``ImportError``).  The BLS fallback
+exists solely to allow the artifact-manifest tests (``test_injection_recovery.py``)
+to run quickly in CI without installing TLS, and to allow smoke-testing the
+data pipeline mechanics (grid construction, artifact writing, row counts) without
+a full TLS run.
+
+**The BLS fallback must never be used to produce a committed completeness
+artifact.** ``data/artifacts/injection_recovery.json`` must always be generated
+with TLS.  The ``--n-bls-periods`` CLI argument exists only for the test:
+``test_row_count_matches_results`` passes ``--n-bls-periods 50`` to keep the
+test under 30 s; the production default of 3000 is irrelevant to TLS runs and
+is only exercised when TLS is absent.
+
 Policy compliance
 -----------------
 - All injected parameters are written to the output artifact before any
@@ -347,12 +369,26 @@ def run_detection(
     period_min_days: float,
     period_max_days: float,
     duration_hours: float,
+    n_bls_periods: int = 3000,
 ) -> tuple[float, float, float]:
     """
     Run period search and return (best_period_days, sde, depth_ppm).
 
-    Tries transitleastsquares first; falls back to the internal BLS if TLS
-    is not installed.  The fallback is noted in the artifact.
+    Primary algorithm: TransitLeastSquares (TLS, Hippke & Heller 2019).
+    TLS fits a limb-darkened transit profile — the same algorithm the main
+    Falsifier pipeline ships.  The completeness curve produced by this script
+    is only meaningful when TLS is used.
+
+    Fallback: a minimal pure-Python BLS implementation activates when
+    ``transitleastsquares`` cannot be imported (``ImportError``).
+    **This fallback is for CI tests only** — it verifies the artifact-writing
+    mechanics (row counts, manifest fields) without a TLS dependency.
+    It must not be used to generate committed completeness artifacts.
+
+    ``n_bls_periods`` sets the BLS period grid resolution.  It has no effect
+    when TLS is used.  The test ``test_row_count_matches_results`` passes
+    ``--n-bls-periods 50`` to stay under the 30 s timeout; the default (3000)
+    applies when the BLS path is taken with no explicit override.
     """
     try:
         from transitleastsquares import transitleastsquares as TLS
@@ -371,6 +407,7 @@ def run_detection(
         return _box_least_squares_search(
             time, flux, period_min_days, period_max_days,
             duration_hours=duration_hours,
+            n_periods=n_bls_periods,
         )
 
 
@@ -437,6 +474,7 @@ def run_single_injection(
     flux_norm: np.ndarray,
     flux_err: np.ndarray,
     detrend_window_days: float = 0.75,
+    n_bls_periods: int = 3000,
 ) -> RecoveryResult:
     """
     Inject one synthetic transit, detrend, search, and return the result.
@@ -472,6 +510,7 @@ def run_single_injection(
             period_min_days=max(0.3, params.period_days * 0.1),
             period_max_days=min(params.period_days * 10, 80.0),
             duration_hours=params.duration_hours,
+            n_bls_periods=n_bls_periods,
         )
 
         # Recovery criterion
@@ -693,6 +732,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="CSV with 'star_id' column.  Default uses built-in list.")
     p.add_argument("--no-plot", action="store_true",
                    help="Skip writing the completeness PNG")
+    p.add_argument("--n-bls-periods", type=int, default=3000,
+                   help="BLS period grid resolution when TLS is unavailable (default: 3000)")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -796,7 +837,8 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         time_arr, flux_arr, flux_err_arr = lc
-        result = run_single_injection(params, time_arr, flux_arr, flux_err_arr)
+        result = run_single_injection(params, time_arr, flux_arr, flux_err_arr,
+                                      n_bls_periods=args.n_bls_periods)
         results.append(result)
 
         if (i + 1) % 50 == 0 or (i + 1) == n_total:
