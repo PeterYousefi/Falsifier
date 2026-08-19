@@ -413,11 +413,54 @@ _DETECTION_ALGORITHM_USED: str = "unknown"
 
 
 def _tls_worker_init() -> None:
-    """Load the distutils shim in each TLS pool worker (macOS spawn fix)."""
+    """
+    Ensure the distutils stub is active in each TLS pool worker.
+
+    macOS uses 'spawn' as the default multiprocessing start method, so TLS
+    workers run fresh Python interpreters that have not yet executed any
+    module-scope code from the parent process.  batman imports
+    ``distutils.ccompiler`` at module scope; distutils was removed in Python
+    3.12.  The setuptools .pth shim fires on interpreter startup via
+    ``distutils-precedence.pth``, but that file may be absent or pre-empted in
+    some venv configurations (uv, editable installs without sitecustomize).
+
+    We try two approaches in order:
+      1. Import ``falsifier._distutils_compat`` — the canonical shim.
+      2. If that fails (e.g. the worker's PYTHONPATH is stripped), inline the
+         minimal stub that batman actually needs, making the fix self-contained.
+    """
+    import sys, types  # stdlib — always available in the worker
+
     try:
         import falsifier._distutils_compat  # noqa: F401
+        return
     except ImportError:
         pass
+
+    # Belt-and-suspenders: activate the setuptools meta-path importer when
+    # possible, then fall back to a minimal inline stub.
+    try:
+        import _distutils_hack as _dh
+        _dh.add_shim()
+        del _dh
+    except ImportError:
+        pass
+
+    if "distutils" not in sys.modules:
+        _stub_pkg = types.ModuleType("distutils")
+        _stub_cc  = types.ModuleType("distutils.ccompiler")
+
+        class _CC:
+            def has_function(self, *a, **kw):
+                return False
+            def add_library(self, *a, **kw):
+                pass
+
+        _stub_cc.new_compiler = lambda *a, **kw: _CC()  # type: ignore[attr-defined]
+        _stub_cc.CCompiler    = _CC                     # type: ignore[attr-defined]
+        _stub_pkg.ccompiler   = _stub_cc                # type: ignore[attr-defined]
+        sys.modules.setdefault("distutils",           _stub_pkg)
+        sys.modules.setdefault("distutils.ccompiler", _stub_cc)
 
 
 def run_detection(

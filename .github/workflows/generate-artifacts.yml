@@ -1,0 +1,138 @@
+name: Generate TLS Artifacts
+
+# Triggered manually only.  Never runs automatically.
+# After downloading the uploaded artifacts, commit them and push.
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-artifacts:
+    name: Generate TLS artifacts (Ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # -----------------------------------------------------------------------
+      # Python
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # -----------------------------------------------------------------------
+      # System deps — libgomp is usually pre-installed on ubuntu-latest;
+      # be explicit so a future runner change does not silently break XGBoost.
+      # -----------------------------------------------------------------------
+      - name: Install OpenMP runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libomp-dev
+
+      # -----------------------------------------------------------------------
+      # Python deps — full dev set so TLS and batman are available.
+      # -----------------------------------------------------------------------
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # -----------------------------------------------------------------------
+      # Verify that transitleastsquares is importable.
+      # -----------------------------------------------------------------------
+      - name: Verify TLS imports
+        run: |
+          python -c "
+          import transitleastsquares
+          print('transitleastsquares', transitleastsquares.__version__, 'OK')
+          "
+
+      # -----------------------------------------------------------------------
+      # Verify batman loads in a fresh worker process.
+      # On Ubuntu the default multiprocessing start method is 'fork', so spawn
+      # workers are not exercised here.  The shim still must load cleanly in a
+      # fork worker (subprocess import of batman).
+      # -----------------------------------------------------------------------
+      - name: Verify batman loads in a worker process
+        run: |
+          python - <<'EOF'
+          import multiprocessing, sys
+
+          def _worker():
+              import falsifier._distutils_compat  # noqa: F401
+              import batman  # noqa: F401
+              print("batman loaded OK in worker", flush=True)
+
+          ctx = multiprocessing.get_context("spawn")
+          p = ctx.Process(target=_worker)
+          p.start()
+          p.join()
+          if p.exitcode != 0:
+              sys.exit(f"Worker exited with code {p.exitcode}")
+          print("batman spawn-worker verification passed")
+          EOF
+
+      # -----------------------------------------------------------------------
+      # Adversarial self-test
+      # -----------------------------------------------------------------------
+      - name: Run adversarial_selftest.py
+        run: |
+          python scripts/adversarial_selftest.py \
+            --seed 42 \
+            --n-trials 20 \
+            --output-dir data/artifacts \
+            --data-dir data/golden \
+            --no-plot
+
+      # -----------------------------------------------------------------------
+      # Injection-recovery completeness
+      # -----------------------------------------------------------------------
+      - name: Run injection_recovery.py
+        run: |
+          python scripts/injection_recovery.py \
+            --seed 42 \
+            --n-per-cell 5 \
+            --output-dir data/artifacts \
+            --data-dir data/golden \
+            --no-plot
+
+      # -----------------------------------------------------------------------
+      # Guard: fail the job if either artifact records BLS_fallback.
+      # A BLS-fallback artifact must never replace a TLS artifact.
+      # -----------------------------------------------------------------------
+      - name: Verify both artifacts used TLS (not BLS_fallback)
+        run: |
+          python - <<'EOF'
+          import json, sys, pathlib
+
+          failures = []
+          for name in ("adversarial_selftest", "injection_recovery"):
+              path = pathlib.Path("data/artifacts") / f"{name}.json"
+              data = json.loads(path.read_text())
+              alg  = data.get("detection_algorithm", "<missing>")
+              if alg != "TLS":
+                  failures.append(f"{path.name}: detection_algorithm={alg!r} (expected 'TLS')")
+
+          if failures:
+              for msg in failures:
+                  print("FAIL:", msg, file=sys.stderr)
+              sys.exit(1)
+
+          print("Both artifacts verified: detection_algorithm=TLS")
+          EOF
+
+      # -----------------------------------------------------------------------
+      # Upload artifacts for download and manual commit.
+      # -----------------------------------------------------------------------
+      - name: Upload JSON artifacts and manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: tls-artifacts
+          path: |
+            data/artifacts/adversarial_selftest.json
+            data/artifacts/adversarial_selftest.manifest.json
+            data/artifacts/injection_recovery.json
+            data/artifacts/injection_recovery.manifest.json
+          if-no-files-found: error
+          retention-days: 30
