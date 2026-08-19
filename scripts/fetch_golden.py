@@ -21,17 +21,31 @@ Requirements
     lightkurve >= 2.4
     astropy >= 5.0
 
-The MAST product ID in each manifest entry pins the exact file.  lightkurve's
-search_lightcurve is used only for discovery; the download is directed to the
-pinned product ID so there are no version-drift surprises from lightkurve
-defaults.
+Single-quarter entries
+----------------------
+Each entry with a scalar ``quarter`` field is fetched from the pinned MAST
+product ID exactly as before.
+
+Multi-quarter entries (stitched baselines)
+------------------------------------------
+Entries with a ``quarters`` list (e.g. ``"quarters": [1, 2, 3, 4, 5, 6, 7, 8]``)
+download each quarter individually and stitch them into a single FITS file
+with a monotonically increasing TIME column.  The stitching is gap-preserving:
+inter-quarter gaps remain in the time axis so the baseline covers the full
+calendar span.  Each quarter's flux is independently median-normalised before
+concatenation; the merged flux is then re-normalised to a grand median of 1.0.
+
+For multi-quarter entries, ``mast_product_id`` is interpreted as a list of
+per-quarter product IDs in the same order as ``quarters``.  Leave as an empty
+list ``[]`` to let lightkurve pick the default product for each quarter
+(acceptable when the quarter is unique for that KIC ID and cadence).
 
 Golden set growth
 -----------------
 To add a new system, append an entry to data/golden/MANIFEST.json.  The
 fetch script will handle the rest.  Each entry must have:
 
-    kic_id, common_name, quarter, cadence, mast_product_id, mast_uri,
+    kic_id, common_name, quarter OR quarters, cadence, mast_product_id,
     fits_filename, provenance_filename, reference_doi, reference_citation,
     notes, (optional) eb_catalog dict for eclipsing binaries
 
@@ -67,10 +81,145 @@ def _sha256_of_file(path: pathlib.Path) -> str:
 # Fetch one entry
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Single-quarter fetch helpers
+# ---------------------------------------------------------------------------
+
+def _find_pinned_index(results, pinned_id: str) -> int | None:
+    """
+    Return the index of the result row whose product filename contains
+    *pinned_id*, or None if not found.  Tries the column names that lightkurve
+    has used across versions.
+    """
+    tbl = results.table
+    for col in ("#product_filename", "productFilename", "description"):
+        if col in tbl.colnames:
+            for i, val in enumerate(tbl[col]):
+                if pinned_id in str(val):
+                    return i
+    return None
+
+
+def _download_one_quarter(
+    lk,
+    kic_id: str,
+    quarter: int,
+    cadence: str,
+    pinned_id: str | None,
+) -> object | None:
+    """
+    Search MAST for one quarter of *kic_id*, optionally pinning to a specific
+    product ID.  Returns a lightkurve LightCurve or None on failure.
+    """
+    results = lk.search_lightcurve(
+        kic_id,
+        mission="Kepler",
+        quarter=quarter,
+        cadence=cadence,
+        author="Kepler",
+    )
+    if len(results) == 0:
+        print(f"    WARNING: No MAST results for {kic_id} Q{quarter}.", file=sys.stderr)
+        return None
+
+    if pinned_id:
+        idx = _find_pinned_index(results, pinned_id)
+        if idx is None:
+            available = []
+            tbl = results.table
+            for col in ("#product_filename", "productFilename", "description"):
+                if col in tbl.colnames:
+                    available = list(tbl[col])
+                    break
+            print(
+                f"    WARNING: Pinned product ID '{pinned_id}' not found for "
+                f"{kic_id} Q{quarter}.\n"
+                f"    Available ({len(results)} rows): {available}\n"
+                f"    Skipping this quarter.",
+                file=sys.stderr,
+            )
+            return None
+        lc = results[idx].download()
+    else:
+        lc = results[0].download()
+
+    if lc is None:
+        print(f"    WARNING: Download returned None for {kic_id} Q{quarter}.", file=sys.stderr)
+    return lc
+
+
+def _write_fits(fits_path: pathlib.Path, t_arr, f_arr, e_arr, q_arr) -> None:
+    """Write arrays to the canonical FITS format expected by load_quiet_star."""
+    import numpy as np
+    from astropy.io import fits as _fits
+    from astropy.table import Table as _Table
+
+    tbl = _Table(
+        [t_arr, f_arr, e_arr, q_arr],
+        names=["TIME", "FLUX", "FLUX_ERR", "QUALITY"],
+    )
+    primary_hdu = _fits.PrimaryHDU()
+    table_hdu = _fits.BinTableHDU(tbl, name="LIGHTCURVE")
+    _fits.HDUList([primary_hdu, table_hdu]).writeto(str(fits_path), overwrite=True)
+
+
+def _write_provenance(
+    prov_path: pathlib.Path,
+    entry: dict,
+    sha256: str,
+    row_count: int,
+    extra: dict | None = None,
+) -> None:
+    """Write (or overwrite) the provenance sidecar for an entry."""
+    provenance = {
+        "target": entry["kic_id"],
+        "common_name": entry["common_name"],
+        "mission": "Kepler",
+        "cadence": entry["cadence"],
+        "pipeline_version": entry.get("pipeline_version", "SOC 9.3"),
+        "time_system": "BKJD",
+        "time_scale": "TDB",
+        "time_reference": "BJD - 2454833.0",
+        "flux_column": entry.get("flux_column", "SAP_FLUX"),
+        "flux_unit": "e-/s",
+        "access_date": date.today().isoformat(),
+        "sha256": sha256,
+        "row_count": row_count,
+        "source_doi": entry["reference_doi"],
+        "reference_doi": entry["reference_doi"],
+        "reference_citation": entry["reference_citation"],
+        "notes": entry.get("notes", ""),
+    }
+    # Single-quarter fields
+    if "quarter" in entry:
+        provenance["quarter"] = entry["quarter"]
+        provenance["mast_product_id"] = entry.get("mast_product_id", "")
+        provenance["mast_uri"] = entry.get("mast_uri", "")
+    # Multi-quarter fields
+    if "quarters" in entry:
+        provenance["quarters"] = entry["quarters"]
+        provenance["mast_product_ids"] = entry.get("mast_product_id", [])
+    if extra:
+        provenance.update(extra)
+    if "eb_catalog" in entry:
+        provenance["eb_catalog"] = entry["eb_catalog"]
+
+    with open(prov_path, "w") as f:
+        json.dump(provenance, f, indent=2)
+        f.write("\n")
+
+
+# ---------------------------------------------------------------------------
+# Per-entry fetch dispatcher
+# ---------------------------------------------------------------------------
+
 def _fetch_entry(entry: dict, force: bool) -> bool:
     """
     Fetch a single manifest entry.  Returns True if the file was (re)fetched,
     False if it was already present and --force was not given.
+
+    Dispatches to single-quarter or multi-quarter logic based on whether the
+    entry has ``quarter`` (int) or ``quarters`` (list[int]).
     """
     fits_path = GOLDEN_DIR / entry["fits_filename"]
     prov_path = GOLDEN_DIR / entry["provenance_filename"]
@@ -85,18 +234,18 @@ def _fetch_entry(entry: dict, force: bool) -> bool:
         print("ERROR: lightkurve not installed.  Run: pip install 'lightkurve>=2.4'", file=sys.stderr)
         sys.exit(1)
 
+    if "quarters" in entry:
+        return _fetch_multi_quarter(entry, lk, fits_path, prov_path)
+    else:
+        return _fetch_single_quarter(entry, lk, fits_path, prov_path)
+
+
+def _fetch_single_quarter(entry: dict, lk, fits_path: pathlib.Path, prov_path: pathlib.Path) -> bool:
+    """Fetch one quarter pinned by mast_product_id."""
+    import numpy as np
+
     print(f"  Searching MAST for {entry['kic_id']}, Q{entry['quarter']}, {entry['cadence']} ...")
 
-    # Pin the exact MAST product by specifying every disambiguating dimension.
-    # lightkurve >= 2.4 exposes the search result table as results.table (an
-    # astropy Table).  We filter the table rows to the exact mast_product_id
-    # so no lightkurve default selects a different product version.
-    #
-    # The four arguments below are all required — no default may remain:
-    #   mission  = "Kepler"  (not K2 or TESS)
-    #   quarter  = int       (not None — would fetch all quarters)
-    #   cadence  = "long"    (not short or fast)
-    #   author   = "Kepler"  (not a community pipeline reprocessing)
     results = lk.search_lightcurve(
         entry["kic_id"],
         mission="Kepler",
@@ -109,31 +258,12 @@ def _fetch_entry(entry: dict, force: bool) -> bool:
         print(f"  ERROR: No MAST results for {entry['kic_id']} Q{entry['quarter']}.", file=sys.stderr)
         return False
 
-    # Filter the result table to rows whose #product_filename contains the
-    # pinned product ID.  lightkurve stores the MAST product filename in the
-    # "productFilename" column of results.table.
     pinned_id = entry["mast_product_id"]
-    tbl = results.table
-    # "productFilename" column contains the base name; "#" prefix may or may not
-    # be present depending on lightkurve version.  Match as substring.
-    if "#product_filename" in tbl.colnames:
-        fn_col = tbl["#product_filename"]
-    elif "productFilename" in tbl.colnames:
-        fn_col = tbl["productFilename"]
-    elif "description" in tbl.colnames:
-        fn_col = tbl["description"]
-    else:
-        fn_col = None
+    idx = _find_pinned_index(results, pinned_id)
 
-    matched_indices = []
-    if fn_col is not None:
-        for i, val in enumerate(fn_col):
-            if pinned_id in str(val):
-                matched_indices.append(i)
-
-    if not matched_indices:
-        # Print all available filenames so the operator can update MANIFEST.json
+    if idx is None:
         available = []
+        tbl = results.table
         for col in ("#product_filename", "productFilename", "description", "target_name"):
             if col in tbl.colnames:
                 available = list(tbl[col])
@@ -147,12 +277,8 @@ def _fetch_entry(entry: dict, force: bool) -> bool:
         )
         return False
 
-    # Use the first (and normally only) matching row
-    idx = matched_indices[0]
     print(f"  Pinned match: index {idx} of {len(results)} results")
-    lc_collection = results[idx].download()
-    # results[idx].download() returns a LightCurve (or None on failure)
-    lc = lc_collection
+    lc = results[idx].download()
 
     if lc is None:
         print(f"  ERROR: Download returned None for {entry['kic_id']}.", file=sys.stderr)
@@ -160,70 +286,125 @@ def _fetch_entry(entry: dict, force: bool) -> bool:
 
     fits_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write a canonical FITS file whose columns match what the pipeline tests
-    # expect: TIME, FLUX, FLUX_ERR, QUALITY (not SAP_QUALITY).
-    # lightkurve.to_fits() writes SAP_QUALITY; we build a custom HDU instead.
-    import numpy as np
-    from astropy.io import fits as _fits
-    from astropy.table import Table as _Table
-
     t_arr = np.asarray(lc.time.bkjd, dtype=np.float64)
     f_arr = np.asarray(lc.flux.value, dtype=np.float64)
     e_arr = np.asarray(lc.flux_err.value, dtype=np.float64)
     q_arr = np.asarray(lc.quality, dtype=np.int32)
-    # MOM_CENTR columns (may be absent on some LC objects)
-    try:
-        c1_arr = np.asarray(lc.centroid_col.value, dtype=np.float64)
-        c2_arr = np.asarray(lc.centroid_row.value, dtype=np.float64)
-        has_centroid = True
-    except (AttributeError, TypeError):
-        has_centroid = False
 
-    tbl = _Table([t_arr, f_arr, e_arr, q_arr], names=["TIME", "FLUX", "FLUX_ERR", "QUALITY"])
-    if has_centroid:
-        tbl["MOM_CENTR1"] = c1_arr
-        tbl["MOM_CENTR2"] = c2_arr
-
-    primary_hdu = _fits.PrimaryHDU()
-    table_hdu = _fits.BinTableHDU(tbl, name="LIGHTCURVE")
-    hdul = _fits.HDUList([primary_hdu, table_hdu])
-    hdul.writeto(str(fits_path), overwrite=True)
+    _write_fits(fits_path, t_arr, f_arr, e_arr, q_arr)
     print(f"  Saved: {fits_path.name}  ({len(lc)} cadences)")
 
-    # Compute SHA-256 and update provenance sidecar
     sha256 = _sha256_of_file(fits_path)
-
-    # Build the provenance document from the manifest entry
-    provenance = {
-        "target": entry["kic_id"],
-        "common_name": entry["common_name"],
-        "mission": "Kepler",
-        "quarter": entry["quarter"],
-        "cadence": entry["cadence"],
-        "mast_product_id": entry["mast_product_id"],
-        "mast_uri": entry["mast_uri"],
-        "pipeline_version": entry.get("pipeline_version", "SOC 9.3"),
-        "time_system": "BKJD",
-        "time_scale": "TDB",
-        "time_reference": "BJD - 2454833.0",
-        "flux_column": entry.get("flux_column", "SAP_FLUX"),
-        "flux_unit": "e-/s",
-        "access_date": date.today().isoformat(),
-        "sha256": sha256,
-        "row_count": len(lc),
-        "source_doi": entry["reference_doi"],
-        "reference_doi": entry["reference_doi"],
-        "reference_citation": entry["reference_citation"],
-        "notes": entry.get("notes", ""),
-    }
-    if "eb_catalog" in entry:
-        provenance["eb_catalog"] = entry["eb_catalog"]
-
-    with open(prov_path, "w") as f:
-        json.dump(provenance, f, indent=2)
-        f.write("\n")
+    _write_provenance(prov_path, entry, sha256, len(lc))
     print(f"  Provenance: {prov_path.name}  (sha256={sha256[:16]}...)")
+    return True
 
+
+def _fetch_multi_quarter(entry: dict, lk, fits_path: pathlib.Path, prov_path: pathlib.Path) -> bool:
+    """
+    Download multiple quarters, stitch them into a single FITS file.
+
+    Each quarter is independently median-normalised before concatenation.
+    The merged array is then re-normalised to grand median = 1.0.
+    Only quality == 0 and finite cadences are kept within each quarter.
+
+    The ``mast_product_id`` field for multi-quarter entries is a list of
+    per-quarter pinned product IDs (parallel to ``quarters``).  An empty list
+    or shorter list means those quarters are fetched without pinning.
+    """
+    import numpy as np
+
+    quarters: list[int] = entry["quarters"]
+    pinned_ids: list[str] = entry.get("mast_product_id", [])
+    cadence: str = entry["cadence"]
+    kic_id: str = entry["kic_id"]
+
+    print(
+        f"  Fetching {len(quarters)} quarters for {kic_id} "
+        f"(Q{quarters[0]}–Q{quarters[-1]}, {cadence}) ..."
+    )
+
+    t_parts: list[np.ndarray] = []
+    f_parts: list[np.ndarray] = []
+    e_parts: list[np.ndarray] = []
+    q_parts: list[np.ndarray] = []
+    quarters_fetched: list[int] = []
+
+    for i, q in enumerate(quarters):
+        pinned = pinned_ids[i] if i < len(pinned_ids) else None
+        print(f"    Q{q} ...", end=" ", flush=True)
+        lc = _download_one_quarter(lk, kic_id, q, cadence, pinned)
+        if lc is None:
+            print("SKIP")
+            continue
+
+        t = np.asarray(lc.time.bkjd, dtype=np.float64)
+        f = np.asarray(lc.flux.value, dtype=np.float64)
+        e = np.asarray(lc.flux_err.value, dtype=np.float64)
+        qf = np.asarray(lc.quality, dtype=np.int32)
+
+        # Per-quarter quality mask and normalisation
+        mask = np.isfinite(t) & np.isfinite(f) & np.isfinite(e) & (qf == 0)
+        t, f, e, qf = t[mask], f[mask], e[mask], qf[mask]
+        if len(t) < 10:
+            print(f"SKIP (only {len(t)} good cadences after quality mask)")
+            continue
+
+        med = float(np.nanmedian(f))
+        if med == 0.0 or not np.isfinite(med):
+            print("SKIP (zero or NaN median flux)")
+            continue
+        f = f / med
+        e = e / abs(med)
+
+        t_parts.append(t)
+        f_parts.append(f)
+        e_parts.append(e)
+        q_parts.append(qf)
+        quarters_fetched.append(q)
+        print(f"OK ({len(t)} cadences)")
+
+    if not t_parts:
+        print(f"  ERROR: No usable quarters fetched for {kic_id}.", file=sys.stderr)
+        return False
+
+    # Concatenate and sort by time (quarters should already be ordered, but be safe)
+    t_all = np.concatenate(t_parts)
+    f_all = np.concatenate(f_parts)
+    e_all = np.concatenate(e_parts)
+    q_all = np.concatenate(q_parts)
+    order = np.argsort(t_all)
+    t_all, f_all, e_all, q_all = t_all[order], f_all[order], e_all[order], q_all[order]
+
+    # Grand re-normalisation: median of the full stitched flux → 1.0
+    grand_med = float(np.median(f_all))
+    if grand_med > 0.0 and np.isfinite(grand_med):
+        f_all = f_all / grand_med
+        e_all = e_all / grand_med
+
+    baseline_days = float(t_all[-1] - t_all[0])
+    n_cadences = len(t_all)
+    print(
+        f"  Stitched {len(quarters_fetched)} quarters: "
+        f"{n_cadences} cadences, baseline {baseline_days:.1f} d"
+    )
+
+    fits_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_fits(fits_path, t_all, f_all, e_all, q_all)
+    print(f"  Saved: {fits_path.name}")
+
+    sha256 = _sha256_of_file(fits_path)
+    _write_provenance(
+        prov_path,
+        entry,
+        sha256,
+        n_cadences,
+        extra={
+            "quarters_fetched": quarters_fetched,
+            "baseline_days": round(baseline_days, 1),
+        },
+    )
+    print(f"  Provenance: {prov_path.name}  (sha256={sha256[:16]}...)")
     return True
 
 

@@ -1,0 +1,169 @@
+{
+  "schema_version": "1",
+  "script_version": "0.1.0",
+  "run_id": "a0604db3-072e-43f8-85ba-402b443d8fe6",
+  "produced_at": "2026-08-19T03:56:56Z",
+  "random_seed": 42,
+  "n_injections_attempted": 4,
+  "n_injections_completed": 4,
+  "period_grid_days": [
+    0.5,
+    1.0
+  ],
+  "depth_grid_ppm": [
+    200,
+    12000
+  ],
+  "period_match_tolerance": 0.02,
+  "sde_threshold": 9.0,
+  "transit_shape": "box",
+  "quiet_stars": [
+    "KIC 7272437"
+  ],
+  "source_doi": "10.17909/T9-NMC8-F686",
+  "access_date": "2026-08-18",
+  "row_count": 4,
+  "detection_algorithm": "BLS_fallback",
+  "asymptote_low_depth": {
+    "depth_ppm": 200,
+    "n_total": 2,
+    "n_recovered": 0,
+    "mean_rate": 0.0,
+    "pass_low_asymptote": true,
+    "pass_high_asymptote": false,
+    "per_period": [
+      {
+        "period_days": 0.5,
+        "rate": 0.0
+      },
+      {
+        "period_days": 1.0,
+        "rate": 0.0
+      }
+    ]
+  },
+  "asymptote_high_depth": {
+    "depth_ppm": 12000,
+    "n_total": 2,
+    "n_recovered": 0,
+    "mean_rate": 0.0,
+    "pass_low_asymptote": true,
+    "pass_high_asymptote": false,
+    "per_period": [
+      {
+        "period_days": 0.5,
+        "rate": 0.0
+      },
+      {
+        "period_days": 1.0,
+        "rate": 0.0
+      }
+    ]
+  },
+  "results": [
+    {
+      "star_id": "KIC 7272437",
+      "injection_index": 0,
+      "period_days": 0.5,
+      "depth_ppm": 200,
+      "epoch_bkjd": 0.38697802427798167,
+      "duration_hours": 1.5874010519681996,
+      "recovered": false,
+      "recovered_period_days": 1.0,
+      "recovered_sde": 4.901603454161993,
+      "recovered_depth_ppm": 174.49623256578894,
+      "period_fractional_error": 1.0,
+      "odd_even_outcome": null,
+      "disposition": null,
+      "error_message": null
+    },
+    {
+      "star_id": "KIC 7272437",
+      "injection_index": 1,
+      "period_days": 0.5,
+      "depth_ppm": 12000,
+      "epoch_bkjd": 0.21943921987602616,
+      "duration_hours": 1.5874010519681996,
+      "recovered": false,
+      "recovered_period_days": 0.5,
+      "recovered_sde": 4.898095447117904,
+      "recovered_depth_ppm": 9354.443159772929,
+      "period_fractional_error": 0.0,
+      "odd_even_outcome": null,
+      "disposition": null,
+      "error_message": null
+    },
+    {
+      "star_id": "KIC 7272437",
+      "injection_index": 2,
+      "period_days": 1.0,
+      "depth_ppm": 200,
+      "epoch_bkjd": 0.8585979199113825,
+      "duration_hours": 2.0,
+      "recovered": false,
+      "recovered_period_days": 2.0,
+      "recovered_sde": 6.3689573103645465,
+      "recovered_depth_ppm": 167.1811592026162,
+      "period_fractional_error": 1.0,
+      "odd_even_outcome": null,
+      "disposition": null,
+      "error_message": null
+    },
+    {
+      "star_id": "KIC 7272437",
+      "injection_index": 3,
+      "period_days": 1.0,
+      "depth_ppm": 12000,
+      "epoch_bkjd": 0.6973680290593639,
+      "duration_hours": 2.0,
+      "recovered": false,
+      "recovered_period_days": 2.0,
+      "recovered_sde": 6.133971043741078,
+      "recovered_depth_ppm": 8823.272320132211,
+      "period_fractional_error": 1.0,
+      "odd_even_outcome": null,
+      "disposition": null,
+      "error_message": null
+    }
+  ],
+  "completeness_bins": [
+    {
+      "period_days": 0.5,
+      "depth_ppm": 200,
+      "n_injected": 1,
+      "n_recovered": 0,
+      "recovery_rate": 0.0,
+      "recovery_rate_lower_68": 0.0,
+      "recovery_rate_upper_68": 0.5
+    },
+    {
+      "period_days": 1.0,
+      "depth_ppm": 200,
+      "n_injected": 1,
+      "n_recovered": 0,
+      "recovery_rate": 0.0,
+      "recovery_rate_lower_68": 0.0,
+      "recovery_rate_upper_68": 0.5
+    },
+    {
+      "period_days": 0.5,
+      "depth_ppm": 12000,
+      "n_injected": 1,
+      "n_recovered": 0,
+      "recovery_rate": 0.0,
+      "recovery_rate_lower_68": 0.0,
+      "recovery_rate_upper_68": 0.5
+    },
+    {
+      "period_days": 1.0,
+      "depth_ppm": 12000,
+      "n_injected": 1,
+      "n_recovered": 0,
+      "recovery_rate": 0.0,
+      "recovery_rate_lower_68": 0.0,
+      "recovery_rate_upper_68": 0.5
+    }
+  ],
+  "plot_artifact_path": "data/artifacts/pilot_merged/injection_recovery_completeness.png",
+  "notes": "Injection-recovery completeness for the Falsifier pipeline. Merged from 1 per-star shards. Overall recovery rate: 0/4 = 0.0% (all depths and periods combined). Detection algorithm: BLS_fallback. Transit shape: box (conservative). Multi-quarter stitched baseline (Q1\u2013Q8, ~720 d). Vet stage not run in bulk injection-recovery; see adversarial_selftest.py for false-positive rates."
+}

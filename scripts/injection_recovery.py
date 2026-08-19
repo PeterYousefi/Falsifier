@@ -102,15 +102,28 @@ SCRIPT_VERSION = "0.1.0"
 OUTPUT_ARTIFACT_NAME = "injection_recovery.json"
 COMPLETENESS_PLOT_NAME = "injection_recovery_completeness.png"
 
-# Depth grid in ppm — spans from marginal to deep
-DEPTH_GRID_PPM = [200, 400, 800, 1500, 3000, 6000, 12000]
+# Depth grid in ppm — spans from sub-noise-floor to deep.
+#
+# 50 and 100 ppm are intentionally below the TLS detection floor on a ~89-day
+# Kepler quarter (~200 ppm per-cadence noise): the low-depth asymptote check
+# requires mean recovery ≤ 0.15 at the shallowest entry.  The Q3-only run
+# showed 200 ppm was detectable by TLS (mean rate 0.267), confirming that 200 ppm
+# is above the noise floor.  50/100 ppm are added to bracket the true floor.
+DEPTH_GRID_PPM = [50, 100, 200, 400, 800, 1500, 3000, 6000, 12000]
 # Period grid in days.
 #
-# Maximum period is limited by the light curve baseline. Kepler Q3 is ~89 days.
-# With MIN_TRANSITS_REQUIRED = 3, the maximum supportable period is:
-#   89 d / 3 ≈ 29.7 d → 20.0 d is the last grid point.
-# Injecting at 40 d on a single ~89-day quarter gives only ~2 transit windows,
-# which is insufficient for a clean period recovery by TLS.
+# The maximum supportable period depends on the light curve baseline and
+# MIN_TRANSITS_REQUIRED.
+#
+# Q3-only baseline (~89 d): max recoverable ≈ 89/3 ≈ 29.7 d → 20 d last point.
+#   On a single quarter, the 20 d and 10 d cells are transit-count limited
+#   (4.5 and 8.9 windows respectively) and produce sub-0.85 recovery even at
+#   12,000 ppm (observed TLS mean rate 0.833 in the Q3 run).
+#
+# Multi-quarter baseline (Q1–Q8, ~720 d): 20 d → ~36 transits; all cells are
+#   well-sampled and the high-depth asymptote is expected to reach ≥ 0.95.
+#   When the q1q8 stitched FITS files are present, load_quiet_star automatically
+#   selects them (longest-baseline preference).
 PERIOD_GRID_DAYS = [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]
 
 # For a transit to be counted as "recovered" the TLS period must be within
@@ -119,14 +132,26 @@ PERIOD_MATCH_TOLERANCE = 0.02  # 2%
 # And the recovered SDE must exceed this threshold
 SDE_THRESHOLD = 9.0
 
-# Quiet-star target list — no confirmed planets in NASA Exoplanet Archive
+# Quiet-star target list — verified planet-free against the NASA Exoplanet Archive
+# KOI cumulative table (all dispositions) and confirmed planets table, 2026-08-18.
+#
+# Stars replaced on 2026-08-18 after Q1–Q8 KOI cross-check revealed the original
+# five quiet-star candidates contained planets:
+#   KIC 3425851  → replaced by KIC 1161145  (was CANDIDATE K00268.01, P=110.4d)
+#   KIC 5514383  → replaced by KIC 5347580  (was CONFIRMED K00257.01, P=6.9d)
+#   KIC 9410930  → replaced by KIC 7347849  (was CONFIRMED K00196.01, P=1.9d)
+#   KIC 10963065 → replaced by KIC 8867895  (was CONFIRMED K01612.01, P=2.5d)
+#   KIC 7272437  → KEPT (no KOI entry, confirmed planet-free)
+#
+# Replacement selection criteria: no KOI entry (any disposition), logg > 4.1,
+# 5000 < Teff < 6200 K, Kepmag 11–12.5, R < 1.3 Rsun, spread across KIC channels.
 # Each entry: KIC ID string
 DEFAULT_QUIET_STARS = [
-    "KIC 3425851",   # Kepler quiet dwarf, no confirmed planet
-    "KIC 5514383",
-    "KIC 7272437",
-    "KIC 9410930",
-    "KIC 10963065",
+    "KIC 1161145",   # replaces KIC 3425851; Teff=5990K logg=4.32 Kepmag=12.36 — no KOI
+    "KIC 5347580",   # replaces KIC 5514383; Teff=5780K logg=4.44 Kepmag=11.57 — no KOI
+    "KIC 7272437",   # original; confirmed planet-free, no KOI entry
+    "KIC 7347849",   # replaces KIC 9410930; Teff=5780K logg=4.44 Kepmag=12.46 — no KOI
+    "KIC 8867895",   # replaces KIC 10963065; Teff=5780K logg=4.44 Kepmag=11.72 — no KOI
 ]
 
 # Transit shape — use a simple box model (uniform depth, flat bottom)
@@ -524,7 +549,7 @@ MIN_TRANSITS_REQUIRED = 3
 # minimum required transits.  Derived from PERIOD_GRID_DAYS[-1] and
 # MIN_TRANSITS_REQUIRED at import time so the check is tight.
 # Importing this at module scope avoids recomputing on every call.
-MIN_BASELINE_DAYS = PERIOD_GRID_DAYS[-1] * MIN_TRANSITS_REQUIRED  # 40 * 3 = 120 d
+MIN_BASELINE_DAYS = PERIOD_GRID_DAYS[-1] * MIN_TRANSITS_REQUIRED  # 20 * 3 = 60 d
 
 
 class QuietStarNotFoundError(FileNotFoundError):
@@ -643,7 +668,35 @@ def load_quiet_star(
     if not fits_files:
         raise QuietStarNotFoundError(star_id, data_dir, pattern)
 
-    fits_path = fits_files[0]
+    # When multiple FITS files exist for the same star (e.g. a Q3-only file and
+    # a stitched Q1–Q8 file), prefer the one with the longest baseline so that
+    # multi-quarter files are automatically used once committed without any
+    # manifest or config change.  We peek at each file cheaply (first/last TIME
+    # values only) to compare baselines.
+    if len(fits_files) > 1:
+        from astropy.io import fits as _fits_peek
+        best_path = fits_files[0]
+        best_baseline = -1.0
+        for fp in fits_files:
+            try:
+                with _fits_peek.open(fp) as _h:
+                    t_col = _h[1].data["TIME"].astype(np.float64)
+                    finite_t = t_col[np.isfinite(t_col)]
+                    if len(finite_t) >= 2:
+                        bl = float(finite_t[-1] - finite_t[0])
+                        if bl > best_baseline:
+                            best_baseline = bl
+                            best_path = fp
+            except Exception:
+                pass
+        fits_path = best_path
+        log.debug(
+            "Multiple FITS files for %s; selected longest baseline: %s (%.1f d)",
+            star_id, fits_path.name, best_baseline,
+        )
+    else:
+        fits_path = fits_files[0]
+
     log.debug("Loading quiet star %s from %s", star_id, fits_path.name)
 
     with _fits.open(fits_path) as hdul:
@@ -1112,6 +1165,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Directory containing quiet-star FITS files (default: data/golden)")
     p.add_argument("--quiet-stars-list", type=Path, default=None,
                    help="CSV with 'star_id' column.  Default uses built-in list.")
+    p.add_argument("--output-name", type=str, default=None,
+                   help=(
+                       "Override the output artifact filename stem "
+                       "(default: 'injection_recovery').  Useful when running "
+                       "one star at a time for parallel matrix jobs; the merged "
+                       "artifact is then produced by merge_injection_recovery.py."
+                   ))
     p.add_argument("--no-plot", action="store_true",
                    help="Skip writing the completeness PNG")
     p.add_argument("--n-bls-periods", type=int, default=3000,
@@ -1262,7 +1322,9 @@ def main(argv: list[str] | None = None) -> int:
     # 6. Write plot artifact
     # ------------------------------------------------------------------
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = args.output_dir / COMPLETENESS_PLOT_NAME
+    artifact_stem = args.output_name if args.output_name else "injection_recovery"
+    plot_name = f"{artifact_stem}_completeness.png"
+    plot_path = args.output_dir / plot_name
     if not args.no_plot:
         write_completeness_plot(bins, PERIOD_GRID_DAYS, DEPTH_GRID_PPM, plot_path)
 
@@ -1337,7 +1399,8 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
-    out_path = args.output_dir / OUTPUT_ARTIFACT_NAME
+    artifact_stem = args.output_name if args.output_name else "injection_recovery"
+    out_path = args.output_dir / f"{artifact_stem}.json"
     payload = {k: v for k, v in asdict(artifact).items()}
     out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 

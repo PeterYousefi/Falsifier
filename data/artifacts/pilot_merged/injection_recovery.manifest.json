@@ -1,0 +1,9 @@
+{
+  "artifact": "data/artifacts/pilot_merged/injection_recovery.json",
+  "sha256": "db3fe7967ef27c376f12dbf1ca983eb570c97054aa0fb25e1b60da2bc1edb979",
+  "source_doi": "10.17909/T9-NMC8-F686",
+  "access_date": "2026-08-18",
+  "row_count": 4,
+  "produced_at": "2026-08-19T03:56:56Z",
+  "run_id": "a0604db3-072e-43f8-85ba-402b443d8fe6"
+}

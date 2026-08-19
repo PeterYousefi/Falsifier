@@ -1,57 +1,61 @@
 name: Generate TLS Artifacts
 
 # Triggered manually only.  Never runs automatically.
-# After downloading the uploaded artifacts, commit them and push.
+# After the merge job completes, download the uploaded artifacts, commit them,
+# and push.
+#
+# Architecture
+# ------------
+# The injection-recovery run on multi-quarter (Q1–Q8) baselines takes ~1 hour
+# per quiet star.  Five stars in a single job would take ~5 hours and is
+# unreliable near the GitHub Actions 6-hour hard limit.
+#
+# Instead the run is split into a parallel matrix: one job per quiet star
+# (5 × ~1 h = ~1 h wall-clock).  Each shard writes its own JSON file to
+# data/artifacts/shards/.  A final merge job stitches the shards, re-computes
+# completeness bins, and runs the asymptote checks on the merged result.
+#
+# The adversarial self-test is a separate single job (fast, ~10 min).
 on:
   workflow_dispatch:
 
 jobs:
-  generate-artifacts:
-    name: Generate TLS artifacts (Ubuntu)
+
+  # ---------------------------------------------------------------------------
+  # Shared setup — verify TLS and batman in a fresh spawn worker.
+  # This is a mandatory gate; if it fails the matrix jobs don't start.
+  # ---------------------------------------------------------------------------
+  setup-check:
+    name: Verify TLS + batman (pre-flight)
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v5
 
-      # -----------------------------------------------------------------------
-      # Python
-      # -----------------------------------------------------------------------
       - name: Set up Python 3.11
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      # -----------------------------------------------------------------------
-      # System deps — libgomp is usually pre-installed on ubuntu-latest;
-      # be explicit so a future runner change does not silently break XGBoost.
-      # -----------------------------------------------------------------------
       - name: Install OpenMP runtime
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends libomp-dev
 
-      # -----------------------------------------------------------------------
-      # Python deps — full dev set so TLS and batman are available.
-      # -----------------------------------------------------------------------
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -e ".[dev]"
 
-      # -----------------------------------------------------------------------
-      # Verify that transitleastsquares is importable.
-      # -----------------------------------------------------------------------
       - name: Verify TLS imports
         run: |
           python - <<'EOF'
           import transitleastsquares
           from importlib.metadata import version, PackageNotFoundError
 
-          # Guard: the callable that the pipeline actually uses must be present.
           tls_cls = transitleastsquares.transitleastsquares
           assert callable(tls_cls), "transitleastsquares.transitleastsquares is not callable"
 
-          # Version is informational only — never fail the job on a missing string.
           try:
               ver = version("transitleastsquares")
           except PackageNotFoundError:
@@ -60,21 +64,35 @@ jobs:
           print(f"transitleastsquares {ver} OK (transitleastsquares.transitleastsquares callable)")
           EOF
 
-      # -----------------------------------------------------------------------
-      # Verify batman loads in a fresh spawn worker process.
-      # Uses a real file (scripts/_verify_spawn_worker.py) rather than a
-      # heredoc because multiprocessing's "spawn" start method re-imports
-      # __main__ in the child interpreter — if __main__ came from stdin the
-      # child raises FileNotFoundError: '<stdin>'.
-      # "spawn" is forced explicitly: Ubuntu's default is "fork", which would
-      # never exercise the macOS code path this guard exists to protect.
-      # -----------------------------------------------------------------------
       - name: Verify batman loads in a spawn worker process
         run: python scripts/_verify_spawn_worker.py
 
-      # -----------------------------------------------------------------------
-      # Adversarial self-test
-      # -----------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Adversarial self-test — single job, independent of matrix.
+  # ---------------------------------------------------------------------------
+  adversarial-selftest:
+    name: Adversarial self-test
+    runs-on: ubuntu-latest
+    needs: setup-check
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install OpenMP runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libomp-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
       - name: Run adversarial_selftest.py
         run: |
           python scripts/adversarial_selftest.py \
@@ -84,54 +102,228 @@ jobs:
             --data-dir data/golden \
             --no-plot
 
-      # -----------------------------------------------------------------------
-      # Injection-recovery completeness
-      # -----------------------------------------------------------------------
-      - name: Run injection_recovery.py
-        run: |
-          python scripts/injection_recovery.py \
-            --seed 42 \
-            --n-per-cell 5 \
-            --output-dir data/artifacts \
-            --data-dir data/golden \
-            --no-plot
-
-      # -----------------------------------------------------------------------
-      # Guard: fail the job if either artifact records BLS_fallback.
-      # A BLS-fallback artifact must never replace a TLS artifact.
-      # -----------------------------------------------------------------------
-      - name: Verify both artifacts used TLS (not BLS_fallback)
+      - name: Verify artifact used TLS (not BLS_fallback)
         run: |
           python - <<'EOF'
           import json, sys, pathlib
 
-          failures = []
-          for name in ("adversarial_selftest", "injection_recovery"):
-              path = pathlib.Path("data/artifacts") / f"{name}.json"
-              data = json.loads(path.read_text())
-              alg  = data.get("detection_algorithm", "<missing>")
-              if alg != "TLS":
-                  failures.append(f"{path.name}: detection_algorithm={alg!r} (expected 'TLS')")
-
-          if failures:
-              for msg in failures:
-                  print("FAIL:", msg, file=sys.stderr)
+          path = pathlib.Path("data/artifacts/adversarial_selftest.json")
+          data = json.loads(path.read_text())
+          alg  = data.get("detection_algorithm", "<missing>")
+          if alg != "TLS":
+              print(f"FAIL: {path.name}: detection_algorithm={alg!r} (expected 'TLS')", file=sys.stderr)
               sys.exit(1)
+          print(f"Verified: detection_algorithm=TLS")
+          EOF
 
-          print("Both artifacts verified: detection_algorithm=TLS")
+      - name: Upload adversarial self-test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adversarial-selftest
+          path: |
+            data/artifacts/adversarial_selftest.json
+            data/artifacts/adversarial_selftest.manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Per-star injection-recovery shards — matrix, 5 parallel jobs.
+  #
+  # Each job writes:
+  #   data/artifacts/shards/injection_recovery_<star_tag>.json
+  #   data/artifacts/shards/injection_recovery_<star_tag>.manifest.json
+  #
+  # star_tag is the KIC ID with spaces replaced by underscores and lowercased.
+  # The CSV files (one row each) are committed under scripts/star_lists/.
+  # ---------------------------------------------------------------------------
+  injection-recovery-shard:
+    name: IR shard — ${{ matrix.star }}
+    runs-on: ubuntu-latest
+    needs: setup-check
+
+    strategy:
+      fail-fast: false   # one star failing should not cancel the others
+      matrix:
+        include:
+          - star: KIC 1161145
+            tag:  kic_1161145
+          - star: KIC 5347580
+            tag:  kic_5347580
+          - star: KIC 7272437
+            tag:  kic_7272437
+          - star: KIC 7347849
+            tag:  kic_7347849
+          - star: KIC 8867895
+            tag:  kic_8867895
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install OpenMP runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libomp-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # -----------------------------------------------------------------------
+      # Fetch multi-quarter light curve for this star only.
+      # The MANIFEST entries for q1q8 files have mast_product_id: [] so
+      # lightkurve picks the default product per quarter — acceptable because
+      # each quiet star has a unique KIC ID and quarter combination.
+      # -----------------------------------------------------------------------
+      - name: Fetch Q1–Q8 light curve for ${{ matrix.star }}
+        run: |
+          python scripts/fetch_golden.py --target "${{ matrix.star }}" --force
+        # --force re-fetches even if a Q3 file is present (Q3 files are
+        # committed; the Q1–Q8 stitched file is generated here at runtime).
+
+      # -----------------------------------------------------------------------
+      # Write a one-row CSV so --quiet-stars-list restricts the run to this star.
+      # -----------------------------------------------------------------------
+      - name: Write star list CSV
+        run: |
+          mkdir -p /tmp/star_lists
+          printf 'star_id\n%s\n' "${{ matrix.star }}" > /tmp/star_lists/${{ matrix.tag }}.csv
+
+      # -----------------------------------------------------------------------
+      # Run injection-recovery for this star only.
+      # --output-name uses the star tag so each shard gets a unique filename.
+      # -----------------------------------------------------------------------
+      - name: Run injection_recovery.py for ${{ matrix.star }}
+        run: |
+          mkdir -p data/artifacts/shards
+          python scripts/injection_recovery.py \
+            --seed 42 \
+            --n-per-cell 5 \
+            --output-dir data/artifacts/shards \
+            --output-name "injection_recovery_${{ matrix.tag }}" \
+            --data-dir data/golden \
+            --quiet-stars-list /tmp/star_lists/${{ matrix.tag }}.csv \
+            --no-plot
+
+      # -----------------------------------------------------------------------
+      # Guard: shard must record TLS, not BLS_fallback.
+      # -----------------------------------------------------------------------
+      - name: Verify shard used TLS
+        run: |
+          python - <<'EOF'
+          import json, sys, pathlib
+
+          path = pathlib.Path("data/artifacts/shards/injection_recovery_${{ matrix.tag }}.json")
+          data = json.loads(path.read_text())
+          alg  = data.get("detection_algorithm", "<missing>")
+          if alg != "TLS":
+              print(f"FAIL: {path.name}: detection_algorithm={alg!r} (expected 'TLS')", file=sys.stderr)
+              sys.exit(1)
+          n   = data.get("n_injections_attempted", 0)
+          rec = sum(1 for r in data.get("results", []) if r.get("recovered"))
+          print(f"Verified TLS: {n} injections, {rec} recovered ({100*rec/n:.1f}%)")
+          EOF
+
+      - name: Upload shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: ir-shard-${{ matrix.tag }}
+          path: |
+            data/artifacts/shards/injection_recovery_${{ matrix.tag }}.json
+            data/artifacts/shards/injection_recovery_${{ matrix.tag }}.manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Merge shards → single injection_recovery.json artifact.
+  # ---------------------------------------------------------------------------
+  merge-shards:
+    name: Merge IR shards
+    runs-on: ubuntu-latest
+    needs: injection-recovery-shard
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # -----------------------------------------------------------------------
+      # Download all shard artifacts into data/artifacts/shards/
+      # -----------------------------------------------------------------------
+      - name: Download IR shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ir-shard-*
+          path: data/artifacts/shards
+          merge-multiple: true
+
+      - name: List downloaded shards
+        run: ls -lh data/artifacts/shards/
+
+      # -----------------------------------------------------------------------
+      # Merge and run asymptote checks.  Fails the job if either check fails.
+      # -----------------------------------------------------------------------
+      - name: Merge shards and run asymptote checks
+        run: |
+          python scripts/merge_injection_recovery.py \
+            --shard-dir data/artifacts/shards \
+            --output-dir data/artifacts \
+            --no-plot
+
+      # -----------------------------------------------------------------------
+      # Final guard: merged artifact must record TLS.
+      # -----------------------------------------------------------------------
+      - name: Verify merged artifact used TLS
+        run: |
+          python - <<'EOF'
+          import json, sys, pathlib
+
+          path = pathlib.Path("data/artifacts/injection_recovery.json")
+          data = json.loads(path.read_text())
+          alg  = data.get("detection_algorithm", "<missing>")
+          if alg != "TLS":
+              print(f"FAIL: {path.name}: detection_algorithm={alg!r} (expected 'TLS')", file=sys.stderr)
+              sys.exit(1)
+          n   = data.get("n_injections_attempted", 0)
+          rec = sum(1 for r in data.get("results", []) if r.get("recovered"))
+          print(f"Verified TLS: {n} injections, {rec} recovered ({100*rec/n:.1f}%)")
+
+          ah = data.get("asymptote_high_depth", {})
+          al = data.get("asymptote_low_depth", {})
+          print(f"Low-depth asymptote:  mean_rate={al.get('mean_rate')}  pass={al.get('pass_low_asymptote')}")
+          print(f"High-depth asymptote: mean_rate={ah.get('mean_rate')}  pass={ah.get('pass_high_asymptote')}")
           EOF
 
       # -----------------------------------------------------------------------
-      # Upload artifacts for download and manual commit.
+      # Upload final merged artifact plus all shards for download and commit.
       # -----------------------------------------------------------------------
-      - name: Upload JSON artifacts and manifests
+      - name: Upload merged artifact
         uses: actions/upload-artifact@v4
         with:
           name: tls-artifacts
           path: |
-            data/artifacts/adversarial_selftest.json
-            data/artifacts/adversarial_selftest.manifest.json
             data/artifacts/injection_recovery.json
             data/artifacts/injection_recovery.manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload all shards (for audit)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tls-shards
+          path: data/artifacts/shards/
           if-no-files-found: error
           retention-days: 30
