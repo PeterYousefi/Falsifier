@@ -124,6 +124,28 @@ export default function TrainingSandbox() {
         </p>
         <hr className="rule-hair" />
 
+        {/* Demo-mode notice */}
+        <div style={{
+          background: 'var(--np-surface)',
+          border: '1px solid var(--np-rule)',
+          borderLeft: '3px solid var(--warn)',
+          padding: '10px 14px',
+          fontFamily: 'var(--font-serif)',
+          fontSize: 13,
+          color: 'var(--np-muted)',
+          lineHeight: 1.6,
+          marginBottom: 20,
+        }} role="note">
+          <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)', letterSpacing: '0.06em' }}>
+            DEMO MODE — NO BACKEND DEPLOYED
+          </strong>
+          <br />
+          Metrics shown are from the committed fixture artifact ({s.labeled_set_name}).
+          Classifier training is also blocked by a train/serve feature skew — see{' '}
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>docs/SKIPPED_TESTS.md</span>.
+          Uploading a labeled set here validates the form but does not trigger a real training run.
+        </div>
+
         {/* Step 1 — Upload labeled set */}
         <div className="step-section">
           <div className="section-label">I. Upload labeled set</div>

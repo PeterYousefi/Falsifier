@@ -446,6 +446,28 @@ function LandingContent() {
       {/* III. BEGIN */}
       <hr className="rule-double" style={{ marginTop: 28 }} />
       <div className="section-label" style={{ marginBottom: 14 }}>III. Begin</div>
+
+      {/* Fixture-mode notice */}
+      <div style={{
+        background: 'var(--np-surface)',
+        border: '1px solid var(--np-rule)',
+        borderLeft: '3px solid var(--warn)',
+        padding: '10px 14px',
+        fontFamily: 'var(--font-serif)',
+        fontSize: 13,
+        color: 'var(--np-muted)',
+        lineHeight: 1.6,
+        marginBottom: 18,
+      }} role="note">
+        <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)', letterSpacing: '0.06em' }}>
+          DEMO MODE — NO BACKEND DEPLOYED
+        </strong>
+        <br />
+        All runs replay the committed Kepler-10b fixture (KIC 11904151). Entering any catalogue ID
+        produces the same fixture result — this is by design for a frontend-only deployment.
+        The pipeline backend is not required to explore every screen.
+      </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, margin: '0 0 24px' }}>
         <div>
           <button

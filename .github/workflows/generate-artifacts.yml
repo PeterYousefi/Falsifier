@@ -6,14 +6,21 @@ name: Generate TLS Artifacts
 #
 # Architecture
 # ------------
-# The injection-recovery run on multi-quarter (Q1–Q8) baselines takes ~1 hour
-# per quiet star.  Five stars in a single job would take ~5 hours and is
-# unreliable near the GitHub Actions 6-hour hard limit.
+# The injection-recovery run on multi-quarter (Q1–Q8) baselines is expensive.
+# On the Q3-only pilot (KIC 7272437, BLS_fallback) one TLS call on ~24,000
+# cadences took ~3–4 minutes.  At 5 injections per cell × 6 periods × 9 depths
+# = 270 injections per star, a single-star job would run for ~14–18 hours —
+# far beyond the 6-hour Actions limit.
 #
-# Instead the run is split into a parallel matrix: one job per quiet star
-# (5 × ~1 h = ~1 h wall-clock).  Each shard writes its own JSON file to
-# data/artifacts/shards/.  A final merge job stitches the shards, re-computes
-# completeness bins, and runs the asymptote checks on the merged result.
+# Sharding strategy: one job per (star × depth), 5 × 9 = 45 parallel jobs.
+# Each job runs 6 periods × 5 per cell = 30 injections (~90–120 min on Q1–Q8).
+#
+# Checkpoint-and-resume: each shard writes a JSONL checkpoint file incrementally.
+# If a job is re-run (Actions retry) it picks up where it left off.
+#
+# Timing measurement: a dedicated pre-flight job measures the actual per-injection
+# cost on the Q1–Q8 baseline before committing to the full matrix.  The result
+# is uploaded as a workflow artifact.
 #
 # The adversarial self-test is a separate single job (fast, ~10 min).
 on:
@@ -68,6 +75,92 @@ jobs:
         run: python scripts/_verify_spawn_worker.py
 
   # ---------------------------------------------------------------------------
+  # Per-injection timing measurement.
+  # Runs ONE (period, depth) cell — 5 injections — on the committed KIC 7272437
+  # Q1–Q8 file (already in data/golden/) and records the wall-clock cost.
+  # Outputs:
+  #   tls-timing-measurement.json  — uploaded as a workflow artifact
+  # ---------------------------------------------------------------------------
+  measure-tls-timing:
+    name: Measure TLS per-injection cost
+    runs-on: ubuntu-latest
+    needs: setup-check
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install OpenMP runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libomp-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Run the smallest possible real TLS injection to get a per-injection
+      # wall-clock measurement on the Q1–Q8 baseline (~24,000 cadences).
+      # Depth=1500 ppm, period=5.0 d, n-per-cell=5 gives 5 TLS calls.
+      - name: Run timing probe (5 injections, 1500 ppm, 5.0 d, KIC 7272437)
+        run: |
+          mkdir -p /tmp/timing_out /tmp/timing_ck
+          python -c "
+          import time, json, pathlib
+
+          t0 = time.monotonic()
+          import subprocess, sys
+          result = subprocess.run(
+              [
+                  sys.executable, 'scripts/injection_recovery.py',
+                  '--seed', '42',
+                  '--n-per-cell', '5',
+                  '--depth-filter', '1500',
+                  '--output-dir', '/tmp/timing_out',
+                  '--output-name', 'timing_probe',
+                  '--data-dir', 'data/golden',
+                  '--quiet-stars-list', '/dev/stdin',
+                  '--no-plot',
+              ],
+              input=b'star_id\nKIC 7272437\n',
+          )
+          elapsed = time.monotonic() - t0
+
+          n_injections = 5
+          per_injection_s = elapsed / n_injections
+
+          measurement = {
+              'star': 'KIC 7272437',
+              'n_cadences_approx': 23784,
+              'n_injections': n_injections,
+              'depth_ppm': 1500,
+              'period_days': 5.0,
+              'total_elapsed_s': round(elapsed, 1),
+              'per_injection_s': round(per_injection_s, 1),
+              'estimated_30inj_job_min': round(30 * per_injection_s / 60, 1),
+              'exit_code': result.returncode,
+          }
+          out = pathlib.Path('/tmp/timing_out/tls-timing-measurement.json')
+          out.write_text(json.dumps(measurement, indent=2) + '\n')
+          print(json.dumps(measurement, indent=2))
+          if result.returncode != 0:
+              sys.exit(result.returncode)
+          "
+
+      - name: Upload timing measurement
+        uses: actions/upload-artifact@v4
+        with:
+          name: tls-timing-measurement
+          path: /tmp/timing_out/tls-timing-measurement.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
   # Adversarial self-test — single job, independent of matrix.
   # ---------------------------------------------------------------------------
   adversarial-selftest:
@@ -93,6 +186,22 @@ jobs:
           pip install --upgrade pip
           pip install -e ".[dev]"
 
+      # Fetch Q1–Q8 FITS for all five quiet stars so every star has the same
+      # multi-quarter baseline in this run.  KIC 7272437 already has a committed
+      # Q1–Q8 file; --force re-fetches it so the shard-selection logic (longest
+      # baseline wins) selects Q1–Q8 consistently for every star.
+      #
+      # Why Q1–Q8 here (not Q3): the committed KIC 7272437 Q1–Q8 file (~23,784
+      # cadences) would otherwise be auto-selected by load_light_curve() while the
+      # other four stars fall back to their Q3-only files (~3,000–4,000 cadences).
+      # Mixed baselines produce inconsistent n_cadences across the trial table,
+      # which confounds per-star false-alarm comparisons.
+      - name: Fetch Q1–Q8 light curves for all five quiet stars
+        run: |
+          for star in "KIC 1161145" "KIC 5084157" "KIC 7272437" "KIC 7347849" "KIC 8935630"; do
+            python scripts/fetch_golden.py --target "$star" --force
+          done
+
       - name: Run adversarial_selftest.py
         run: |
           python scripts/adversarial_selftest.py \
@@ -113,7 +222,19 @@ jobs:
           if alg != "TLS":
               print(f"FAIL: {path.name}: detection_algorithm={alg!r} (expected 'TLS')", file=sys.stderr)
               sys.exit(1)
+
+          # Guard: quiet_stars must NOT contain the contaminated originals.
+          contaminated = {"KIC 3425851", "KIC 5514383", "KIC 9410930", "KIC 10963065"}
+          found = contaminated & set(data.get("quiet_stars", []))
+          if found:
+              print(
+                  f"FAIL: artifact quiet_stars still contains contaminated entries: {found}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
           print(f"Verified: detection_algorithm=TLS")
+          print(f"Quiet stars: {data.get('quiet_stars')}")
           EOF
 
       - name: Upload adversarial self-test artifact
@@ -127,34 +248,213 @@ jobs:
           retention-days: 30
 
   # ---------------------------------------------------------------------------
-  # Per-star injection-recovery shards — matrix, 5 parallel jobs.
+  # Per-(star × depth) injection-recovery shards — matrix, 45 parallel jobs.
   #
-  # Each job writes:
-  #   data/artifacts/shards/injection_recovery_<star_tag>.json
-  #   data/artifacts/shards/injection_recovery_<star_tag>.manifest.json
+  # Each job runs 6 periods × 5 per cell = 30 injections for one star and one
+  # depth slice.  A shard writes:
+  #   data/artifacts/shards/injection_recovery_<tag>.json
+  #   data/artifacts/shards/injection_recovery_<tag>.manifest.json
   #
-  # star_tag is the KIC ID with spaces replaced by underscores and lowercased.
-  # The CSV files (one row each) are committed under scripts/star_lists/.
+  # The checkpoint JSONL is uploaded separately (see checkpoint artifact) so that
+  # a re-triggered job can resume instead of restarting from scratch.
+  #
+  # Depth groups are named d0–d8 corresponding to DEPTH_GRID_PPM indices.
   # ---------------------------------------------------------------------------
   injection-recovery-shard:
-    name: IR shard — ${{ matrix.star }}
+    name: IR shard — ${{ matrix.star }} / ${{ matrix.depth_ppm }} ppm
     runs-on: ubuntu-latest
     needs: setup-check
+    timeout-minutes: 300   # 5-hour per-job cap; 30 injections × ~9 min each = ~4.5 h
 
     strategy:
-      fail-fast: false   # one star failing should not cancel the others
+      fail-fast: false   # one shard failing should not cancel the others
       matrix:
         include:
-          - star: KIC 1161145
-            tag:  kic_1161145
-          - star: KIC 5347580
-            tag:  kic_5347580
-          - star: KIC 7272437
-            tag:  kic_7272437
-          - star: KIC 7347849
-            tag:  kic_7347849
-          - star: KIC 8867895
-            tag:  kic_8867895
+          # ---- KIC 1161145 ----
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 50
+            depth_tag: d0
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 100
+            depth_tag: d1
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 200
+            depth_tag: d2
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 400
+            depth_tag: d3
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 800
+            depth_tag: d4
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 1500
+            depth_tag: d5
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 3000
+            depth_tag: d6
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 6000
+            depth_tag: d7
+          - star: "KIC 1161145"
+            tag: kic_1161145
+            depth_ppm: 12000
+            depth_tag: d8
+          # ---- KIC 5084157 (replaces KIC 5347580 — no Q1-Q8 MAST data) ----
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 50
+            depth_tag: d0
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 100
+            depth_tag: d1
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 200
+            depth_tag: d2
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 400
+            depth_tag: d3
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 800
+            depth_tag: d4
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 1500
+            depth_tag: d5
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 3000
+            depth_tag: d6
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 6000
+            depth_tag: d7
+          - star: "KIC 5084157"
+            tag: kic_5084157
+            depth_ppm: 12000
+            depth_tag: d8
+          # ---- KIC 7272437 ----
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 50
+            depth_tag: d0
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 100
+            depth_tag: d1
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 200
+            depth_tag: d2
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 400
+            depth_tag: d3
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 800
+            depth_tag: d4
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 1500
+            depth_tag: d5
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 3000
+            depth_tag: d6
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 6000
+            depth_tag: d7
+          - star: "KIC 7272437"
+            tag: kic_7272437
+            depth_ppm: 12000
+            depth_tag: d8
+          # ---- KIC 7347849 ----
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 50
+            depth_tag: d0
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 100
+            depth_tag: d1
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 200
+            depth_tag: d2
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 400
+            depth_tag: d3
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 800
+            depth_tag: d4
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 1500
+            depth_tag: d5
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 3000
+            depth_tag: d6
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 6000
+            depth_tag: d7
+          - star: "KIC 7347849"
+            tag: kic_7347849
+            depth_ppm: 12000
+            depth_tag: d8
+          # ---- KIC 8935630 (replaces KIC 8867895 — only Q0/Q1 in MAST) ----
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 50
+            depth_tag: d0
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 100
+            depth_tag: d1
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 200
+            depth_tag: d2
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 400
+            depth_tag: d3
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 800
+            depth_tag: d4
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 1500
+            depth_tag: d5
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 3000
+            depth_tag: d6
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 6000
+            depth_tag: d7
+          - star: "KIC 8935630"
+            tag: kic_8935630
+            depth_ppm: 12000
+            depth_tag: d8
 
     steps:
       - uses: actions/checkout@v5
@@ -175,16 +475,13 @@ jobs:
           pip install -e ".[dev]"
 
       # -----------------------------------------------------------------------
-      # Fetch multi-quarter light curve for this star only.
-      # The MANIFEST entries for q1q8 files have mast_product_id: [] so
-      # lightkurve picks the default product per quarter — acceptable because
-      # each quiet star has a unique KIC ID and quarter combination.
+      # Fetch Q1–Q8 light curve for this star only.
+      # KIC 7272437 has a committed Q1–Q8 file; the others need to be fetched
+      # at runtime.  --force re-fetches even if a Q3 file is present.
       # -----------------------------------------------------------------------
       - name: Fetch Q1–Q8 light curve for ${{ matrix.star }}
         run: |
           python scripts/fetch_golden.py --target "${{ matrix.star }}" --force
-        # --force re-fetches even if a Q3 file is present (Q3 files are
-        # committed; the Q1–Q8 stitched file is generated here at runtime).
 
       # -----------------------------------------------------------------------
       # Write a one-row CSV so --quiet-stars-list restricts the run to this star.
@@ -195,19 +492,34 @@ jobs:
           printf 'star_id\n%s\n' "${{ matrix.star }}" > /tmp/star_lists/${{ matrix.tag }}.csv
 
       # -----------------------------------------------------------------------
-      # Run injection-recovery for this star only.
-      # --output-name uses the star tag so each shard gets a unique filename.
+      # Restore checkpoint if a prior run uploaded one (enables resume).
+      # Continue-on-error: if no checkpoint artifact exists yet this is fine.
       # -----------------------------------------------------------------------
-      - name: Run injection_recovery.py for ${{ matrix.star }}
+      - name: Restore checkpoint (if any)
+        id: restore-checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: ir-checkpoint-${{ matrix.tag }}-${{ matrix.depth_tag }}
+          path: /tmp/checkpoints
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # Run injection-recovery for this (star, depth) cell.
+      # Output-name encodes both the star tag and the depth so each shard gets
+      # a unique filename.
+      # -----------------------------------------------------------------------
+      - name: Run injection_recovery.py — ${{ matrix.star }} / ${{ matrix.depth_ppm }} ppm
         run: |
-          mkdir -p data/artifacts/shards
+          mkdir -p data/artifacts/shards /tmp/checkpoints
           python scripts/injection_recovery.py \
             --seed 42 \
             --n-per-cell 5 \
+            --depth-filter ${{ matrix.depth_ppm }} \
             --output-dir data/artifacts/shards \
-            --output-name "injection_recovery_${{ matrix.tag }}" \
+            --output-name "injection_recovery_${{ matrix.tag }}_${{ matrix.depth_tag }}" \
             --data-dir data/golden \
             --quiet-stars-list /tmp/star_lists/${{ matrix.tag }}.csv \
+            --checkpoint-dir /tmp/checkpoints \
             --no-plot
 
       # -----------------------------------------------------------------------
@@ -218,7 +530,10 @@ jobs:
           python - <<'EOF'
           import json, sys, pathlib
 
-          path = pathlib.Path("data/artifacts/shards/injection_recovery_${{ matrix.tag }}.json")
+          path = pathlib.Path(
+              "data/artifacts/shards/"
+              "injection_recovery_${{ matrix.tag }}_${{ matrix.depth_tag }}.json"
+          )
           data = json.loads(path.read_text())
           alg  = data.get("detection_algorithm", "<missing>")
           if alg != "TLS":
@@ -226,17 +541,28 @@ jobs:
               sys.exit(1)
           n   = data.get("n_injections_attempted", 0)
           rec = sum(1 for r in data.get("results", []) if r.get("recovered"))
-          print(f"Verified TLS: {n} injections, {rec} recovered ({100*rec/n:.1f}%)")
+          pct = 100 * rec / n if n else 0.0
+          print(f"Verified TLS: {n} injections, {rec} recovered ({pct:.1f}%)")
           EOF
 
       - name: Upload shard
         uses: actions/upload-artifact@v4
         with:
-          name: ir-shard-${{ matrix.tag }}
+          name: ir-shard-${{ matrix.tag }}-${{ matrix.depth_tag }}
           path: |
-            data/artifacts/shards/injection_recovery_${{ matrix.tag }}.json
-            data/artifacts/shards/injection_recovery_${{ matrix.tag }}.manifest.json
+            data/artifacts/shards/injection_recovery_${{ matrix.tag }}_${{ matrix.depth_tag }}.json
+            data/artifacts/shards/injection_recovery_${{ matrix.tag }}_${{ matrix.depth_tag }}.manifest.json
           if-no-files-found: error
+          retention-days: 30
+
+      # Upload checkpoint so a re-triggered job can resume.
+      - name: Upload checkpoint
+        if: always()   # upload even on failure so partial progress is preserved
+        uses: actions/upload-artifact@v4
+        with:
+          name: ir-checkpoint-${{ matrix.tag }}-${{ matrix.depth_tag }}
+          path: /tmp/checkpoints/injection_recovery_${{ matrix.tag }}_${{ matrix.depth_tag }}.checkpoint.jsonl
+          if-no-files-found: ignore
           retention-days: 30
 
   # ---------------------------------------------------------------------------

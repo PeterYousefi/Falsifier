@@ -92,67 +92,27 @@ try:
 except ImportError:
     pass  # running without falsifier installed; distutils shim may still be active via .pth
 
+# Shared constants — single source of truth.  Do NOT redefine these locally.
+# Tests enforce that no script carries its own copy of any name listed here.
+from scripts.pipeline_constants import (  # noqa: E402
+    DEFAULT_QUIET_STARS,
+    DEPTH_GRID_PPM,
+    MIN_BASELINE_DAYS,
+    MIN_TRANSITS_REQUIRED,
+    PERIOD_GRID_DAYS,
+    PERIOD_MATCH_TOLERANCE,
+    SDE_THRESHOLD,
+)
+
 log = logging.getLogger("injection_recovery")
 
 # ---------------------------------------------------------------------------
-# Constants and defaults
+# Constants local to this script
 # ---------------------------------------------------------------------------
 
 SCRIPT_VERSION = "0.1.0"
 OUTPUT_ARTIFACT_NAME = "injection_recovery.json"
 COMPLETENESS_PLOT_NAME = "injection_recovery_completeness.png"
-
-# Depth grid in ppm — spans from sub-noise-floor to deep.
-#
-# 50 and 100 ppm are intentionally below the TLS detection floor on a ~89-day
-# Kepler quarter (~200 ppm per-cadence noise): the low-depth asymptote check
-# requires mean recovery ≤ 0.15 at the shallowest entry.  The Q3-only run
-# showed 200 ppm was detectable by TLS (mean rate 0.267), confirming that 200 ppm
-# is above the noise floor.  50/100 ppm are added to bracket the true floor.
-DEPTH_GRID_PPM = [50, 100, 200, 400, 800, 1500, 3000, 6000, 12000]
-# Period grid in days.
-#
-# The maximum supportable period depends on the light curve baseline and
-# MIN_TRANSITS_REQUIRED.
-#
-# Q3-only baseline (~89 d): max recoverable ≈ 89/3 ≈ 29.7 d → 20 d last point.
-#   On a single quarter, the 20 d and 10 d cells are transit-count limited
-#   (4.5 and 8.9 windows respectively) and produce sub-0.85 recovery even at
-#   12,000 ppm (observed TLS mean rate 0.833 in the Q3 run).
-#
-# Multi-quarter baseline (Q1–Q8, ~720 d): 20 d → ~36 transits; all cells are
-#   well-sampled and the high-depth asymptote is expected to reach ≥ 0.95.
-#   When the q1q8 stitched FITS files are present, load_quiet_star automatically
-#   selects them (longest-baseline preference).
-PERIOD_GRID_DAYS = [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]
-
-# For a transit to be counted as "recovered" the TLS period must be within
-# this fractional tolerance of the injected period.
-PERIOD_MATCH_TOLERANCE = 0.02  # 2%
-# And the recovered SDE must exceed this threshold
-SDE_THRESHOLD = 9.0
-
-# Quiet-star target list — verified planet-free against the NASA Exoplanet Archive
-# KOI cumulative table (all dispositions) and confirmed planets table, 2026-08-18.
-#
-# Stars replaced on 2026-08-18 after Q1–Q8 KOI cross-check revealed the original
-# five quiet-star candidates contained planets:
-#   KIC 3425851  → replaced by KIC 1161145  (was CANDIDATE K00268.01, P=110.4d)
-#   KIC 5514383  → replaced by KIC 5347580  (was CONFIRMED K00257.01, P=6.9d)
-#   KIC 9410930  → replaced by KIC 7347849  (was CONFIRMED K00196.01, P=1.9d)
-#   KIC 10963065 → replaced by KIC 8867895  (was CONFIRMED K01612.01, P=2.5d)
-#   KIC 7272437  → KEPT (no KOI entry, confirmed planet-free)
-#
-# Replacement selection criteria: no KOI entry (any disposition), logg > 4.1,
-# 5000 < Teff < 6200 K, Kepmag 11–12.5, R < 1.3 Rsun, spread across KIC channels.
-# Each entry: KIC ID string
-DEFAULT_QUIET_STARS = [
-    "KIC 1161145",   # replaces KIC 3425851; Teff=5990K logg=4.32 Kepmag=12.36 — no KOI
-    "KIC 5347580",   # replaces KIC 5514383; Teff=5780K logg=4.44 Kepmag=11.57 — no KOI
-    "KIC 7272437",   # original; confirmed planet-free, no KOI entry
-    "KIC 7347849",   # replaces KIC 9410930; Teff=5780K logg=4.44 Kepmag=12.46 — no KOI
-    "KIC 8867895",   # replaces KIC 10963065; Teff=5780K logg=4.44 Kepmag=11.72 — no KOI
-]
 
 # Transit shape — use a simple box model (uniform depth, flat bottom)
 # A realistic limb-darkened model would require stellar parameters we may not
@@ -525,10 +485,13 @@ def run_detection(
             _mp_pool.Pool = _orig_pool  # type: ignore[assignment]
             multiprocessing.Pool = _orig_pool  # type: ignore[assignment]
 
+        # TLS results.depth is the fractional flux level at mid-transit
+        # (e.g. 0.999 for a 1000-ppm transit), NOT the fractional depth itself.
+        # Correct conversion: depth_ppm = (1 - results.depth) * 1e6
         return (
             float(results.period),
             float(results.SDE),
-            float(results.depth * 1e6),
+            float((1.0 - results.depth) * 1e6),
         )
     except ImportError:
         _DETECTION_ALGORITHM_USED = "BLS_fallback"
@@ -539,17 +502,7 @@ def run_detection(
         )
 
 
-# Minimum number of transits required for a detection.  TLS needs at least
-# 2 distinct transit windows to constrain the period; we require 3 to reduce
-# aliasing.  Any injection whose period exceeds baseline/3 is rejected before
-# the TLS call.
-MIN_TRANSITS_REQUIRED = 3
-
-# Minimum baseline required to cover the longest period in the grid with the
-# minimum required transits.  Derived from PERIOD_GRID_DAYS[-1] and
-# MIN_TRANSITS_REQUIRED at import time so the check is tight.
-# Importing this at module scope avoids recomputing on every call.
-MIN_BASELINE_DAYS = PERIOD_GRID_DAYS[-1] * MIN_TRANSITS_REQUIRED  # 20 * 3 = 60 d
+# MIN_TRANSITS_REQUIRED and MIN_BASELINE_DAYS are imported from scripts.pipeline_constants.
 
 
 class QuietStarNotFoundError(FileNotFoundError):
@@ -1165,17 +1118,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Directory containing quiet-star FITS files (default: data/golden)")
     p.add_argument("--quiet-stars-list", type=Path, default=None,
                    help="CSV with 'star_id' column.  Default uses built-in list.")
+    p.add_argument("--depth-filter", type=float, nargs="+", default=None,
+                   help=(
+                       "Restrict the run to these specific depths (ppm). "
+                       "Each value must exactly match an entry in DEPTH_GRID_PPM. "
+                       "Use this to shard by depth in a parallel matrix job: "
+                       "e.g. --depth-filter 50 100 200 for the shallow shard."
+                   ))
     p.add_argument("--output-name", type=str, default=None,
                    help=(
                        "Override the output artifact filename stem "
                        "(default: 'injection_recovery').  Useful when running "
-                       "one star at a time for parallel matrix jobs; the merged "
-                       "artifact is then produced by merge_injection_recovery.py."
+                       "one star at a time or one depth slice for parallel matrix "
+                       "jobs; the merged artifact is then produced by "
+                       "merge_injection_recovery.py."
                    ))
     p.add_argument("--no-plot", action="store_true",
                    help="Skip writing the completeness PNG")
     p.add_argument("--n-bls-periods", type=int, default=3000,
                    help="BLS period grid resolution when TLS is unavailable (default: 3000)")
+    p.add_argument("--checkpoint-dir", type=Path, default=None,
+                   help=(
+                       "Directory to write per-injection checkpoint JSONL files. "
+                       "If a checkpoint file already exists for this run's output-name "
+                       "the completed injections are loaded and skipped, enabling "
+                       "resume after a timeout.  Default: disabled."
+                   ))
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -1206,10 +1174,34 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Using built-in quiet-star list (%d stars)", len(quiet_stars))
 
     # ------------------------------------------------------------------
+    # 1b. Validate and apply depth filter
+    # ------------------------------------------------------------------
+    if args.depth_filter is not None:
+        unknown = [d for d in args.depth_filter if d not in DEPTH_GRID_PPM]
+        if unknown:
+            log.error(
+                "--depth-filter values %s are not in DEPTH_GRID_PPM %s",
+                unknown, DEPTH_GRID_PPM,
+            )
+            return 1
+        active_depths = [d for d in DEPTH_GRID_PPM if d in args.depth_filter]
+        log.info(
+            "Depth filter active: running %d/%d depths: %s",
+            len(active_depths), len(DEPTH_GRID_PPM), active_depths,
+        )
+    else:
+        active_depths = list(DEPTH_GRID_PPM)
+
+    # ------------------------------------------------------------------
     # 2. Build injection grid
     # ------------------------------------------------------------------
     # Each cell in (period × depth) gets args.n_per_cell independent injections,
     # each with a different epoch drawn uniformly over one period.
+    #
+    # The full grid is always enumerated in the same order so that injection
+    # indices are deterministic regardless of depth filter.  Injections whose
+    # depth is not in active_depths are skipped after index assignment so the
+    # RNG state advances identically, keeping epochs reproducible across shards.
     injections: list[InjectionParams] = []
     inj_idx = 0
     for period in PERIOD_GRID_DAYS:
@@ -1226,22 +1218,24 @@ def main(argv: list[str] | None = None) -> int:
                 duration_h = max(0.5, min(duration_h, 15.0))
 
                 # Epoch: random within one period of BKJD=0
+                # Advance the RNG unconditionally so shard epochs are reproducible.
                 epoch = float(rng.uniform(0.0, period))
 
-                injections.append(InjectionParams(
-                    star_id=star_id,
-                    injection_index=inj_idx,
-                    period_days=period,
-                    depth_ppm=depth,
-                    epoch_bkjd=epoch,
-                    duration_hours=duration_h,
-                ))
+                if depth in active_depths:
+                    injections.append(InjectionParams(
+                        star_id=star_id,
+                        injection_index=inj_idx,
+                        period_days=period,
+                        depth_ppm=depth,
+                        epoch_bkjd=epoch,
+                        duration_hours=duration_h,
+                    ))
                 inj_idx += 1
 
     n_total = len(injections)
     log.info(
-        "Built %d injections (%d periods × %d depths × %d per cell)",
-        n_total, len(PERIOD_GRID_DAYS), len(DEPTH_GRID_PPM), args.n_per_cell,
+        "Built %d injections (%d periods × %d active depths × %d per cell)",
+        n_total, len(PERIOD_GRID_DAYS), len(active_depths), args.n_per_cell,
     )
 
     # ------------------------------------------------------------------
@@ -1257,25 +1251,115 @@ def main(argv: list[str] | None = None) -> int:
         lc_cache[star_id] = load_quiet_star(star_id, args.data_dir)
 
     # ------------------------------------------------------------------
+    # 3b. Checkpoint-and-resume setup
+    #
+    # When --checkpoint-dir is given, each completed injection is written as a
+    # JSONL line immediately after it finishes.  On resume the checkpoint file
+    # is loaded and those injection_index values are skipped; the rest run from
+    # scratch.  This ensures a 6-hour timeout loses at most one in-progress
+    # injection, not the entire shard.
+    # ------------------------------------------------------------------
+    artifact_stem = args.output_name if args.output_name else "injection_recovery"
+
+    checkpoint_path: Path | None = None
+    completed_by_index: dict[int, RecoveryResult] = {}
+
+    if args.checkpoint_dir is not None:
+        args.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_path = args.checkpoint_dir / f"{artifact_stem}.checkpoint.jsonl"
+
+        if checkpoint_path.exists():
+            log.info("Checkpoint file found: %s — loading completed injections", checkpoint_path)
+            n_loaded = 0
+            with open(checkpoint_path, encoding="utf-8") as _ckf:
+                for line in _ckf:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        d = json.loads(line)
+                        r = RecoveryResult(
+                            injection=InjectionParams(
+                                star_id=d["star_id"],
+                                injection_index=d["injection_index"],
+                                period_days=d["period_days"],
+                                depth_ppm=d["depth_ppm"],
+                                epoch_bkjd=d["epoch_bkjd"],
+                                duration_hours=d["duration_hours"],
+                            ),
+                            recovered=d["recovered"],
+                            recovered_period_days=d.get("recovered_period_days"),
+                            recovered_sde=d.get("recovered_sde"),
+                            recovered_depth_ppm=d.get("recovered_depth_ppm"),
+                            period_fractional_error=d.get("period_fractional_error"),
+                            odd_even_outcome=d.get("odd_even_outcome"),
+                            disposition=d.get("disposition"),
+                            error_message=d.get("error_message"),
+                        )
+                        completed_by_index[r.injection.injection_index] = r
+                        n_loaded += 1
+                    except Exception as exc:
+                        log.warning("Skipping malformed checkpoint line: %s", exc)
+            log.info("Loaded %d completed injections from checkpoint", n_loaded)
+        else:
+            log.info("No checkpoint file yet at %s — starting fresh", checkpoint_path)
+
+    # ------------------------------------------------------------------
     # 4. Run injections
     # ------------------------------------------------------------------
     results: list[RecoveryResult] = []
     t0 = time.monotonic()
 
-    for i, params in enumerate(injections):
-        time_arr, flux_arr, flux_err_arr = lc_cache[params.star_id]
-        result = run_single_injection(params, time_arr, flux_arr, flux_err_arr,
-                                      n_bls_periods=args.n_bls_periods)
-        results.append(result)
+    # Open checkpoint file for appending (if enabled).
+    _ckf_handle = (
+        open(checkpoint_path, "a", encoding="utf-8")  # noqa: WPS515
+        if checkpoint_path is not None
+        else None
+    )
 
-        if (i + 1) % 50 == 0 or (i + 1) == n_total:
-            elapsed = time.monotonic() - t0
-            n_rec = sum(1 for r in results if r.recovered)
-            log.info(
-                "[%d/%d] elapsed %.1fs | recovered so far: %d/%d (%.0f%%)",
-                i + 1, n_total, elapsed, n_rec, len(results),
-                100.0 * n_rec / len(results) if results else 0.0,
-            )
+    try:
+        for i, params in enumerate(injections):
+            # Resume: skip injections already in the checkpoint.
+            if params.injection_index in completed_by_index:
+                results.append(completed_by_index[params.injection_index])
+                continue
+
+            time_arr, flux_arr, flux_err_arr = lc_cache[params.star_id]
+            result = run_single_injection(params, time_arr, flux_arr, flux_err_arr,
+                                          n_bls_periods=args.n_bls_periods)
+            results.append(result)
+
+            # Write to checkpoint immediately so progress survives a timeout.
+            if _ckf_handle is not None:
+                _ckf_handle.write(json.dumps({
+                    "star_id": result.injection.star_id,
+                    "injection_index": result.injection.injection_index,
+                    "period_days": result.injection.period_days,
+                    "depth_ppm": result.injection.depth_ppm,
+                    "epoch_bkjd": result.injection.epoch_bkjd,
+                    "duration_hours": result.injection.duration_hours,
+                    "recovered": result.recovered,
+                    "recovered_period_days": result.recovered_period_days,
+                    "recovered_sde": result.recovered_sde,
+                    "recovered_depth_ppm": result.recovered_depth_ppm,
+                    "period_fractional_error": result.period_fractional_error,
+                    "odd_even_outcome": result.odd_even_outcome,
+                    "disposition": result.disposition,
+                    "error_message": result.error_message,
+                }) + "\n")
+                _ckf_handle.flush()
+
+            if (i + 1) % 50 == 0 or (i + 1) == n_total:
+                elapsed = time.monotonic() - t0
+                n_rec = sum(1 for r in results if r.recovered)
+                log.info(
+                    "[%d/%d] elapsed %.1fs | recovered so far: %d/%d (%.0f%%)",
+                    i + 1, n_total, elapsed, n_rec, len(results),
+                    100.0 * n_rec / len(results) if results else 0.0,
+                )
+    finally:
+        if _ckf_handle is not None:
+            _ckf_handle.close()
 
     # ------------------------------------------------------------------
     # 5. Compute completeness bins
@@ -1322,7 +1406,6 @@ def main(argv: list[str] | None = None) -> int:
     # 6. Write plot artifact
     # ------------------------------------------------------------------
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    artifact_stem = args.output_name if args.output_name else "injection_recovery"
     plot_name = f"{artifact_stem}_completeness.png"
     plot_path = args.output_dir / plot_name
     if not args.no_plot:
@@ -1399,7 +1482,6 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
-    artifact_stem = args.output_name if args.output_name else "injection_recovery"
     out_path = args.output_dir / f"{artifact_stem}.json"
     payload = {k: v for k, v in asdict(artifact).items()}
     out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

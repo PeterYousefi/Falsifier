@@ -76,20 +76,23 @@ try:
 except ImportError:
     pass  # running without falsifier installed; distutils shim may still be active via .pth
 
+# Shared constants — single source of truth.  Do NOT redefine these locally.
+# Tests enforce that no script carries its own copy of any name listed here.
+from scripts.pipeline_constants import (  # noqa: E402
+    DEFAULT_QUIET_STARS,
+    SDE_THRESHOLD,
+)
+
 log = logging.getLogger("adversarial_selftest")
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants local to this script
 # ---------------------------------------------------------------------------
 
 SCRIPT_VERSION = "0.1.0"
 OUTPUT_ARTIFACT_NAME = "adversarial_selftest.json"
 FAR_PLOT_NAME = "adversarial_selftest_far.png"
 
-# A trial is a "false alarm" if:
-#  - SDE ≥ this threshold AND
-#  - at least one period in the search range produces the TCE
-SDE_THRESHOLD = 9.0
 PERIOD_MIN_DAYS = 0.5
 PERIOD_MAX_DAYS = 30.0
 SEARCH_DURATION_HOURS = 2.5   # default duration assumption for BLS fallback
@@ -126,14 +129,7 @@ CATEGORY_DESCRIPTIONS = {
 # Approximate Kepler photon-noise floor for a 14th-magnitude star, long cadence
 INSTRUMENT_NOISE_FLOOR_PPM = 300.0
 
-# Default quiet-star list (no confirmed planets)
-DEFAULT_QUIET_STARS = [
-    "KIC 3425851",
-    "KIC 5514383",
-    "KIC 7272437",
-    "KIC 9410930",
-    "KIC 10963065",
-]
+# DEFAULT_QUIET_STARS and SDE_THRESHOLD are imported from scripts.pipeline_constants above.
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -257,7 +253,39 @@ def load_light_curve(
             "scripts/fetch_golden.py."
         )
 
-    fits_path = fits_files[0]
+    # When multiple FITS files exist for the same star (e.g. a Q3-only file and
+    # a stitched Q1–Q8 file), prefer the one with the longest baseline so that
+    # multi-quarter files are automatically used once committed.
+    #
+    # Baseline-consistency requirement: ALL stars in a single adversarial run must
+    # resolve to the same baseline length.  If one star has a committed Q1–Q8 file
+    # while the others only have Q3, the trial table will show mixed n_cadences
+    # (~23,000 vs ~3,000–4,000), which confounds per-star FAR comparisons and
+    # invalidates any combined Wilson CI computed assuming a homogeneous substrate.
+    # The generate-artifacts.yml adversarial job therefore fetches Q1–Q8 for every
+    # star explicitly before this script is called.
+    if len(fits_files) > 1:
+        best_path = fits_files[0]
+        best_baseline = -1.0
+        for fp in fits_files:
+            try:
+                with _fits.open(fp) as _h:
+                    t_col = _h[1].data["TIME"].astype(np.float64)
+                    finite_t = t_col[np.isfinite(t_col)]
+                    if len(finite_t) >= 2:
+                        bl = float(finite_t[-1] - finite_t[0])
+                        if bl > best_baseline:
+                            best_baseline = bl
+                            best_path = fp
+            except Exception:
+                pass
+        fits_path = best_path
+        log.debug(
+            "Multiple FITS files for %s; selected longest baseline: %s (%.1f d)",
+            star_id, fits_path.name, best_baseline,
+        )
+    else:
+        fits_path = fits_files[0]
     log.debug("Loading %s from %s", star_id, fits_path.name)
 
     with _fits.open(fits_path) as hdul:
@@ -310,17 +338,28 @@ def make_sign_inverted(
     time: np.ndarray,
     flux: np.ndarray,
     flux_err: np.ndarray,
+    rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Negate the flux around its median.
+    Negate the flux around its median, then add a Gaussian noise realisation.
 
     Real transits (downward dips) become anti-transits (upward bumps).
     A periodic signal in this data is either a systematic that looks the same
     upside-down (e.g. a flat-bottomed artefact) or a near-sinusoidal alias.
+
+    Sign inversion alone is deterministic: running TLS on the same input array
+    twice produces bit-identical output, making repeated trials effectively
+    n=1 with duplicated rows.  To give each trial a distinct noise realisation
+    we add zero-mean Gaussian noise scaled by the per-cadence flux_err.  This
+    preserves the statistical character of the data (same noise level) while
+    ensuring the TLS power spectrum differs across trials.
     """
     med = float(np.median(flux))
     inverted = med - (flux - med)   # reflect around median
-    return time.copy(), inverted, flux_err.copy()
+    # Add one independent noise draw per cadence; scale is flux_err so the
+    # added noise is commensurate with the photon noise floor.
+    noise = rng.normal(0.0, flux_err)
+    return time.copy(), inverted + noise, flux_err.copy()
 
 
 def make_off_target(
@@ -340,6 +379,23 @@ def make_off_target(
 
     This is not a pixel-level simulation — it is a conservative statistical
     proxy.  Real off-target tests require per-pixel photometry.
+
+    IMPORTANT — roll preserves periodicity:
+    Rolling the flux array is a cyclic permutation.  Any periodic signal
+    already present in the flux (e.g. a real transiting planet) survives the
+    roll unchanged — only its epoch shifts.  If the substrate star hosts a
+    confirmed planet, a TLS search on the rolled flux will find that planet
+    and report it as a false alarm.  This is NOT a false alarm from the
+    off_target transform; it is contamination from a wrong substrate choice.
+
+    This behaviour was confirmed on 2026-08-19: trial 53 used KIC 9410930
+    (K00196.01, P=1.9 d) as substrate; the roll produced SDE=27.9 at
+    P=1.856 d — the confirmed planet, not a detector artefact.
+
+    Consequence: the substrate star must be verified planet-free (no KOI
+    of any disposition) before the off_target category produces interpretable
+    false-alarm rates.  See docs/tls_run_2026_q3_baseline.md and
+    docs/WHAT_THE_GATES_CAUGHT.md defect #2.
     """
     rolled = np.roll(flux, roll_cadences)
     return time.copy(), rolled, flux_err.copy()
@@ -515,7 +571,10 @@ def run_detection(
             _mp_pool.Pool = _orig_pool  # type: ignore[assignment]
             multiprocessing.Pool = _orig_pool  # type: ignore[assignment]
 
-        return float(results.period), float(results.SDE), float(results.depth * 1e6)
+        # TLS results.depth is the fractional flux level at mid-transit
+        # (e.g. 0.999 for a 1000-ppm transit), NOT the fractional depth itself.
+        # Correct conversion: depth_ppm = (1 - results.depth) * 1e6
+        return float(results.period), float(results.SDE), float((1.0 - results.depth) * 1e6)
     except ImportError:
         _DETECTION_ALGORITHM_USED = "BLS_fallback"
         return _bls_search(time, flux, PERIOD_MIN_DAYS, PERIOD_MAX_DAYS)
@@ -548,7 +607,7 @@ def run_trial(
             t_null, f_null, e_null = make_scrambled(time, flux, flux_err, rng)
 
         elif category == "sign_inverted":
-            t_null, f_null, e_null = make_sign_inverted(time, flux, flux_err)
+            t_null, f_null, e_null = make_sign_inverted(time, flux, flux_err, rng)
 
         elif category == "off_target":
             # Roll by a random amount between 10 and len/4 cadences

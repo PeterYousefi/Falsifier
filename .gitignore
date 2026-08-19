@@ -58,3 +58,12 @@ models/
 
 # mypy
 .mypy_cache/
+
+# Generated pipeline artifacts — must only be committed after a verified clean
+# run (correct quiet stars, TLS detector, no KOIs in substrate).
+# Use `git add -f` after manual verification.
+data/artifacts/adversarial_selftest.json
+data/artifacts/adversarial_selftest.manifest.json
+data/artifacts/injection_recovery.json
+data/artifacts/injection_recovery.manifest.json
+data/artifacts/injection_recovery_completeness.png

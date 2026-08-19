@@ -426,9 +426,27 @@ export default function UploadFlow() {
                 Complete all column assignments and select a time system and flux convention before submitting.
               </p>
             )}
+            {/* Demo-mode notice */}
+            <div style={{
+              background: 'var(--np-surface)',
+              border: '1px solid var(--np-rule)',
+              borderLeft: '3px solid var(--warn)',
+              padding: '8px 12px',
+              fontFamily: 'var(--font-serif)',
+              fontSize: 13,
+              color: 'var(--np-muted)',
+              lineHeight: 1.55,
+              marginBottom: 12,
+            }} role="note">
+              <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--warn)', letterSpacing: '0.06em' }}>
+                DEMO MODE
+              </strong>
+              {' '}— No backend is deployed. Submit validates your column mapping and time system
+              but does not enqueue a real pipeline run.
+            </div>
             {submitted ? (
               <div style={{ color: 'var(--pass)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                ✓ Upload accepted — job queued
+                ✓ Upload accepted — mapping validated (demo mode, no pipeline run)
               </div>
             ) : (
               <div>

@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "description": "Manifest of committed golden light curves. Each entry pins a MAST product ID. Run scripts/fetch_golden.py to populate data/golden/. Single-quarter entries (field: quarter) use a scalar mast_product_id. Multi-quarter entries (field: quarters) use a list mast_product_id and produce a stitched FITS file.",
+  "description": "Manifest of committed golden light curves. Each entry pins a MAST product ID. Run scripts/fetch_golden.py to populate data/golden/. Single-quarter entries (field: quarter) use a scalar mast_product_id. Multi-quarter entries (field: quarters) use a list mast_product_id (parallel to quarters list) and produce a stitched FITS file.",
   "golden_set": [
     {
       "kic_id": "KIC 11904151",
@@ -53,22 +53,22 @@
       "provenance_filename": "kic_1161145_q3_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. Replaces KIC 3425851 (was KOI CANDIDATE K00268.01 P=110.4d). KIC 1161145: no KOI entry (any disposition), Teff=5990K logg=4.32 R=1.23Rsun Kepmag=12.36. Verified planet-free 2026-08-18 against NASA Exoplanet Archive KOI cumulative and confirmed planets tables."
+      "notes": "Quiet-star injection-recovery target. Replaces KIC 3425851 (was KOI CANDIDATE K00268.01 P=110.4d). KIC 1161145: no KOI entry (any disposition), Teff=5990K logg=4.32 Kepmag=12.36. Verified planet-free 2026-08-19 against NASA Exoplanet Archive KOI cumulative table. Q1-Q8 MAST coverage confirmed 2026-08-19."
     },
     {
-      "kic_id": "KIC 5347580",
-      "common_name": "KIC 5347580",
+      "kic_id": "KIC 5084157",
+      "common_name": "KIC 5084157",
       "quarter": 3,
       "cadence": "long",
-      "mast_product_id": "kplr005347580-2009350155506_llc",
-      "mast_uri": "mast:Kepler/url/public/lightcurves/0053/005347580/kplr005347580-2009350155506_llc.fits",
+      "mast_product_id": "kplr005084157-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0050/005084157/kplr005084157-2009350155506_llc.fits",
       "pipeline_version": "SOC 9.3",
       "flux_column": "SAP_FLUX",
-      "fits_filename": "kic_5347580_q3_long.fits",
-      "provenance_filename": "kic_5347580_q3_long.provenance.json",
+      "fits_filename": "kic_5084157_q3_long.fits",
+      "provenance_filename": "kic_5084157_q3_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. Replaces KIC 5514383 (was CONFIRMED K00257.01 P=6.9d). KIC 5347580: no KOI entry (any disposition), Teff=5780K logg=4.44 R=1.00Rsun Kepmag=11.57. Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. Replaces KIC 5347580 (2026-08-19: KIC 5347580 has no Q1-Q8 MAST products — only Q9/Q13/Q17; pinned Q3 product kplr005347580-2009350155506_llc does not exist in MAST). KIC 5084157: no KOI entry (any disposition), Teff=5677K logg=4.12 Kepmag=11.65. Verified planet-free 2026-08-19. Q1-Q8 MAST coverage confirmed 2026-08-19."
     },
     {
       "kic_id": "KIC 7272437",
@@ -83,7 +83,7 @@
       "provenance_filename": "kic_7272437_q3_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. Original star retained: no KOI entry (any disposition). Verified planet-free 2026-08-18 against NASA Exoplanet Archive KOI cumulative and confirmed planets tables. Kepler Q3 long-cadence."
+      "notes": "Quiet-star injection-recovery target. Original star retained: no KOI entry (any disposition). Verified planet-free 2026-08-19 against NASA Exoplanet Archive KOI cumulative table. Full Q1-Q17 MAST coverage confirmed 2026-08-19."
     },
     {
       "kic_id": "KIC 7347849",
@@ -98,50 +98,68 @@
       "provenance_filename": "kic_7347849_q3_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. Replaces KIC 9410930 (was CONFIRMED K00196.01 P=1.9d). KIC 7347849: no KOI entry (any disposition), Teff=5780K logg=4.44 R=1.00Rsun Kepmag=12.46. Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. Replaces KIC 9410930 (was CONFIRMED K00196.01 P=1.9d). KIC 7347849: no KOI entry (any disposition), Teff=5780K logg=4.44 Kepmag=12.46. Verified planet-free 2026-08-19. Q1-Q8 MAST coverage confirmed 2026-08-19."
     },
     {
-      "kic_id": "KIC 8867895",
-      "common_name": "KIC 8867895",
+      "kic_id": "KIC 8935630",
+      "common_name": "KIC 8935630",
       "quarter": 3,
       "cadence": "long",
-      "mast_product_id": "kplr008867895-2009350155506_llc",
-      "mast_uri": "mast:Kepler/url/public/lightcurves/0088/008867895/kplr008867895-2009350155506_llc.fits",
+      "mast_product_id": "kplr008935630-2009350155506_llc",
+      "mast_uri": "mast:Kepler/url/public/lightcurves/0089/008935630/kplr008935630-2009350155506_llc.fits",
       "pipeline_version": "SOC 9.3",
       "flux_column": "SAP_FLUX",
-      "fits_filename": "kic_8867895_q3_long.fits",
-      "provenance_filename": "kic_8867895_q3_long.provenance.json",
+      "fits_filename": "kic_8935630_q3_long.fits",
+      "provenance_filename": "kic_8935630_q3_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. Replaces KIC 10963065 (was CONFIRMED K01612.01 P=2.5d). KIC 8867895: no KOI entry (any disposition), Teff=5780K logg=4.44 R=1.00Rsun Kepmag=11.72. Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. Replaces KIC 8867895 (2026-08-19: KIC 8867895 has only Q0/Q1 in MAST — entered safe mode after Q1; cannot produce multi-quarter baseline). KIC 8935630: no KOI entry (any disposition), Teff=5664K logg=4.56 Kepmag=12.10. Verified planet-free 2026-08-19. Q1-Q8 MAST coverage confirmed 2026-08-19."
     },
     {
       "kic_id": "KIC 1161145",
       "common_name": "KIC 1161145",
       "quarters": [1, 2, 3, 4, 5, 6, 7, 8],
       "cadence": "long",
-      "mast_product_id": [],
+      "mast_product_id": [
+        "kplr001161145-2009166043257_llc",
+        "kplr001161145-2009259160929_llc",
+        "kplr001161145-2009350155506_llc",
+        "kplr001161145-2010078095331_llc",
+        "kplr001161145-2010174085026_llc",
+        "kplr001161145-2010265121752_llc",
+        "kplr001161145-2010355172524_llc",
+        "kplr001161145-2011073133259_llc"
+      ],
       "pipeline_version": "SOC 9.3",
       "flux_column": "SAP_FLUX",
       "fits_filename": "kic_1161145_q1q8_long.fits",
       "provenance_filename": "kic_1161145_q1q8_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. KIC 1161145 Q1–Q8 stitched baseline. No KOI entry (any disposition). Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. KIC 1161145 Q1-Q8 stitched baseline. No KOI entry (any disposition). All 8 product IDs pinned from MAST 2026-08-19."
     },
     {
-      "kic_id": "KIC 5347580",
-      "common_name": "KIC 5347580",
+      "kic_id": "KIC 5084157",
+      "common_name": "KIC 5084157",
       "quarters": [1, 2, 3, 4, 5, 6, 7, 8],
       "cadence": "long",
-      "mast_product_id": [],
+      "mast_product_id": [
+        "kplr005084157-2009166043257_llc",
+        "kplr005084157-2009259160929_llc",
+        "kplr005084157-2009350155506_llc",
+        "kplr005084157-2010078095331_llc",
+        "kplr005084157-2010174085026_llc",
+        "kplr005084157-2010265121752_llc",
+        "kplr005084157-2010355172524_llc",
+        "kplr005084157-2011073133259_llc"
+      ],
       "pipeline_version": "SOC 9.3",
       "flux_column": "SAP_FLUX",
-      "fits_filename": "kic_5347580_q1q8_long.fits",
-      "provenance_filename": "kic_5347580_q1q8_long.provenance.json",
+      "fits_filename": "kic_5084157_q1q8_long.fits",
+      "provenance_filename": "kic_5084157_q1q8_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. KIC 5347580 Q1–Q8 stitched baseline. No KOI entry (any disposition). Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. Replaces KIC 5347580 which had no Q1-Q8 MAST data. KIC 5084157 Q1-Q8 stitched baseline. No KOI entry (any disposition). All 8 product IDs pinned from MAST 2026-08-19."
     },
     {
       "kic_id": "KIC 7272437",
@@ -155,35 +173,53 @@
       "provenance_filename": "kic_7272437_q1q8_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. KIC 7272437 Q1–Q8 stitched baseline. No KOI entry (any disposition). Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. KIC 7272437 Q1-Q8 stitched baseline. No KOI entry (any disposition). Verified planet-free 2026-08-19."
     },
     {
       "kic_id": "KIC 7347849",
       "common_name": "KIC 7347849",
       "quarters": [1, 2, 3, 4, 5, 6, 7, 8],
       "cadence": "long",
-      "mast_product_id": [],
+      "mast_product_id": [
+        "kplr007347849-2009166043257_llc",
+        "kplr007347849-2009259160929_llc",
+        "kplr007347849-2009350155506_llc",
+        "kplr007347849-2010078095331_llc",
+        "kplr007347849-2010174085026_llc",
+        "kplr007347849-2010265121752_llc",
+        "kplr007347849-2010355172524_llc",
+        "kplr007347849-2011073133259_llc"
+      ],
       "pipeline_version": "SOC 9.3",
       "flux_column": "SAP_FLUX",
       "fits_filename": "kic_7347849_q1q8_long.fits",
       "provenance_filename": "kic_7347849_q1q8_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. KIC 7347849 Q1–Q8 stitched baseline. No KOI entry (any disposition). Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. KIC 7347849 Q1-Q8 stitched baseline. No KOI entry (any disposition). All 8 product IDs pinned from MAST 2026-08-19."
     },
     {
-      "kic_id": "KIC 8867895",
-      "common_name": "KIC 8867895",
+      "kic_id": "KIC 8935630",
+      "common_name": "KIC 8935630",
       "quarters": [1, 2, 3, 4, 5, 6, 7, 8],
       "cadence": "long",
-      "mast_product_id": [],
+      "mast_product_id": [
+        "kplr008935630-2009166043257_llc",
+        "kplr008935630-2009259160929_llc",
+        "kplr008935630-2009350155506_llc",
+        "kplr008935630-2010078095331_llc",
+        "kplr008935630-2010174085026_llc",
+        "kplr008935630-2010265121752_llc",
+        "kplr008935630-2010355172524_llc",
+        "kplr008935630-2011073133259_llc"
+      ],
       "pipeline_version": "SOC 9.3",
       "flux_column": "SAP_FLUX",
-      "fits_filename": "kic_8867895_q1q8_long.fits",
-      "provenance_filename": "kic_8867895_q1q8_long.provenance.json",
+      "fits_filename": "kic_8935630_q1q8_long.fits",
+      "provenance_filename": "kic_8935630_q1q8_long.provenance.json",
       "reference_doi": "10.17909/T9-NMC8-F686",
       "reference_citation": "Kepler Mission Archive, MAST",
-      "notes": "Quiet-star injection-recovery target. KIC 8867895 Q1–Q8 stitched baseline. No KOI entry (any disposition). Verified planet-free 2026-08-18."
+      "notes": "Quiet-star injection-recovery target. Replaces KIC 8867895 which had only Q0/Q1 in MAST. KIC 8935630 Q1-Q8 stitched baseline. No KOI entry (any disposition). All 8 product IDs pinned from MAST 2026-08-19."
     }
   ]
 }

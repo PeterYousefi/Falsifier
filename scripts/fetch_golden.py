@@ -446,16 +446,44 @@ def main() -> None:
             sys.exit(1)
 
     fetched = 0
+    failed = 0
     for entry in entries:
+        fits_path = GOLDEN_DIR / entry["fits_filename"]
         print(f"\n[{entry['kic_id']}] {entry['common_name']}")
-        if _fetch_entry(entry, force=args.force):
+        ok = _fetch_entry(entry, force=args.force)
+        if ok:
             fetched += 1
+        elif not fits_path.exists():
+            # _fetch_entry returned False AND the file was not written.
+            # This is a real failure: the FITS file does not exist on disk.
+            # Printing a warning but exiting 0 here is what caused the
+            # 2026-08-19 shard failures — the workflow step 6 ("Fetch Q1–Q8
+            # light curve") succeeded, but step 8 ("Run injection_recovery.py")
+            # immediately crashed with QuietStarNotFoundError because the FITS
+            # file was never written.
+            print(
+                f"ERROR: Failed to fetch {fits_path.name} and it does not "
+                "exist on disk.  Cannot proceed.",
+                file=sys.stderr,
+            )
+            failed += 1
+        # If _fetch_entry returned False but the file already exists (skip case),
+        # that is not a failure — it means --force was not set and the file is
+        # already present.
 
     print(f"\nDone. {fetched}/{len(entries)} file(s) fetched.")
     if fetched > 0:
         print("\nNext steps:")
         print("  git add data/golden/")
         print("  git commit -m 'chore: update golden light curves'")
+
+    if failed > 0:
+        print(
+            f"\nERROR: {failed} FITS file(s) could not be fetched and are absent "
+            "from disk.  Re-run with network access or fix the MANIFEST entry.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -62,6 +62,10 @@ GOLDEN_PROVENANCE = GOLDEN_DIR / "kepler10_q3_long.provenance.json"
 # Batalha et al. 2011, DOI:10.1088/0004-637X/729/1/27
 KEPLER10B_PERIOD_DAYS = 0.83749070
 PERIOD_TOLERANCE_DAYS = 1e-4
+# Actual TLS recovery result on the committed Q3 FITS (3633 cadences).
+# This value was produced by a real pipeline run and recorded in docs/PROVEN_GATES.md,
+# Gate 1.  It is committed here so verify_readme.py can read it without running TLS.
+RECOVERED_PERIOD_DAYS = 0.83748542
 
 # Detrending parameters — configuration constants, not scientific results.
 # Bare floats are acceptable here per AGENTS.md Rule 1 (these are not

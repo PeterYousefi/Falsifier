@@ -119,32 +119,50 @@ class TestMakeScrambled:
 
 
 class TestMakeSignInverted:
-    def test_median_preserved(self):
-        """After sign inversion the median must equal the original median."""
-        t, f, e = _synthetic_lc(n=500, noise_ppm=0.0)  # zero noise for exact check
-        f[:] = 1.0  # constant = trivial, median preserved
-        _, f_out, _ = make_sign_inverted(t, f, e)
-        assert np.median(f_out) == pytest.approx(np.median(f), rel=1e-9)
+    def test_median_approximately_preserved(self):
+        """After sign inversion+noise the median is close to the original median."""
+        # Use very small noise so the noise perturbation is negligible relative
+        # to the inversion.  Median is preserved in expectation; allow 1% slack.
+        rng = np.random.default_rng(7)
+        t, f, e = _synthetic_lc(n=500, noise_ppm=1.0)   # tiny noise floor
+        f[:] = 1.0
+        e[:] = 1e-6                                      # noise scale ~ 1 ppm
+        _, f_out, _ = make_sign_inverted(t, f, e, rng)
+        assert np.median(f_out) == pytest.approx(np.median(f), rel=0.01)
 
     def test_transit_becomes_anti_transit(self):
         """A downward dip in the original must become an upward bump."""
+        rng = np.random.default_rng(8)
         t = np.linspace(0.0, 10.0, 100)
         f = np.ones(100)
         f[40:45] -= 0.01  # 1% downward dip
-        _, f_out, _ = make_sign_inverted(t, f, np.zeros(100))
+        e = np.full(100, 1e-9)   # near-zero noise so the bump is unambiguous
+        _, f_out, _ = make_sign_inverted(t, f, e, rng)
         # The dip becomes a bump
         assert f_out[42] > 1.0
 
     def test_err_unchanged(self):
+        rng = np.random.default_rng(9)
         t, f, e = _synthetic_lc(n=100)
-        _, _, e_out = make_sign_inverted(t, f, e)
+        _, _, e_out = make_sign_inverted(t, f, e, rng)
         np.testing.assert_array_equal(e_out, e)
 
     def test_does_not_mutate_input(self):
+        rng = np.random.default_rng(10)
         t, f, e = _synthetic_lc(n=100)
         f_copy = f.copy()
-        make_sign_inverted(t, f, e)
+        make_sign_inverted(t, f, e, rng)
         np.testing.assert_array_equal(f, f_copy)
+
+    def test_distinct_trials_differ(self):
+        """Two calls with different RNG states must produce different flux arrays."""
+        rng1 = np.random.default_rng(11)
+        rng2 = np.random.default_rng(12)
+        t, f, e = _synthetic_lc(n=200)
+        _, f_out1, _ = make_sign_inverted(t, f, e, rng1)
+        _, f_out2, _ = make_sign_inverted(t, f, e, rng2)
+        # Outputs must not be identical — this is the fix for the duplicate-trial bug
+        assert not np.allclose(f_out1, f_out2)
 
 
 class TestMakeOffTarget:
@@ -256,8 +274,14 @@ class TestAdversarialSelftestArtifact:
     def _require_artifact(self):
         if not _ADV_ARTIFACT.exists():
             pytest.skip(
-                "data/artifacts/adversarial_selftest.json not yet committed. "
-                "Run: python scripts/adversarial_selftest.py --seed 42 --n-trials 20 "
+                "No clean TLS adversarial artifact exists yet. "
+                "data/artifacts/adversarial_selftest.json has been removed because "
+                "it was produced with BLS_fallback on a contaminated quiet-star list "
+                "(four of five stars had known KOIs). "
+                "To produce a clean artifact: fetch Q3 FITS for the five replacement "
+                "quiet stars (KIC 1161145, KIC 5084157, KIC 7272437, KIC 7347849, "
+                "KIC 8935630), then run: "
+                "python scripts/adversarial_selftest.py --seed 42 --n-trials 20 "
                 "--output-dir data/artifacts --data-dir data/golden --no-plot"
             )
 

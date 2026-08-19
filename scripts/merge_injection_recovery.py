@@ -39,12 +39,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scripts.pipeline_constants import (
+    DEPTH_GRID_PPM,
+    PERIOD_GRID_DAYS,
+)
 from scripts.injection_recovery import (
     InjectionParams,
     RecoveryResult,
     CompletenenessBin,
-    DEPTH_GRID_PPM,
-    PERIOD_GRID_DAYS,
     compute_completeness_bins,
     check_asymptotes,
     report_asymptotes,
@@ -118,7 +120,9 @@ def main(argv: list[str] | None = None) -> int:
                    ))
     args = p.parse_args(argv)
 
-    # Match both upper and lower case KIC tags; exclude manifest sidecars.
+    # Match both the old per-star pattern and the new per-(star × depth) pattern.
+    # Both are anchored to injection_recovery_kic*.json (lower or upper case).
+    # Manifest sidecars (.manifest.json) are excluded.
     shard_paths = sorted(
         p for p in (
             set(args.shard_dir.glob("injection_recovery_KIC*.json")) |

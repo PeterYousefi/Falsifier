@@ -6,8 +6,8 @@
  */
 import React, { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { dataSource } from '../data/DataSource'
 import type { StageEvent } from '../data/types'
+import fixtureEventsData from '../fixtures/events.json'
 
 function formatElapsed(s: number | null | undefined): string {
   if (s == null) return '—'
@@ -34,15 +34,9 @@ const EVENT_COLORS: Record<string, string> = {
 
 export default function LiveConsole() {
   const { stageEvents, jobId } = useStore()
-  const [fixtureEvents, setFixtureEvents] = useState<StageEvent[]>([])
+  const [fixtureEvents, setFixtureEvents] = useState<StageEvent[]>(fixtureEventsData as StageEvent[])
   const [replaying, setReplaying] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    import('../fixtures/events.json').then((m) => {
-      setFixtureEvents(m.default as StageEvent[])
-    })
-  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -55,16 +49,14 @@ export default function LiveConsole() {
     if (replaying) return
     setReplaying(true)
     setFixtureEvents([])
-    import('../fixtures/events.json').then((m) => {
-      const events = m.default as StageEvent[]
-      let i = 0
-      const step = () => {
-        if (i >= events.length) { setReplaying(false); return }
-        setFixtureEvents((prev) => [...prev, events[i++]])
-        setTimeout(step, 200)
-      }
-      step()
-    })
+    const events = fixtureEventsData as StageEvent[]
+    let i = 0
+    const step = () => {
+      if (i >= events.length) { setReplaying(false); return }
+      setFixtureEvents((prev) => [...prev, events[i++]])
+      setTimeout(step, 200)
+    }
+    step()
   }
 
   return (

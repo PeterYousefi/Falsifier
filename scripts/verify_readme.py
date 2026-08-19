@@ -96,33 +96,37 @@ def _regen_n_pipeline_stages() -> str:
 
 
 def _regen_injection_sde_threshold() -> str:
-    """Read SDE_THRESHOLD from scripts/injection_recovery.py."""
-    script_path = REPO_ROOT / "scripts" / "injection_recovery.py"
-    text = script_path.read_text(encoding="utf-8")
-    m = re.search(r'^SDE_THRESHOLD\s*=\s*([0-9.]+)', text, re.MULTILINE)
+    """Read SDE_THRESHOLD from the canonical shared constants module."""
+    # Both injection_recovery.py and adversarial_selftest.py import this value
+    # from scripts/pipeline_constants.py; read it directly from the source.
+    const_path = REPO_ROOT / "scripts" / "pipeline_constants.py"
+    text = const_path.read_text(encoding="utf-8")
+    m = re.search(r'^SDE_THRESHOLD\s*:\s*float\s*=\s*([0-9.]+)', text, re.MULTILINE)
     if not m:
-        raise ValueError("Could not find SDE_THRESHOLD in injection_recovery.py")
+        raise ValueError("Could not find SDE_THRESHOLD in scripts/pipeline_constants.py")
     return f"Injection recovery SDE threshold: {float(m.group(1)):.1f}"
 
 
 def _regen_injection_period_match_pct() -> str:
-    """Read PERIOD_MATCH_TOLERANCE from scripts/injection_recovery.py as a percentage."""
-    script_path = REPO_ROOT / "scripts" / "injection_recovery.py"
-    text = script_path.read_text(encoding="utf-8")
-    m = re.search(r'^PERIOD_MATCH_TOLERANCE\s*=\s*([0-9.]+)', text, re.MULTILINE)
+    """Read PERIOD_MATCH_TOLERANCE from the canonical shared constants module."""
+    const_path = REPO_ROOT / "scripts" / "pipeline_constants.py"
+    text = const_path.read_text(encoding="utf-8")
+    m = re.search(r'^PERIOD_MATCH_TOLERANCE\s*:\s*float\s*=\s*([0-9.]+)', text, re.MULTILINE)
     if not m:
-        raise ValueError("Could not find PERIOD_MATCH_TOLERANCE in injection_recovery.py")
+        raise ValueError("Could not find PERIOD_MATCH_TOLERANCE in scripts/pipeline_constants.py")
     pct = float(m.group(1)) * 100.0
     return f"Period-match tolerance for recovery: {pct:.0f}%"
 
 
 def _regen_adversarial_sde_threshold() -> str:
-    """Read SDE_THRESHOLD from scripts/adversarial_selftest.py."""
-    script_path = REPO_ROOT / "scripts" / "adversarial_selftest.py"
-    text = script_path.read_text(encoding="utf-8")
-    m = re.search(r'^SDE_THRESHOLD\s*=\s*([0-9.]+)', text, re.MULTILINE)
+    """Read SDE_THRESHOLD from the canonical shared constants module."""
+    # adversarial_selftest.py imports SDE_THRESHOLD from pipeline_constants;
+    # read the authoritative value directly from the shared module.
+    const_path = REPO_ROOT / "scripts" / "pipeline_constants.py"
+    text = const_path.read_text(encoding="utf-8")
+    m = re.search(r'^SDE_THRESHOLD\s*:\s*float\s*=\s*([0-9.]+)', text, re.MULTILINE)
     if not m:
-        raise ValueError("Could not find SDE_THRESHOLD in adversarial_selftest.py")
+        raise ValueError("Could not find SDE_THRESHOLD in scripts/pipeline_constants.py")
     return f"Adversarial false-alarm SDE threshold: {float(m.group(1)):.1f}"
 
 
@@ -236,6 +240,48 @@ def _regen_eb_depth_ratio() -> str:
     raise ValueError("KIC 6965293 entry not found in MANIFEST.json golden_set")
 
 
+def _regen_recovered_period_days() -> str:
+    """Read RECOVERED_PERIOD_DAYS and KEPLER10B_PERIOD_DAYS from test_kepler10_recovery.py."""
+    test_path = REPO_ROOT / "tests" / "test_kepler10_recovery.py"
+    text = test_path.read_text(encoding="utf-8")
+    m_rec = re.search(r'RECOVERED_PERIOD_DAYS\s*=\s*([0-9.]+)', text)
+    if not m_rec:
+        raise ValueError("Could not find RECOVERED_PERIOD_DAYS in test_kepler10_recovery.py")
+    m_pub = re.search(r'KEPLER10B_PERIOD_DAYS\s*=\s*([0-9.]+)', text)
+    if not m_pub:
+        raise ValueError("Could not find KEPLER10B_PERIOD_DAYS in test_kepler10_recovery.py")
+    rec = float(m_rec.group(1))
+    pub = float(m_pub.group(1))
+    delta = abs(rec - pub)
+    return f"Kepler-10b recovered period (TLS on committed FITS): {rec:.8f} days (\u0394 = {delta:.1e} days)"
+
+
+def _regen_n_proven_gates() -> str:
+    """Count table rows with EXECUTED status in docs/PROVEN_GATES.md."""
+    path = REPO_ROOT / "docs" / "PROVEN_GATES.md"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing: {path}")
+    text = path.read_text(encoding="utf-8")
+    # Count only pipe-delimited table rows that contain ✅ EXECUTED, not section headers.
+    # A table row starts with '|' (after stripping).
+    n = sum(
+        1 for line in text.splitlines()
+        if line.strip().startswith("|") and "\u2705 EXECUTED" in line
+    )
+    return f"Gates proven by mutation testing: {n}"
+
+
+def _regen_n_tests_ci() -> str:
+    """Read full-dev CI test count from tests/CI_TEST_COUNT."""
+    path = REPO_ROOT / "tests" / "CI_TEST_COUNT"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Missing: {path}\n"
+            "Create with: pytest tests/ --co -q | tail -1 | awk '{{print $1}}' > tests/CI_TEST_COUNT"
+        )
+    return f"Full test suite (CI, full-dev): {path.read_text(encoding='utf-8').strip()} collected"
+
+
 # ---------------------------------------------------------------------------
 # Claim registry
 # Maps CLAIM id → regeneration function
@@ -252,6 +298,7 @@ CLAIM_REGISTRY: dict[str, Callable[[], str]] = {
     # Period recovery
     "period_tolerance_days": _regen_period_tolerance_days,
     "kepler10b_period_days": _regen_kepler10b_period_days,
+    "recovered_period_days": _regen_recovered_period_days,
     # EB rejection
     "eb_depth_ratio": _regen_eb_depth_ratio,
     # Injection recovery methodology
@@ -264,6 +311,9 @@ CLAIM_REGISTRY: dict[str, Callable[[], str]] = {
     "n_curated_targets": _regen_n_curated_targets,
     # Time-system integrity
     "time_roundtrip_tolerance": _regen_time_roundtrip_tolerance,
+    # Proven gates and test count
+    "n_proven_gates": _regen_n_proven_gates,
+    "n_tests_ci": _regen_n_tests_ci,
 }
 
 

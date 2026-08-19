@@ -374,9 +374,15 @@ class TestInjectionRecoveryArtifact:
     def _require_artifact(self):
         if not _IR_ARTIFACT.exists():
             pytest.skip(
-                "data/artifacts/injection_recovery.json not yet committed. "
-                "Run: python scripts/injection_recovery.py --seed 42 --n-per-cell 5 "
-                "--output-dir data/artifacts --data-dir data/golden --no-plot"
+                "No clean TLS injection-recovery artifact exists yet. "
+                "data/artifacts/injection_recovery.json has been removed because "
+                "it was produced with BLS_fallback on a contaminated quiet-star list "
+                "(four of five stars had known KOIs). "
+                "To produce a clean artifact: fetch Q1-Q8 FITS for the five "
+                "replacement quiet stars (KIC 1161145, KIC 5084157, KIC 7272437, "
+                "KIC 7347849, KIC 8935630), then run: "
+                "python scripts/injection_recovery.py --seed 42 --n-per-cell 5 "
+                "--output-dir data/artifacts --data-dir data/golden"
             )
 
     def _load(self) -> dict:
