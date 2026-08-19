@@ -61,29 +61,16 @@ jobs:
           EOF
 
       # -----------------------------------------------------------------------
-      # Verify batman loads in a fresh worker process.
-      # On Ubuntu the default multiprocessing start method is 'fork', so spawn
-      # workers are not exercised here.  The shim still must load cleanly in a
-      # fork worker (subprocess import of batman).
+      # Verify batman loads in a fresh spawn worker process.
+      # Uses a real file (scripts/_verify_spawn_worker.py) rather than a
+      # heredoc because multiprocessing's "spawn" start method re-imports
+      # __main__ in the child interpreter — if __main__ came from stdin the
+      # child raises FileNotFoundError: '<stdin>'.
+      # "spawn" is forced explicitly: Ubuntu's default is "fork", which would
+      # never exercise the macOS code path this guard exists to protect.
       # -----------------------------------------------------------------------
-      - name: Verify batman loads in a worker process
-        run: |
-          python - <<'EOF'
-          import multiprocessing, sys
-
-          def _worker():
-              import falsifier._distutils_compat  # noqa: F401
-              import batman  # noqa: F401
-              print("batman loaded OK in worker", flush=True)
-
-          ctx = multiprocessing.get_context("spawn")
-          p = ctx.Process(target=_worker)
-          p.start()
-          p.join()
-          if p.exitcode != 0:
-              sys.exit(f"Worker exited with code {p.exitcode}")
-          print("batman spawn-worker verification passed")
-          EOF
+      - name: Verify batman loads in a spawn worker process
+        run: python scripts/_verify_spawn_worker.py
 
       # -----------------------------------------------------------------------
       # Adversarial self-test
