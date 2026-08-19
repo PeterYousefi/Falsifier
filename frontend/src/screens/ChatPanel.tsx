@@ -128,17 +128,20 @@ export default function ChatPanel() {
 
   return (
     <div className="screen chat-layout" style={{ minHeight: 0 }}>
-      {/* Header strip */}
+      {/* Header strip with article dateline */}
       <div style={{
         padding: '12px 32px', borderBottom: '1px solid var(--np-rule)',
         background: 'var(--np-surface)', display: 'flex', alignItems: 'center',
         gap: 12, flexShrink: 0,
       }}>
         <div>
+          <div className="article-dateline" style={{ textAlign: 'left', marginBottom: 4 }}>
+            ASK · PIPELINE CHAT{jobId ? ` · ${jobId}` : ''}
+          </div>
           <h2 style={{ fontSize: 18, marginBottom: 2 }}>Ask the pipeline</h2>
-          <p style={{ fontSize: 13, color: 'var(--np-muted)', fontFamily: 'var(--font-serif)', lineHeight: 1.4 }}>
+          <p className="standfirst" style={{ fontSize: 13, marginBottom: 0 }}>
             Answers are assembled from committed pipeline artifacts only.
-            The model can say the data cannot distinguish something — treat that as a correct answer.
+            The model can say the data cannot distinguish something — that is a correct answer.
           </p>
         </div>
         {jobId && (

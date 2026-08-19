@@ -367,11 +367,18 @@ function LandingContent() {
 
   return (
     <div className="page-body">
-      {/* Headline */}
+      {/* Article dateline + headline */}
       <hr className="rule-double" />
-      <h1 style={{ textAlign: 'center', fontSize: 'clamp(28px, 5vw, 48px)', marginBottom: 10 }}>
+      <div className="article-dateline" style={{ marginTop: 16 }}>
+        NO. 001 · KEPLER · K2 · TESS · LONG CADENCE
+      </div>
+      <h1 style={{ textAlign: 'center', fontSize: 'clamp(28px, 5vw, 48px)', marginBottom: 8 }}>
         Is that a planet, or something pretending to be one?
       </h1>
+      <p className="standfirst" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>
+        Seven automated challenges. Every false positive fingerprint tested in sequence.
+        Nothing is hidden.
+      </p>
       <hr className="rule-hair" />
 
       {/* Two-column opening prose with drop cap */}
@@ -406,9 +413,9 @@ function LandingContent() {
         </p>
       </div>
 
-      {/* How it works strip */}
+      {/* I. THE SEVEN CHALLENGES */}
       <hr className="rule-hair" style={{ marginTop: 24 }} />
-      <div className="section-label" style={{ marginTop: 20, textAlign: 'center' }}>How it works</div>
+      <div className="section-label" style={{ marginTop: 20, textAlign: 'center' }}>I. How it works</div>
       <div className="how-strip">
         <div className="how-step">
           <div className="how-step-num">I</div>
@@ -436,9 +443,10 @@ function LandingContent() {
         </div>
       </div>
 
-      {/* Primary action + example chips */}
+      {/* III. BEGIN */}
       <hr className="rule-double" style={{ marginTop: 28 }} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, margin: '24px 0' }}>
+      <div className="section-label" style={{ marginBottom: 14 }}>III. Begin</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, margin: '0 0 24px' }}>
         <div>
           <button
             className="btn-primary"
@@ -549,7 +557,8 @@ function OrbitalFigure() {
 
       {use3D ? (
         <figure className="figure-inset">
-          <div style={{ height: 320, position: 'relative' }}>
+          <hr className="figure-inset-rule-top" />
+          <div className="figure-inset-plot" style={{ height: 320, position: 'relative' }}>
             <Canvas
               camera={{ position: [0, 3, 8], fov: 45, near: 0.01, far: 200 }}
               gl={{ antialias: true, alpha: false }}
@@ -570,6 +579,8 @@ function OrbitalFigure() {
               }
             </Canvas>
           </div>
+          <hr className="figure-inset-rule-bottom" />
+          <div className="figure-label">FIG. 1</div>
           <figcaption>
             Orbital diagram computed from pipeline output. Sphere radius encodes R_p from transit depth and host-star radius;
             colour encodes equilibrium temperature T<sub>eq</sub> (visual only). Green ring = habitable zone (Kopparapu 2013).

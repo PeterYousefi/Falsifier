@@ -2,7 +2,7 @@
    styles.css — Falsifier newspaper design system
    Warm newsprint. Serif headings. Monospace for numbers and IDs only.
    Rust as the single accent colour. Green/amber/red only for test outcomes.
-   No gradients, no glassmorphism, no pure black.
+   No gradients, no glassmorphism. Near-black on cream.
    ============================================================================= */
 
 /* Fonts: Playfair Display (serif headings) + Source Serif 4 (body) + JetBrains Mono (numerics) */
@@ -11,16 +11,16 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Newsprint palette */
-  --np-paper:   #F4F0E6;
+  /* Tightened newsprint palette */
+  --np-paper:   #F2EFE7;
   --np-surface: #EDE9DE;
-  --np-border:  #D3D1C7;
-  --np-rule:    #B4B2A9;
+  --np-border:  #D8D5CB;
+  --np-rule:    #C9C6BB;
   --np-text:    #1A1A18;
-  --np-muted:   #5A5850;
+  --np-muted:   #5F5E5A;
   --np-faint:   #8A8880;
 
-  /* Rust accent — used sparingly */
+  /* Rust accent — section labels and links ONLY */
   --rust:      #993C1D;
   --rust-dim:  rgba(153,60,29,0.10);
 
@@ -31,8 +31,8 @@
   --fail-dim:  rgba(139,26,26,0.12);
   --warn:      #7A5200;
   --warn-dim:  rgba(122,82,0,0.12);
-  --inc:       #5A5850;
-  --inc-dim:   rgba(90,88,80,0.12);
+  --inc:       #5F5E5A;
+  --inc-dim:   rgba(95,94,90,0.12);
 
   /* Typography */
   --font-serif:  'Source Serif 4', 'Georgia', serif;
@@ -41,11 +41,15 @@
   --font-ui:     system-ui, -apple-system, sans-serif;
 
   /* Spacing */
-  --r:    3px;
-  --r2:   5px;
+  --r:    0px;
+  --r2:   0px;
 
   /* Column rule */
   --col-rule: 1px solid var(--np-rule);
+
+  /* Layout */
+  --page-max:  960px;
+  --page-pad:  40px;
 }
 
 html, body, #root {
@@ -65,59 +69,77 @@ html, body, #root {
   min-height: 100vh;
 }
 
-/* ── MASTHEAD ────────────────────────────────────────────────────────────── */
+/* ── Header wrapper — constrains masthead, dateline, nav to same column ── */
+.header-wrap {
+  background: var(--np-paper);
+}
+.header-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0 var(--page-pad);
+  width: 100%;
+}
+
+/* ── MASTHEAD ─────────────────────────────────────────────────────────────── */
 .masthead {
   background: var(--np-paper);
-  padding: 28px 40px 0;
+  padding-top: 22px;
   text-align: center;
-  border-bottom: none;
 }
 .masthead-title {
   font-family: var(--font-head);
-  font-size: clamp(48px, 8vw, 96px);
+  font-size: 23px;
   font-weight: 900;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.30em;
+  /* Compensate for tracking pushing right: pull left by half the tracking */
+  margin-left: -0.30em;
   color: var(--np-text);
   line-height: 1;
   text-transform: uppercase;
+  display: inline-block;
 }
-.masthead-rule {
-  margin: 10px auto 0;
-  border: none;
-  border-top: 3px double var(--np-text);
-  width: 100%;
-}
-.masthead-rule-bottom {
-  margin: 4px auto 0;
+/* 1px hairline immediately below wordmark */
+.masthead-rule-thin {
+  margin: 8px 0 0;
   border: none;
   border-top: 1px solid var(--np-text);
-  width: 100%;
+}
+/* 3px double rule closing the masthead block (below dateline) */
+.masthead-rule-double {
+  margin: 0;
+  border: none;
+  border-top: 3px double var(--np-text);
 }
 
 /* ── Dateline strip ─────────────────────────────────────────────────────── */
 .dateline {
   background: var(--np-paper);
-  padding: 5px 40px;
+  padding: 5px 0;
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--np-muted);
-  border-bottom: 1px solid var(--np-rule);
-  flex-wrap: wrap;
 }
-.dateline-divider { color: var(--np-rule); }
+/* Dateline items fill the full width evenly */
+.dateline-item {
+  flex: 1;
+  text-align: center;
+}
+.dateline-item:first-child { text-align: left; }
+.dateline-item:last-child  { text-align: right; }
 
 /* ── Navigation tabs ────────────────────────────────────────────────────── */
 .top-nav {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0;
   background: var(--np-surface);
-  border-bottom: 2px solid var(--np-rule);
-  padding: 0 32px;
+  border-top: 1px solid var(--np-rule);
+  border-bottom: 2px solid var(--np-text);
   flex-wrap: wrap;
 }
 .nav-btn {
@@ -161,10 +183,21 @@ html, body, #root {
 
 /* ── Page content wrapper ───────────────────────────────────────────────── */
 .page-body {
-  max-width: 960px;
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 32px 40px 48px;
+  padding: 32px var(--page-pad) 48px;
   width: 100%;
+}
+
+/* ── Article dateline (per-page, above headline) ────────────────────────── */
+.article-dateline {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--np-faint);
+  text-align: center;
+  text-transform: uppercase;
+  margin-bottom: 10px;
 }
 
 /* ── Two-column article layout (desktop) ────────────────────────────────── */
@@ -176,9 +209,9 @@ html, body, #root {
 @media (max-width: 700px) {
   .article-columns { column-count: 1; }
   .page-body { padding: 20px 18px 32px; }
-  .masthead { padding: 16px 18px 0; }
-  .dateline { padding: 5px 18px; }
-  .top-nav  { padding: 0 12px; }
+  .masthead { padding-top: 16px; }
+  .header-inner { padding: 0 18px; }
+  .top-nav { justify-content: flex-start; }
 }
 
 /* Drop cap on opening paragraph */
@@ -236,24 +269,41 @@ h3, .h3 {
   color: var(--np-muted);
   line-height: 1.55;
   margin-bottom: 18px;
-  border-left: 3px solid var(--rust);
-  padding-left: 14px;
 }
 
-/* ── Figure inset (plot or 3D view) ─────────────────────────────────────── */
+/* ── Figure inset (plot or 3D view) with full figure treatment ───────────── */
 .figure-inset {
-  border: 1px solid var(--np-rule);
-  background: var(--np-surface);
-  padding: 10px;
   margin: 18px 0;
   break-inside: avoid;
+}
+.figure-inset-rule-top {
+  border: none;
+  border-top: 1px solid var(--np-text);
+  margin: 0 0 8px;
+}
+.figure-inset-plot {
+  background: var(--np-surface);
+  border: none;
+  padding: 10px;
+}
+.figure-inset-rule-bottom {
+  border: none;
+  border-top: 1px solid var(--np-text);
+  margin: 8px 0 4px;
+}
+.figure-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: var(--np-muted);
+  text-transform: uppercase;
+  margin-bottom: 3px;
 }
 .figure-inset figcaption {
   font-family: var(--font-serif);
   font-style: italic;
   font-size: 12px;
   color: var(--np-muted);
-  margin-top: 6px;
   line-height: 1.5;
 }
 
@@ -261,7 +311,7 @@ h3, .h3 {
 .dispo-chip {
   display: inline-flex;
   align-items: center;
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 1px 8px;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -274,7 +324,7 @@ h3, .h3 {
 .dispo-chip.false_positive       { background: var(--fail-dim); color: var(--fail); }
 .dispo-chip.ambiguous            { background: var(--inc-dim); color: var(--inc); }
 
-/* ── Vetting rows ─────────────────────────────────────────────────────────── */
+/* ── Vetting rows with numeral gutter ────────────────────────────────────── */
 .vet-row {
   display: flex;
   align-items: flex-start;
@@ -285,6 +335,19 @@ h3, .h3 {
 }
 .vet-row:last-child { border-bottom: none; }
 .vet-row.triggering { background: rgba(139,26,26,0.04); }
+
+/* Numeral gutter — lowercase roman numeral left of each row */
+.vet-numeral {
+  flex-shrink: 0;
+  width: 24px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--np-faint);
+  padding-top: 12px;
+  text-align: right;
+  letter-spacing: 0.04em;
+}
+
 .vet-badge {
   flex-shrink: 0;
   width: 36px;
@@ -292,7 +355,7 @@ h3, .h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 0;
   font-size: 16px;
   line-height: 1;
 }
@@ -312,7 +375,7 @@ h3, .h3 {
 .expander-btn {
   background: none;
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-muted);
   cursor: pointer;
   font-family: var(--font-mono);
@@ -325,7 +388,7 @@ h3, .h3 {
 .expander-panel {
   background: var(--np-surface);
   border: 1px solid var(--np-border);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 8px 10px;
   margin-top: 5px;
   font-family: var(--font-mono);
@@ -361,11 +424,11 @@ h3, .h3 {
 /* ── Phase-folded light curve (SVG) ─────────────────────────────────────── */
 .lc-container { padding: 2px 0; }
 
-/* ── Primary button ─────────────────────────────────────────────────────── */
+/* ── Primary button — square corners ────────────────────────────────────── */
 .btn-primary {
   background: var(--np-text);
   border: none;
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-paper);
   cursor: pointer;
   font-family: var(--font-serif);
@@ -384,7 +447,7 @@ h3, .h3 {
 .btn-secondary {
   background: none;
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-text);
   cursor: pointer;
   font-family: var(--font-serif);
@@ -394,11 +457,11 @@ h3, .h3 {
 }
 .btn-secondary:hover { border-color: var(--rust); color: var(--rust); }
 
-/* ── Target chip (example targets) ─────────────────────────────────────── */
+/* ── Target chip ────────────────────────────────────────────────────────── */
 .target-chip {
   background: var(--np-surface);
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-text);
   cursor: pointer;
   font-family: var(--font-mono);
@@ -418,7 +481,7 @@ h3, .h3 {
 .search-row input, .search-row select {
   background: var(--np-paper);
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-text);
   font-family: var(--font-serif);
   font-size: 14px;
@@ -511,7 +574,7 @@ h3, .h3 {
 .chat-bubble {
   max-width: 88%;
   padding: 12px 16px;
-  border-radius: var(--r);
+  border-radius: 0;
   font-family: var(--font-serif);
   font-size: 14px;
   line-height: 1.65;
@@ -541,7 +604,7 @@ h3, .h3 {
 .source-chip {
   background: var(--np-surface);
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-muted);
   cursor: pointer;
   font-family: var(--font-mono);
@@ -554,7 +617,7 @@ h3, .h3 {
 .suggestion-btn {
   background: var(--np-surface);
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-muted);
   cursor: pointer;
   font-family: var(--font-serif);
@@ -575,7 +638,7 @@ h3, .h3 {
   flex: 1;
   background: var(--np-paper);
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-text);
   font-family: var(--font-serif);
   font-size: 14px;
@@ -586,7 +649,7 @@ h3, .h3 {
 .chat-input-row button {
   background: var(--np-text);
   border: none;
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-paper);
   cursor: pointer;
   font-family: var(--font-serif);
@@ -599,7 +662,7 @@ h3, .h3 {
 /* ── Upload flow ─────────────────────────────────────────────────────────── */
 .drop-zone {
   border: 2px dashed var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 40px 24px;
   text-align: center;
   color: var(--np-muted);
@@ -621,7 +684,7 @@ h3, .h3 {
 .col-map-table select {
   background: var(--np-paper);
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--np-text);
   font-family: var(--font-serif);
   font-size: 13px;
@@ -633,7 +696,7 @@ h3, .h3 {
 .time-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0; }
 .time-card {
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 12px 14px;
   cursor: pointer;
   transition: border-color 0.1s, background 0.1s;
@@ -656,13 +719,13 @@ h3, .h3 {
 }
 .prov-table td { padding: 6px 8px; border-bottom: 1px solid var(--np-border); font-size: 13px; }
 .prov-table td.mono { font-family: var(--font-mono); font-size: 12px; }
-.wired-chip   { display: inline-block; background: var(--pass-dim); color: var(--pass); border-radius: var(--r); padding: 1px 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
-.aspir-chip   { display: inline-block; background: var(--inc-dim); color: var(--inc); border-radius: var(--r); padding: 1px 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
+.wired-chip   { display: inline-block; background: var(--pass-dim); color: var(--pass); border-radius: 0; padding: 1px 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
+.aspir-chip   { display: inline-block; background: var(--inc-dim); color: var(--inc); border-radius: 0; padding: 1px 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
 .non-claim-block {
   background: var(--np-surface);
   border: 1px solid var(--np-rule);
   border-left: 4px solid var(--rust);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 14px 16px;
 }
 .non-claim-block .nc-locked {
@@ -692,7 +755,7 @@ h3, .h3 {
 .metric-cell .m-baseline { font-family: var(--font-mono); font-size: 11px; color: var(--np-muted); margin-top: 2px; }
 .leakage-badge {
   display: inline-flex; align-items: center; gap: 6px;
-  border-radius: var(--r); font-family: var(--font-mono); font-size: 12px; padding: 4px 10px;
+  border-radius: 0; font-family: var(--font-mono); font-size: 12px; padding: 4px 10px;
 }
 .leakage-badge.pass { background: var(--pass-dim); color: var(--pass); }
 .leakage-badge.fail { background: var(--fail-dim); color: var(--fail); }
@@ -703,7 +766,7 @@ h3, .h3 {
 .rejection-box {
   background: var(--fail-dim);
   border: 1px solid rgba(139,26,26,0.3);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--fail);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -738,7 +801,7 @@ h3, .h3 {
 .job-status-badge {
   font-family: var(--font-mono);
   font-size: 10px;
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 2px 8px;
   letter-spacing: 0.05em;
 }
@@ -776,7 +839,7 @@ h3, .h3 {
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--np-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--np-border); border-radius: 0; }
 
 /* ── Focus visible ──────────────────────────────────────────────────────────── */
 :focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
@@ -784,7 +847,7 @@ h3, .h3 {
 /* ── Download btn ──────────────────────────────────────────────────────────── */
 .dl-btn {
   display: flex; align-items: center; gap: 6px;
-  background: var(--np-surface); border: 1px solid var(--np-rule); border-radius: var(--r);
+  background: var(--np-surface); border: 1px solid var(--np-rule); border-radius: 0;
   color: var(--np-text); cursor: pointer; font-family: var(--font-serif);
   font-size: 13px; padding: 6px 12px; margin: 4px 0; width: 100%; text-align: left;
   transition: border-color 0.12s;
@@ -799,7 +862,7 @@ a:hover { opacity: 0.8; }
 .tag {
   background: var(--np-surface);
   border: 1px solid var(--np-rule);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 1px 6px;
   font-family: var(--font-mono);
   font-size: 10px;

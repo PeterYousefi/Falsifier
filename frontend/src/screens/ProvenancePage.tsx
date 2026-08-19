@@ -29,18 +29,15 @@ export default function ProvenancePage() {
     <div className="screen" style={{ overflowY: 'auto' }}>
       <div className="page-body">
 
-        {/* Masthead for this section */}
+        {/* Article dateline + headline */}
         <hr className="rule-double" />
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginTop: 14, marginBottom: 4, flexWrap: 'wrap' }}>
-          <h1>Data Provenance</h1>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--np-muted)' }}>
-            falsifier {provenance.falsifier_version}
-          </span>
+        <div className="article-dateline" style={{ marginTop: 16 }}>
+          PROVENANCE · falsifier {provenance.falsifier_version}
         </div>
-        <p style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--np-muted)', marginBottom: 20, lineHeight: 1.6 }}>
+        <h1 style={{ marginBottom: 8 }}>Data Provenance</h1>
+        <p className="standfirst">
           Every dataset ingested by this pipeline is recorded below with its citable DOI,
-          access date, and row count at ingest time. Module wiring status distinguishes
-          code that is reachable from a live path from code that is written but not yet connected.
+          access date, and row count at ingest time.
         </p>
         <hr className="rule-hair" />
 

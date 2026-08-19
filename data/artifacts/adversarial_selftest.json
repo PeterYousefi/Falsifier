@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
   "script_version": "0.1.0",
-  "run_id": "8a9ae43f-487c-4c52-9c50-30f7863726b9",
-  "produced_at": "2026-08-18T20:36:33Z",
+  "run_id": "82a1eecf-0597-487a-a204-2f4bfbc03cae",
+  "produced_at": "2026-08-19T00:21:48Z",
   "random_seed": 42,
   "n_trials_per_category": 20,
   "sde_threshold": 9.0,

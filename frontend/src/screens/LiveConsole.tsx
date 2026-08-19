@@ -70,12 +70,15 @@ export default function LiveConsole() {
   return (
     <div className="screen" style={{ overflowY: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
-      {/* Header */}
+      {/* Header with article dateline */}
       <div style={{
-        padding: '10px 32px', borderBottom: '2px solid var(--np-rule)',
+        padding: '10px 32px', borderBottom: '2px solid var(--np-text)',
         background: 'var(--np-surface)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
       }}>
         <div>
+          <div className="article-dateline" style={{ textAlign: 'left', marginBottom: 4 }}>
+            CONSOLE · {isLive ? 'LIVE SSE' : 'FIXTURE REPLAY'}{jobId ? ` · ${jobId}` : ''}
+          </div>
           <h2 style={{ fontSize: 16, marginBottom: 2 }}>Pipeline Console</h2>
           <p style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.4 }}>
             {isLive ? 'Live SSE events from the running job.' : 'Fixture replay — no live job running.'}

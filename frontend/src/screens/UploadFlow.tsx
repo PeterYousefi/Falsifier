@@ -120,19 +120,24 @@ function PreviewPlot({ rows, timeCol, fluxCol }: {
   return (
     <div style={{ margin: '12px 0' }}>
       <figure className="figure-inset">
-        <svg
-          width={W} height={H}
-          style={{ background: 'var(--np-surface)', display: 'block', width: '100%' }}
-          aria-label={`Preview: ${timeCol} vs ${fluxCol}`}
-        >
-          <polyline points={pts} fill="none" stroke="var(--rust)" strokeWidth="1.2" />
-          <text x={PAD} y={H - 2} fill="var(--np-faint)" fontSize="9" fontFamily="var(--font-mono)">
-            {xMin.toFixed(2)}
-          </text>
-          <text x={W - PAD} y={H - 2} fill="var(--np-faint)" fontSize="9" fontFamily="var(--font-mono)" textAnchor="end">
-            {xMax.toFixed(2)}
-          </text>
-        </svg>
+        <hr className="figure-inset-rule-top" />
+        <div className="figure-inset-plot">
+          <svg
+            width={W} height={H}
+            style={{ background: 'var(--np-surface)', display: 'block', width: '100%' }}
+            aria-label={`Preview: ${timeCol} vs ${fluxCol}`}
+          >
+            <polyline points={pts} fill="none" stroke="var(--rust)" strokeWidth="1.2" />
+            <text x={PAD} y={H - 2} fill="var(--np-faint)" fontSize="9" fontFamily="var(--font-mono)">
+              {xMin.toFixed(2)}
+            </text>
+            <text x={W - PAD} y={H - 2} fill="var(--np-faint)" fontSize="9" fontFamily="var(--font-mono)" textAnchor="end">
+              {xMax.toFixed(2)}
+            </text>
+          </svg>
+        </div>
+        <hr className="figure-inset-rule-bottom" />
+        <div className="figure-label">FIG. 1</div>
         <figcaption>
           Preview ({points.length} rows) — {timeCol} vs {fluxCol}.
           {' '}Flux should dip <em>below</em> the baseline (≤ 1.0 for normalised flux) during a transit.
@@ -221,11 +226,14 @@ export default function UploadFlow() {
       <div className="page-body">
 
         <hr className="rule-double" />
-        <h1 style={{ marginTop: 14, marginBottom: 6 }}>Upload a light curve</h1>
-        <p style={{ fontFamily: 'var(--font-serif)', color: 'var(--np-muted)', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
-          Provide a CSV or TSV file with at least a time column and a flux column.
+        <div className="article-dateline" style={{ marginTop: 16 }}>
+          UPLOAD · CUSTOM LIGHT CURVE
+        </div>
+        <h1 style={{ marginBottom: 8 }}>Upload a light curve</h1>
+        <p className="standfirst">
+          Provide a CSV or TSV file with a time column and a flux column.
           The pipeline requires explicit confirmation of the time system and flux convention —
-          no defaults are preselected, because a wrong choice silently corrupts the analysis.
+          no defaults are preselected.
         </p>
         <hr className="rule-hair" />
 

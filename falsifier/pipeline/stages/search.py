@@ -25,13 +25,10 @@ Rule 1: no scientific values hardcoded; all parameters come from ``SearchInput``
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import multiprocessing
-import multiprocessing.pool
 import sys
 import time
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -44,7 +41,7 @@ import numpy as np
 # to the API server, scripts, and any other caller, not only to pytest.
 # Importing it here (at module scope, before batman/TLS) ensures it fires in:
 #   - the main process
-#   - multiprocessing fork workers (which inherit sys.modules)
+#   - multiprocessing worker processes via _tls_worker_init (see below)
 # The conftest.py also imports it as a belt-and-suspenders guard for the
 # test process itself.
 import falsifier._distutils_compat  # noqa: F401  (side-effect: distutils shim)
@@ -53,6 +50,7 @@ import falsifier
 from falsifier.pipeline.contracts.search import SearchInput, SearchOutput, TCE
 from falsifier.pipeline.contracts.detrend import DetrendOutput
 from falsifier.pipeline.contracts.manifest import ArtifactRef, StageManifest, UnitedArray
+from falsifier.pipeline.exceptions import TLSUnavailableError
 
 __all__ = ["run_search"]
 
@@ -75,41 +73,23 @@ _SDE_THRESHOLD = 7.0
 _MAX_PLANETS = 1
 
 
-@contextlib.contextmanager
-def _tls_fork_pool_ctx():
+def _tls_worker_init() -> None:
     """
-    Context manager that makes TLS's internal multiprocessing.Pool use the
-    'fork' start method for the duration of one TLS call.
+    Pool worker initializer: load the distutils shim in each worker process.
 
-    TLS calls ``multiprocessing.Pool(use_threads)`` directly.  We monkey-patch
-    ``multiprocessing.pool.Pool`` with a subclass whose constructor forces a
-    fork-context pool, then restore the original class on exit.
+    TLS spawns a ``multiprocessing.Pool`` internally to parallelise the period
+    search.  On macOS the default start method is 'spawn': each worker runs a
+    fresh Python interpreter that does **not** inherit ``sys.modules`` from the
+    parent.  Without this initializer, ``batman`` (a TLS dependency) fails to
+    import in spawn workers because ``distutils`` is absent in Python 3.12.
 
-    This is intentionally narrow in scope: it does not call
-    ``multiprocessing.set_start_method()`` (which is process-wide and
-    permanently affects every subsequent Pool, including those created by the
-    FastAPI server's async workers where fork is unsafe).
-
-    Fork is required on macOS/Python 3.12 because TLS's spawn workers run a
-    fresh interpreter that lacks the distutils shim already loaded in the
-    parent; batman (which TLS imports) fails to import in spawn workers.
+    Passing this function as ``initializer=`` to the Pool means every worker —
+    regardless of start method (spawn, fork, forkserver) — loads the shim
+    before batman is imported.  This is the correct fix: it does not touch the
+    global start-method state, does not monkey-patch Pool, and does not require
+    fork semantics anywhere in the server process.
     """
-    original_pool = multiprocessing.pool.Pool
-
-    class _ForkPool(original_pool):  # type: ignore[valid-type, misc]
-        def __init__(self, *args, **kwargs):
-            kwargs.setdefault("context", multiprocessing.get_context("fork"))
-            super().__init__(*args, **kwargs)
-
-    multiprocessing.pool.Pool = _ForkPool  # type: ignore[assignment]
-    # TLS accesses multiprocessing.Pool (not multiprocessing.pool.Pool) in some
-    # versions; patch both to be safe.
-    multiprocessing.Pool = _ForkPool  # type: ignore[assignment]
-    try:
-        yield
-    finally:
-        multiprocessing.pool.Pool = original_pool  # type: ignore[assignment]
-        multiprocessing.Pool = original_pool  # type: ignore[assignment]
+    import falsifier._distutils_compat  # noqa: F401
 
 
 def _compute_odd_even_excess(results, depth_ppm: float) -> float:
@@ -181,8 +161,17 @@ def run_search(
     -------
     SearchOutput
     """
-    import transitleastsquares as tls_module
-    from transitleastsquares import transitleastsquares as TLS
+    # Import TLS eagerly and raise a typed exception if unavailable.
+    # BLS is never a fallback here — if TLS is absent the stage must not run.
+    try:
+        import transitleastsquares as tls_module
+        from transitleastsquares import transitleastsquares as TLS
+    except ImportError as exc:
+        missing = str(exc).split("'")[1] if "'" in str(exc) else "transitleastsquares"
+        raise TLSUnavailableError(
+            missing_package=missing,
+            reason=str(exc),
+        ) from exc
 
     if detrend_output is None:
         raise NotImplementedError(
@@ -226,27 +215,36 @@ def run_search(
         n_threads = max(1, multiprocessing.cpu_count())
         model = TLS(time_arr, flux_work)
         # TLS uses multiprocessing.Pool internally.  On macOS/Python 3.12 the
-        # default start method is 'spawn'; spawned workers run fresh interpreter
-        # processes that do not inherit sys.modules, so the distutils stub and
-        # already-imported batman symbols are absent in them.  'fork' workers
-        # inherit the parent's memory space including sys.modules.
+        # default start method is 'spawn': spawned workers run a fresh
+        # interpreter that does not inherit sys.modules, so ``batman`` (which
+        # TLS imports at worker startup) would fail without the distutils shim.
         #
-        # We must NOT call multiprocessing.set_start_method() at module scope
-        # or in run_search() body — that would affect every importer, including
-        # the threaded FastAPI server where fork is unsafe (open sockets are
-        # duplicated into children, leading to fd corruption).
-        #
-        # Instead we temporarily replace the Pool class TLS will instantiate
-        # with a subclass that forces the fork context, restoring the original
-        # afterwards.  This is scoped to a single TLS call and does not touch
-        # the global start-method state.
-        with _tls_fork_pool_ctx():
+        # The fix is to pass ``_tls_worker_init`` as the pool initializer.
+        # TLS does not accept an initializer kwarg directly; we monkey-patch
+        # the Pool constructor *just* enough to thread it through, then restore.
+        # This is narrower than changing the global start method (which would
+        # affect FastAPI worker pools) and correct for all start methods.
+        import multiprocessing.pool as _mp_pool
+
+        _orig_pool = _mp_pool.Pool
+
+        class _InitPool(_orig_pool):  # type: ignore[valid-type, misc]
+            def __init__(self, *args, **kwargs):
+                kwargs.setdefault("initializer", _tls_worker_init)
+                super().__init__(*args, **kwargs)
+
+        _mp_pool.Pool = _InitPool  # type: ignore[assignment]
+        multiprocessing.Pool = _InitPool  # type: ignore[assignment]
+        try:
             results = model.power(
                 period_min=period_min,
                 period_max=period_max,
                 use_threads=n_threads,
                 show_progress_bar=False,
             )
+        finally:
+            _mp_pool.Pool = _orig_pool  # type: ignore[assignment]
+            multiprocessing.Pool = _orig_pool  # type: ignore[assignment]
 
         if results.SDE < sde_threshold:
             break  # no more significant signals

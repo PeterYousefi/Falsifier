@@ -69,6 +69,13 @@ from typing import Optional
 
 import numpy as np
 
+# Python 3.12 distutils compat — must precede any batman/TLS import.
+# See falsifier/_distutils_compat.py for explanation.
+try:
+    import falsifier._distutils_compat  # noqa: F401
+except ImportError:
+    pass  # running without falsifier installed; distutils shim may still be active via .pth
+
 log = logging.getLogger("adversarial_selftest")
 
 # ---------------------------------------------------------------------------
@@ -405,6 +412,14 @@ def _bls_search(
 _DETECTION_ALGORITHM_USED: str = "unknown"
 
 
+def _tls_worker_init() -> None:
+    """Load the distutils shim in each TLS pool worker (macOS spawn fix)."""
+    try:
+        import falsifier._distutils_compat  # noqa: F401
+    except ImportError:
+        pass
+
+
 def run_detection(
     time: np.ndarray,
     flux: np.ndarray,
@@ -421,17 +436,42 @@ def run_detection(
     Fallback: internal BLS, activated only when ``transitleastsquares`` is not
     installed.  BLS-fallback artifacts must not be committed; see the warning
     in main() and the ``detection_algorithm`` field in the artifact.
+
+    macOS / Python 3.12 spawn fix
+    ------------------------------
+    TLS spawns a multiprocessing.Pool internally.  On macOS the default start
+    method is 'spawn': workers run fresh interpreters that lack the distutils
+    shim, causing batman to fail at import.  We inject ``_tls_worker_init`` as
+    the pool initializer via a narrow Pool subclass that is restored afterwards.
     """
+    import multiprocessing
+    import multiprocessing.pool as _mp_pool
+
     global _DETECTION_ALGORITHM_USED
     try:
         from transitleastsquares import transitleastsquares as TLS
         _DETECTION_ALGORITHM_USED = "TLS"
         model = TLS(time, flux, flux_err)
-        results = model.power(
-            period_min=PERIOD_MIN_DAYS,
-            period_max=PERIOD_MAX_DAYS,
-            show_progress_bar=False,
-        )
+
+        _orig_pool = _mp_pool.Pool
+
+        class _InitPool(_orig_pool):  # type: ignore[valid-type, misc]
+            def __init__(self, *args, **kwargs):
+                kwargs.setdefault("initializer", _tls_worker_init)
+                super().__init__(*args, **kwargs)
+
+        _mp_pool.Pool = _InitPool  # type: ignore[assignment]
+        multiprocessing.Pool = _InitPool  # type: ignore[assignment]
+        try:
+            results = model.power(
+                period_min=PERIOD_MIN_DAYS,
+                period_max=PERIOD_MAX_DAYS,
+                show_progress_bar=False,
+            )
+        finally:
+            _mp_pool.Pool = _orig_pool  # type: ignore[assignment]
+            multiprocessing.Pool = _orig_pool  # type: ignore[assignment]
+
         return float(results.period), float(results.SDE), float(results.depth * 1e6)
     except ImportError:
         _DETECTION_ALGORITHM_USED = "BLS_fallback"

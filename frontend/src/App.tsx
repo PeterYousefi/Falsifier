@@ -50,38 +50,46 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {/* Newspaper masthead */}
-      <header className="masthead" role="banner">
-        <div className="masthead-title" aria-label="Falsifier">FALSIFIER</div>
-        <hr className="masthead-rule" />
-        <hr className="masthead-rule-bottom" />
-      </header>
+      {/* Header wrapper — constrains all header elements to the same column */}
+      <div className="header-wrap">
+        <div className="header-inner">
 
-      {/* Dateline strip */}
-      <div className="dateline" role="doc-subtitle">
-        <span>DISEQUILIBRIUM SCREENING &amp; FALSE-POSITIVE TRIAGE</span>
-        <span className="dateline-divider">·</span>
-        <span>KEPLER · TESS · K2</span>
-        <span className="dateline-divider">·</span>
-        <span>NO API KEYS REQUIRED</span>
-        <span className="dateline-divider">·</span>
-        <span>OPEN PIPELINE ARTIFACTS</span>
+          {/* Newspaper masthead — reduced wordmark */}
+          <header className="masthead" role="banner">
+            <div className="masthead-title" aria-label="Falsifier">FALSIFIER</div>
+          </header>
+
+          {/* 1px rule directly under wordmark */}
+          <hr className="masthead-rule-thin" />
+
+          {/* Dateline strip — four items spanning full container width */}
+          <div className="dateline" role="doc-subtitle">
+            <span className="dateline-item">FALSE-POSITIVE TRIAGE</span>
+            <span className="dateline-item">KEPLER · K2 · TESS</span>
+            <span className="dateline-item">NO API KEYS</span>
+            <span className="dateline-item">OPEN ARTIFACTS</span>
+          </div>
+
+          {/* 3px double rule closing the masthead block */}
+          <hr className="masthead-rule-double" />
+
+          {/* Navigation — centered under the masthead */}
+          <nav className="top-nav" role="navigation" aria-label="Main navigation">
+            {SCREENS.map((s) => (
+              <button
+                key={s.id}
+                className={`nav-btn${activeScreen === s.id ? ' active' : ''}`}
+                onClick={() => setActiveScreen(s.id)}
+                aria-current={activeScreen === s.id ? 'page' : undefined}
+                title={s.title}
+              >
+                {s.label}
+              </button>
+            ))}
+          </nav>
+
+        </div>
       </div>
-
-      {/* Navigation */}
-      <nav className="top-nav" role="navigation" aria-label="Main navigation">
-        {SCREENS.map((s) => (
-          <button
-            key={s.id}
-            className={`nav-btn${activeScreen === s.id ? ' active' : ''}`}
-            onClick={() => setActiveScreen(s.id)}
-            aria-current={activeScreen === s.id ? 'page' : undefined}
-            title={s.title}
-          >
-            {s.label}
-          </button>
-        ))}
-      </nav>
 
       {/* Active screen */}
       <main className="screen" role="main">

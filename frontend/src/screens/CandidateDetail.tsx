@@ -60,6 +60,9 @@ export const TEST_LABELS: Record<string, { short: string; headline: string; why:
   },
 }
 
+// Lowercase roman numeral sequence for vetting rows
+const ROMAN_LOWER = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x']
+
 const OUTCOME_ICONS: Record<string, string> = {
   PASS:        '✓',
   FAIL:        '✗',
@@ -108,7 +111,7 @@ export function PhaseLCPlot({ phasedData }: { phasedData: PhasedLC | null | unde
       <div className="lc-container">
         <svg
           width={W} height={H}
-          style={{ background: 'var(--np-surface)', borderRadius: 'var(--r)', display: 'block', border: '1px solid var(--np-border)' }}
+          style={{ background: 'var(--np-surface)', display: 'block', border: '1px solid var(--np-border)' }}
         >
           <text x={W / 2} y={H / 2} fill="var(--np-faint)" textAnchor="middle" dominantBaseline="middle" fontSize="12"
             fontFamily="var(--font-serif)" fontStyle="italic">
@@ -134,7 +137,7 @@ export function PhaseLCPlot({ phasedData }: { phasedData: PhasedLC | null | unde
     <div className="lc-container">
       <svg
         width={W} height={H}
-        style={{ background: 'var(--np-surface)', borderRadius: 'var(--r)', display: 'block', border: '1px solid var(--np-border)' }}
+        style={{ background: 'var(--np-surface)', display: 'block', border: '1px solid var(--np-border)' }}
         aria-label="Phase-folded light curve"
         role="img"
       >
@@ -178,18 +181,20 @@ function MetricExpander({ metric_value, metric_unit, threshold }: {
   )
 }
 
-// ── Vetting test row ───────────────────────────────────────────────────────
-function VetTestRow({ name, vetResult }: { name: string; vetResult: VetResult }) {
+// ── Vetting test row with numeral gutter ───────────────────────────────────
+function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetResult; index: number }) {
   const r = vetResult.test_results?.find((t) => t.test_name === name)
   const outcome = r?.outcome ?? 'INCONCLUSIVE'
   const isTriggering = vetResult.triggering_test === name
   const label = TEST_LABELS[name]
+  const numeral = ROMAN_LOWER[index] ?? String(index + 1)
 
   return (
     <div
       className={`vet-row${isTriggering ? ' triggering' : ''}`}
       aria-label={`${label?.short}: ${outcome}`}
     >
+      <span className="vet-numeral">{numeral}</span>
       <VetBadge outcome={outcome} />
       <div className="vet-body">
         <div className="vet-headline">
@@ -208,7 +213,6 @@ function VetTestRow({ name, vetResult }: { name: string; vetResult: VetResult })
 
 // ── Headline generator (physical finding, not status code) ────────────────
 function reportHeadline(vet: VetResult, targetId: string): string {
-  const count = vet.test_results?.length ?? 0
   if (vet.disposition === 'candidate') {
     return `${targetId} survives every challenge`
   }
@@ -255,7 +259,7 @@ function TceSelector({ tce_id, disposition }: { tce_id: string; disposition: Dis
       style={{
         background: active ? 'var(--rust-dim)' : 'var(--np-surface)',
         border: `1px solid ${active ? 'var(--rust)' : 'var(--np-rule)'}`,
-        borderRadius: 'var(--r)', color: active ? 'var(--rust)' : 'var(--np-muted)',
+        borderRadius: 0, color: active ? 'var(--rust)' : 'var(--np-muted)',
         cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11,
         padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: 6,
       }}
@@ -312,21 +316,29 @@ export default function CandidateDetail() {
           </div>
         )}
 
-        {/* Headline + standfirst */}
+        {/* Article dateline + headline + standfirst */}
         <hr className="rule-double" />
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div className="article-dateline" style={{ marginTop: 16 }}>
+          {report.target_id} · CANDIDATE REPORT
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
           <h1 style={{ marginBottom: 0 }}>{headline}</h1>
           {vetResult && <DispoChip disposition={vetResult.disposition} />}
         </div>
-        <div className="standfirst">{standfirst}</div>
+        <p className="standfirst">{standfirst}</p>
         <hr className="rule-hair" />
 
         {vetResult ? (
           <div className="article-columns" style={{ marginTop: 20 }}>
 
-            {/* Phase-folded LC figure */}
+            {/* FIG. 1 — Phase-folded LC */}
             <figure className="figure-inset" style={{ breakInside: 'avoid' }}>
-              <PhaseLCPlot phasedData={vetResult.phased_lc} />
+              <hr className="figure-inset-rule-top" />
+              <div className="figure-inset-plot">
+                <PhaseLCPlot phasedData={vetResult.phased_lc} />
+              </div>
+              <hr className="figure-inset-rule-bottom" />
+              <div className="figure-label">FIG. 1</div>
               <figcaption>
                 Phase-folded light curve for <span style={{ fontFamily: 'var(--font-mono)' }}>{vetResult.tce_id}</span>.
                 The star's brightness (vertical axis) is plotted against orbital phase.
@@ -335,9 +347,9 @@ export default function CandidateDetail() {
               </figcaption>
             </figure>
 
-            {/* TCE parameters */}
+            {/* I. ORBITAL PARAMETERS */}
             <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
-              <div className="section-label">Orbital parameters</div>
+              <div className="section-label">I. Orbital parameters</div>
               <div style={{ background: 'var(--np-surface)', border: '1px solid var(--np-rule)', padding: '10px 14px' }}>
                 <Row label="Period"      value={vetResult.period_days != null ? `${vetResult.period_days.toFixed(6)} d` : null}      source="vet.period_days" />
                 <Row label="Depth"       value={vetResult.depth_ppm != null ? `${vetResult.depth_ppm.toFixed(0)} ppm` : null}         source="vet.depth_ppm" />
@@ -348,10 +360,10 @@ export default function CandidateDetail() {
               </div>
             </div>
 
-            {/* Classifier ranking score */}
+            {/* II. RANKING SCORE */}
             {classifyResult && (
               <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
-                <div className="section-label">Ranking score — not a verdict</div>
+                <div className="section-label">II. Ranking score — not a verdict</div>
                 <div style={{
                   background: 'var(--np-surface)', border: '1px solid var(--np-rule)',
                   borderLeft: '3px solid var(--warn)', padding: '12px 14px',
@@ -376,18 +388,18 @@ export default function CandidateDetail() {
               </div>
             )}
 
-            {/* Vetting tests narrative */}
+            {/* III. VETTING TESTS */}
             <div style={{ columnSpan: 'all', marginTop: 4 } as React.CSSProperties}>
               <hr className="rule-double" />
               <div className="section-label" style={{ marginTop: 16 }}>
-                Vetting tests — all {VETTING_TEST_ORDER.length}
+                III. The seven challenges
                 <span style={{ fontFamily: 'var(--font-serif)', textTransform: 'none', letterSpacing: 0, color: 'var(--np-muted)', marginLeft: 8, fontSize: 12 }}>
                   (Metrics hidden by default — click "Show the numbers" on any row to expand)
                 </span>
               </div>
               <div style={{ background: 'var(--np-surface)', border: '1px solid var(--np-rule)', padding: '4px 16px' }}>
-                {VETTING_TEST_ORDER.map((name) => (
-                  <VetTestRow key={name} name={name} vetResult={vetResult} />
+                {VETTING_TEST_ORDER.map((name, idx) => (
+                  <VetTestRow key={name} name={name} vetResult={vetResult} index={idx} />
                 ))}
               </div>
             </div>

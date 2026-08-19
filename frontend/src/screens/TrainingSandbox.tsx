@@ -114,14 +114,13 @@ export default function TrainingSandbox() {
       <div className="page-body">
 
         <hr className="rule-double" />
-        <h1 style={{ marginTop: 14, marginBottom: 6 }}>Training Sandbox</h1>
-        <p style={{ fontFamily: 'var(--font-serif)', color: 'var(--np-muted)', fontSize: 15, lineHeight: 1.6, marginBottom: 6 }}>
-          Upload a labeled set to retrain the XGBoost classifier and compare session metrics against the
-          committed baseline. Splits are always grouped by host star ID to prevent system-level data leakage
-          (AGENTS.md Rule 4).
-        </p>
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-muted)', marginBottom: 20 }}>
-          Classifier probability is a ranking score only — not a verdict. Disposition is determined by the vet stage.
+        <div className="article-dateline" style={{ marginTop: 16 }}>
+          TRAINING SANDBOX · XGBOOST CLASSIFIER
+        </div>
+        <h1 style={{ marginBottom: 8 }}>Training Sandbox</h1>
+        <p className="standfirst">
+          Upload a labeled set to retrain the XGBoost classifier and compare session metrics
+          against the committed baseline. Splits are grouped by host star ID.
         </p>
         <hr className="rule-hair" />
 
@@ -209,10 +208,13 @@ export default function TrainingSandbox() {
         <div className="step-section">
           <div className="section-label">Reliability diagrams — session vs baseline</div>
           <figure className="figure-inset">
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+            <hr className="figure-inset-rule-top" />
+            <div className="figure-inset-plot" style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
               <ReliabilityDiagram metrics={sm} label="session" color="var(--rust)" />
               <ReliabilityDiagram metrics={bm} label="baseline" color="var(--np-faint)" />
             </div>
+            <hr className="figure-inset-rule-bottom" />
+            <div className="figure-label">FIG. 1</div>
             <figcaption>
               Dashed diagonal = perfect calibration.
               Session model in rust; baseline in grey.
