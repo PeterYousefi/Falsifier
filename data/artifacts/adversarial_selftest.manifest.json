@@ -1,9 +1,0 @@
-{
-  "artifact": "data/artifacts/adversarial_selftest.json",
-  "sha256": "7533ca971fe5e5286f15c37d625861ca91b9f34502bd0209b33adb77d125b6b3",
-  "source_doi": "10.17909/T9-NMC8-F686",
-  "access_date": "2026-08-18",
-  "row_count": 80,
-  "produced_at": "2026-08-19T00:21:48Z",
-  "run_id": "82a1eecf-0597-487a-a204-2f4bfbc03cae"
-}
