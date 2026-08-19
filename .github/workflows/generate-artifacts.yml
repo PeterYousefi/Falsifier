@@ -43,10 +43,22 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Verify TLS imports
         run: |
-          python -c "
+          python - <<'EOF'
           import transitleastsquares
-          print('transitleastsquares', transitleastsquares.__version__, 'OK')
-          "
+          from importlib.metadata import version, PackageNotFoundError
+
+          # Guard: the callable that the pipeline actually uses must be present.
+          tls_cls = transitleastsquares.transitleastsquares
+          assert callable(tls_cls), "transitleastsquares.transitleastsquares is not callable"
+
+          # Version is informational only — never fail the job on a missing string.
+          try:
+              ver = version("transitleastsquares")
+          except PackageNotFoundError:
+              ver = "unknown"
+
+          print(f"transitleastsquares {ver} OK (transitleastsquares.transitleastsquares callable)")
+          EOF
 
       # -----------------------------------------------------------------------
       # Verify batman loads in a fresh worker process.
