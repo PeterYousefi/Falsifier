@@ -553,3 +553,251 @@ def test_explanation_file_has_no_hardcoded_scientific_numbers(clean_env):
         "If these are intentional non-measured numbers (e.g. year references), "
         "reduce their precision or annotate with a comment."
     )
+
+
+# ---------------------------------------------------------------------------
+# T-DISTINCT — two different target_ids produce two different DetectionReports
+# ---------------------------------------------------------------------------
+# This is the regression gate for the "same result for any ID" symptom.
+#
+# We do NOT test the MAST-fetch path here (that requires network access).
+# Instead we test the only layer where silent same-result behaviour could
+# occur inside the backend:
+#
+#   1. _build_report reads target_id from req.target_id (the submitted request),
+#      not from a default or from the ingest output.  If this were wrong, both
+#      jobs would show the same target in their report.
+#
+#   2. The cache key is derived from the normalised target_id (plus mission/
+#      cadence/sectors).  If there were a key collision, different targets would
+#      hit the same cache entry.  We verify the cache keys are distinct.
+#
+#   3. The DetectionReport for target A must not be the same object as for
+#      target B even when the underlying segment data happens to be identical
+#      (it never is in practice, but we test the report metadata).
+#
+# Tests are marked @pytest.mark.no_network — no sockets opened.
+
+@pytest.mark.no_network
+def test_distinct_target_ids_produce_distinct_ingest_cache_keys():
+    """
+    Cache keys for different target_ids must never collide.
+
+    The cache key includes the normalised target_id, so this test guards
+    against any normalisation bug that could cause two different targets to
+    hash to the same cache entry (which would produce the same MAST data for
+    both).
+    """
+    from falsifier.pipeline.contracts.ingest import IngestInput
+    from falsifier.pipeline.stages.ingest import _mast_cache_query, normalise_target_id
+    from falsifier.pipeline.ingest.cache import query_hash
+
+    targets = [
+        "KIC 11904151",   # Kepler-10 golden
+        "KIC 7272437",    # quiet-star injection-recovery target
+        "KIC 5084157",    # quiet-star injection-recovery target
+        "KIC 7347849",    # quiet-star injection-recovery target
+        "KIC 8935630",    # quiet-star injection-recovery target
+    ]
+
+    run_id = "test-distinct-keys"
+    cache_queries = {}
+    hashes = {}
+
+    for t in targets:
+        inp = IngestInput(
+            target_id=t,
+            mission="Kepler",
+            author="Kepler",
+            cadence="long",
+            sectors=None,
+            pipeline_run_id=run_id,
+        )
+        q = _mast_cache_query(inp)
+        h = query_hash(q)
+        cache_queries[t] = q
+        hashes[t] = h
+
+    # All query strings must be distinct
+    unique_queries = set(cache_queries.values())
+    assert len(unique_queries) == len(targets), (
+        f"Cache query collision detected: {cache_queries}\n"
+        "Two different target_ids are producing the same cache query string."
+    )
+
+    # All hashes must be distinct (no SHA-256 collision in this finite set)
+    unique_hashes = set(hashes.values())
+    assert len(unique_hashes) == len(targets), (
+        f"Cache hash collision detected: {hashes}\n"
+        "Two different target_ids are hashing to the same cache key."
+    )
+
+
+@pytest.mark.no_network
+def test_distinct_target_ids_produce_distinct_normalised_ids():
+    """
+    normalise_target_id must return a distinct canonical form for each of the
+    quiet-star targets used in injection-recovery tests.
+    """
+    from falsifier.pipeline.stages.ingest import normalise_target_id
+
+    targets = [
+        ("KIC 11904151",  "KIC 11904151"),
+        ("kic11904151",   "KIC 11904151"),  # no space variant
+        ("KIC 7272437",   "KIC 7272437"),
+        ("KIC 5084157",   "KIC 5084157"),
+        ("KIC 7347849",   "KIC 7347849"),
+        ("KIC 8935630",   "KIC 8935630"),
+    ]
+
+    for raw, expected in targets:
+        got = normalise_target_id(raw)
+        assert got == expected, (
+            f"normalise_target_id({raw!r}) → {got!r}, expected {expected!r}"
+        )
+
+
+@pytest.mark.no_network
+def test_distinct_target_ids_produce_distinct_report_target_fields():
+    """
+    _build_report must embed the submitted target_id in the returned
+    DetectionReport, not a default/fixture value.
+
+    This test guards against the scenario where two different jobs for two
+    different targets would both show "KIC 11904151" (or any other fixed
+    string) in their reports — the exact symptom described in the issue.
+
+    We call _build_report directly with two different JobRequests and verify
+    that the two resulting DetectionReport objects differ in target_id,
+    job_id, and pipeline_run_id.
+    """
+    from falsifier.pipeline.contracts.ingest import IngestInput, IngestOutput
+    from falsifier.pipeline.stages.ingest import run_ingest
+    from falsifier.api.queue import _stub_detrend, _stub_search, _stub_vet, _stub_classify, _build_report
+    from falsifier.api.models import JobRequest, DetectionReport
+
+    # Build two minimal IngestOutputs with distinct target_ids using _segments
+    # injection — no network, no cache, no FITS required.
+    def _make_segments(n_cadences: int = 10):
+        from falsifier.pipeline.contracts.ingest import LightCurveSegment
+        from falsifier.pipeline.contracts.manifest import UnitedArray
+        return [
+            LightCurveSegment(
+                sector=3,
+                time=UnitedArray(values=[2454833.0 + i * 0.020833 for i in range(n_cadences)], unit="bkjd"),
+                time_scale="tdb",
+                time_format="bkjd",
+                flux=UnitedArray(values=[1.0] * n_cadences, unit="electron / s"),
+                flux_err=UnitedArray(values=[1e-4] * n_cadences, unit="electron / s"),
+                quality_flags=[0] * n_cadences,
+                cadence_type="long",
+            )
+        ]
+
+    target_a = "KIC 11904151"
+    target_b = "KIC 7272437"
+
+    run_id_a = "regression-distinct-a"
+    run_id_b = "regression-distinct-b"
+
+    ingest_out_a = run_ingest(
+        IngestInput(
+            target_id=target_a,
+            mission="Kepler",
+            author="Kepler",
+            cadence="long",
+            sectors=None,
+            pipeline_run_id=run_id_a,
+        ),
+        _segments=_make_segments(),
+    )
+
+    ingest_out_b = run_ingest(
+        IngestInput(
+            target_id=target_b,
+            mission="Kepler",
+            author="Kepler",
+            cadence="long",
+            sectors=None,
+            pipeline_run_id=run_id_b,
+        ),
+        _segments=_make_segments(),
+    )
+
+    # The normalised host_star_id must differ
+    assert ingest_out_a.host_star_id != ingest_out_b.host_star_id, (
+        f"host_star_id collision: both targets normalised to {ingest_out_a.host_star_id!r}"
+    )
+
+    detrend_a = _stub_detrend(ingest_out_a, run_id_a)
+    detrend_b = _stub_detrend(ingest_out_b, run_id_b)
+    search_a  = _stub_search(detrend_a, run_id_a)
+    search_b  = _stub_search(detrend_b, run_id_b)
+    vet_a     = _stub_vet(search_a, run_id_a)
+    vet_b     = _stub_vet(search_b, run_id_b)
+
+    started = datetime.datetime.now(tz=datetime.timezone.utc)
+
+    report_a = _build_report(
+        job_id="job-a",
+        req=JobRequest(target_id=target_a),
+        run_id=run_id_a,
+        started_at=started,
+        ingest_out=ingest_out_a,
+        detrend_out=detrend_a,
+        search_out=search_a,
+        vet_outs=vet_a,
+        classify_outs=[],
+    )
+
+    report_b = _build_report(
+        job_id="job-b",
+        req=JobRequest(target_id=target_b),
+        run_id=run_id_b,
+        started_at=started,
+        ingest_out=ingest_out_b,
+        detrend_out=detrend_b,
+        search_out=search_b,
+        vet_outs=vet_b,
+        classify_outs=[],
+    )
+
+    assert isinstance(report_a, DetectionReport)
+    assert isinstance(report_b, DetectionReport)
+
+    # --- Core regression assertions ---
+
+    # 1. target_id is taken from the request, not from a default/fixture
+    assert report_a.target_id == target_a, (
+        f"report_a.target_id={report_a.target_id!r}, expected {target_a!r}\n"
+        "_build_report must read target_id from req.target_id, not a default."
+    )
+    assert report_b.target_id == target_b, (
+        f"report_b.target_id={report_b.target_id!r}, expected {target_b!r}\n"
+        "_build_report must read target_id from req.target_id, not a default."
+    )
+
+    # 2. The two reports have distinct target_ids (the core regression guard)
+    assert report_a.target_id != report_b.target_id, (
+        "Both DetectionReports have the same target_id — "
+        "a different target_id was submitted but the same target appears in both reports.  "
+        "This is the 'same result for any ID' bug."
+    )
+
+    # 3. job_id and pipeline_run_id are distinct (no identity bleed between jobs)
+    assert report_a.job_id != report_b.job_id
+    assert report_a.pipeline_run_id != report_b.pipeline_run_id
+
+    # 4. ingest.host_star_id reflects the correct normalised target
+    assert report_a.ingest is not None
+    assert report_b.ingest is not None
+    assert report_a.ingest.host_star_id == "KIC 11904151"
+    assert report_b.ingest.host_star_id == "KIC 7272437"
+    assert report_a.ingest.host_star_id != report_b.ingest.host_star_id, (
+        "ingest.host_star_id is the same for two different targets — "
+        "either normalise_target_id collapsed them or the wrong IngestOutput was used."
+    )
+
+    # 5. non_claims must be present in both reports (locked claim always travels)
+    assert len(report_a.non_claims) >= 1
+    assert len(report_b.non_claims) >= 1

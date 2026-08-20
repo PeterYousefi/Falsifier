@@ -14,6 +14,11 @@ They verify:
   T6. refit_with_params returns a pending_enqueue marker (not a new job itself)
   T7. Session offline_mode responds with templated text when no API key is set
   T8. system_prompt contains the locked claim and all tool names
+
+  T9.  Response contract — normal (live OpenAI-backed) path has all required fields
+  T10. Response contract — offline path has all required fields and offline_mode=True
+  T11. Response contract — Guardian-blocked path has all required fields and safe=False
+  T12. Response contract — reply field is always a str (never None/missing)
 """
 
 from __future__ import annotations
@@ -371,3 +376,190 @@ def test_system_prompt_contains_locked_claim_and_tools():
     assert "No exoplanet biosignature has ever been confirmed" in prompt
     for tool_name in TOOL_REGISTRY:
         assert tool_name in prompt, f"Tool {tool_name!r} missing from system prompt"
+
+
+# ---------------------------------------------------------------------------
+# T9-T12 — Frontend-facing response contract regression tests
+#
+# These tests assert that ChatResponse (and therefore the JSON the API
+# serialises) has a stable shape across all three production paths:
+#   (a) normal OpenAI-backed response (mocked)
+#   (b) offline degradation (OPENAI_API_KEY unset)
+#   (c) Guardian-blocked response
+#
+# The contract that the frontend relies on:
+#   .reply          — str, never None
+#   .tool_calls     — list[dict]
+#   .sources        — list[str]
+#   .guardian_verdict — dict with keys: safe, risk_label, model_used, confidence
+#   .offline_mode   — bool
+# ---------------------------------------------------------------------------
+
+_REQUIRED_VERDICT_KEYS = {"safe", "risk_label", "model_used", "confidence"}
+
+
+def _assert_contract(response) -> None:
+    """Assert the full frontend-facing ChatResponse contract."""
+    assert isinstance(response.reply, str), "reply must be str"
+    assert response.reply != "", "reply must be non-empty"
+    assert isinstance(response.tool_calls, list), "tool_calls must be list"
+    assert isinstance(response.sources, list), "sources must be list"
+    assert isinstance(response.guardian_verdict, dict), "guardian_verdict must be dict"
+    assert _REQUIRED_VERDICT_KEYS.issubset(response.guardian_verdict.keys()), (
+        f"guardian_verdict missing keys: "
+        f"{_REQUIRED_VERDICT_KEYS - response.guardian_verdict.keys()}"
+    )
+    assert isinstance(response.offline_mode, bool), "offline_mode must be bool"
+
+
+@pytest.mark.asyncio
+async def test_response_contract_offline_path(fake_job_store):
+    """
+    T10 — Offline path (no API key) returns a ChatResponse satisfying the
+    full frontend-facing contract.  Regression: reply must be 'reply' not
+    something else (the white-screen bug was caused by the field being absent).
+    """
+    from falsifier.api.chat.session import run_turn
+
+    job_id, _, _ = fake_job_store
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+        response = await run_turn(
+            job_id=job_id,
+            message="What are the vetting results?",
+            history=[],
+        )
+
+    _assert_contract(response)
+    assert response.offline_mode is True
+    assert response.guardian_verdict["safe"] is True
+
+
+@pytest.mark.asyncio
+async def test_response_contract_offline_no_job():
+    """
+    T10b — Offline path with no job_id also satisfies the contract.
+    """
+    from falsifier.api.chat.session import run_turn
+
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+        response = await run_turn(
+            job_id=None,
+            message="Explain what the pipeline does.",
+            history=[],
+        )
+
+    _assert_contract(response)
+    assert response.offline_mode is True
+
+
+@pytest.mark.asyncio
+async def test_response_contract_openai_mocked(fake_job_store):
+    """
+    T9 — Normal (OpenAI-backed) path with mocked HTTP returns a ChatResponse
+    satisfying the full frontend-facing contract.
+    """
+    from falsifier.api.chat.session import run_turn
+    import json as _json
+
+    job_id, tce, _ = fake_job_store
+
+    _FAKE_OPENAI_RESPONSE = {
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {
+                "role": "assistant",
+                "content": (
+                    "The disposition is candidate "
+                    "[source: get_vetting_results(test-job-001, KIC-11904151-00)]."
+                ),
+                "tool_calls": None,
+            },
+        }]
+    }
+
+    class _FakeHTTPResponse:
+        def read(self):
+            return _json.dumps(_FAKE_OPENAI_RESPONSE).encode()
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-fake-key-for-test"}):
+        with patch("urllib.request.urlopen", return_value=_FakeHTTPResponse()):
+            response = await run_turn(
+                job_id=job_id,
+                message="What is the disposition?",
+                history=[],
+            )
+
+    _assert_contract(response)
+    assert response.offline_mode is False
+    # The content must be a non-empty string (the original white-screen bug)
+    assert len(response.reply) > 0
+
+
+@pytest.mark.asyncio
+async def test_response_contract_guardian_blocked(fake_job_store):
+    """
+    T11 — When the Guardian blocks a response, ChatResponse still satisfies
+    the full contract: reply is a str, safe=False, risk_label is set.
+    """
+    from falsifier.api.chat.session import run_turn
+    import json as _json
+
+    job_id, _, _ = fake_job_store
+
+    # Craft a fake OpenAI reply that the heuristic Guardian will block
+    # (biosignature claim — unconditionally blocked per locked claim).
+    _BAD_OPENAI_RESPONSE = {
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {
+                "role": "assistant",
+                "content": "This planet shows potential biosignature gases in its atmosphere.",
+                "tool_calls": None,
+            },
+        }]
+    }
+
+    class _FakeHTTPResponse:
+        def read(self):
+            return _json.dumps(_BAD_OPENAI_RESPONSE).encode()
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-fake-key-for-test"}):
+        with patch("urllib.request.urlopen", return_value=_FakeHTTPResponse()):
+            response = await run_turn(
+                job_id=job_id,
+                message="Tell me about biosignatures.",
+                history=[],
+            )
+
+    _assert_contract(response)
+    assert response.offline_mode is False
+    # Guardian must have blocked this
+    assert response.guardian_verdict["safe"] is False
+    assert response.guardian_verdict["risk_label"] == "biosignature_claim"
+    # reply must still be a non-empty str (the screened replacement message)
+    assert len(response.reply) > 0
+    assert "[Output blocked" in response.reply
+
+
+@pytest.mark.no_network
+def test_response_contract_reply_never_none():
+    """
+    T12 — reply is always a str across all paths; the field 'content'
+    (the frontend ChatMessage key) must NEVER appear in a ChatResponse — only
+    'reply'.  This guards against the field-name mismatch that caused the
+    white-screen regression.
+    """
+    from falsifier.api.chat.session import ChatResponse
+    from dataclasses import fields as dc_fields
+
+    field_names = {f.name for f in dc_fields(ChatResponse)}
+    assert "reply" in field_names, "ChatResponse must have a 'reply' field"
+    assert "content" not in field_names, (
+        "ChatResponse must NOT have a 'content' field — "
+        "the frontend maps 'reply' → 'content'; adding 'content' here would "
+        "shadow it and re-introduce the white-screen bug."
+    )

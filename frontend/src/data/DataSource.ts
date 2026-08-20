@@ -193,8 +193,18 @@ export class ApiDataSource implements DataSource {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ job_id, message, history }),
     })
-    if (!res.ok) throw new Error('POST /chat failed')
-    return res.json()
+    if (!res.ok) throw new Error(`POST /chat failed: ${res.status}`)
+    // The API returns { reply, tool_calls, sources, guardian_verdict, offline_mode }.
+    // Map `reply` → `content` to match the ChatMessage contract.
+    const data = await res.json()
+    return {
+      role: 'assistant',
+      content: typeof data.reply === 'string' ? data.reply : '',
+      tool_calls: data.tool_calls ?? [],
+      sources: data.sources ?? [],
+      guardian_verdict: data.guardian_verdict ?? null,
+      offline_mode: data.offline_mode ?? false,
+    }
   }
 
   async getChatFixture(): Promise<ChatFixture> {

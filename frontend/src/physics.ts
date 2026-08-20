@@ -135,3 +135,39 @@ export function orbitalAngularVelocity(period_days: number, playFactor = 365.25)
 export function inclinationToRotation(inclination_deg: number): number {
   return (inclination_deg * Math.PI) / 180
 }
+
+/**
+ * Host-star sphere radius in Three.js scene units.
+ * Scaled proportionally to stellar radius so the visual changes when
+ * stellar_params change between jobs.  Clamped for scene legibility.
+ *
+ * @param r_star_rsun  host star radius (Rsun) — from stellar_params
+ */
+export function starSceneSize(
+  r_star_rsun: number,
+  { minSize = 0.08, maxSize = 0.40 } = {},
+): number {
+  // Reference: 1 Rsun → 0.18 scene units (matching the previous constant)
+  const raw = r_star_rsun * 0.18
+  return Math.max(minSize, Math.min(maxSize, raw))
+}
+
+/**
+ * Host-star sphere colour as a hex string, derived from stellar Teff.
+ * Follows a simplified blackbody colour ramp: cool red/orange → solar
+ * yellow → blue-white for hot stars.  For visual display only.
+ *
+ * @param teff_K  host star effective temperature (K) — from stellar_params
+ */
+export function starColor(teff_K: number): string {
+  // Map Teff range [2000 K (M-dwarf) … 30 000 K (O-type)] to [0, 1]
+  const t = Math.max(0, Math.min(1, (teff_K - 2000) / 28000))
+  // Red channel: peaks at mid-range (solar-type), falls at hot blue-white end
+  const r = Math.round(t < 0.5 ? 200 + t * 110 : 255 - (t - 0.5) * 400)
+  // Green channel: low at cool end, peaks near solar, fades at very hot
+  const g = Math.round(t < 0.3 ? t * 500 : t < 0.6 ? 150 - (t - 0.3) * 100 : 120 + (t - 0.6) * 200)
+  // Blue channel: negligible at cool end, rises steeply for hot stars
+  const b = Math.round(t < 0.4 ? 0 : (t - 0.4) * 425)
+  const clamp = (v: number) => Math.max(0, Math.min(255, v))
+  return `#${clamp(r).toString(16).padStart(2, '0')}${clamp(g).toString(16).padStart(2, '0')}${clamp(b).toString(16).padStart(2, '0')}`
+}

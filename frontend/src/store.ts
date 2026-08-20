@@ -50,7 +50,7 @@ interface AppState {
 
   // Chat history (per screen session)
   chatHistory: ChatMessage[]
-  setChatHistory: (msgs: ChatMessage[]) => void
+  setChatHistory: (msgs: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void
 
   // Actions
   submitJob: (targetId: string, mission: string, cadence: string) => Promise<void>
@@ -103,7 +103,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   stageEvents: [],
   chatHistory: [],
-  setChatHistory: (msgs) => set({ chatHistory: msgs }),
+  setChatHistory: (msgs) =>
+    typeof msgs === 'function'
+      ? set((s) => ({ chatHistory: (msgs as (prev: ChatMessage[]) => ChatMessage[])(s.chatHistory) }))
+      : set({ chatHistory: msgs }),
 
   provenance: null,
 

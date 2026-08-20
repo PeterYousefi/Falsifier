@@ -21,6 +21,8 @@ import {
   auToScene,
   orbitalAngularVelocity,
   inclinationToRotation,
+  starSceneSize,
+  starColor,
 } from '../physics'
 import type { VetResult } from '../data/types'
 import { DispoChip } from './CandidateDetail'
@@ -29,6 +31,19 @@ import { DispoChip } from './CandidateDetail'
 // These constants are fallback display values, not scientific claims.
 const STAR_SCENE_SIZE_DEFAULT = 0.18
 const HZ_OPACITY_DEFAULT      = 0.09
+
+// ── Deterministic phase seed ──────────────────────────────────────────────
+// Maps a tce_id string to a stable phase offset in [0, 2π).
+// This replaces Math.random() in Planet.phase so the scene is reproducible
+// and correctly rebuilds when the active job_id changes.
+function _hashPhase(tce_id: string): number {
+  let h = 0
+  for (let i = 0; i < tce_id.length; i++) {
+    h = (Math.imul(31, h) + tce_id.charCodeAt(i)) | 0
+  }
+  // Map unsigned 32-bit range to [0, 2π)
+  return ((h >>> 0) / 0xFFFFFFFF) * Math.PI * 2
+}
 
 // ── Example targets across missions ─────────────────────────────────────
 const EXAMPLE_TARGETS = [
@@ -96,7 +111,11 @@ function Planet({
   const size    = radiusToSceneSize(rearth)
   const omega   = orbitalAngularVelocity(period)
   const inclRad = inclinationToRotation(inclDeg)
-  const phase   = useMemo(() => Math.random() * Math.PI * 2, [vet.tce_id])
+  // Deterministic phase offset derived from tce_id so the scene is reproducible
+  // and rebuilds correctly when a new job produces a different tce_id.
+  // Using Math.random() here was a bug: same tce_id → stale phase; different
+  // job, same tce_id → still stale.  The hash gives stable, unique offsets.
+  const phase   = useMemo(() => _hashPhase(vet.tce_id), [vet.tce_id])
 
   useFrame(({ clock }) => {
     if (pivotRef.current)
@@ -157,6 +176,9 @@ function SceneContent({ vets, stellarTeff, stellarRadius, lumLsun }: {
   const hz = useMemo(() => habitableZone(stellarTeff, lumLsun), [stellarTeff, lumLsun])
   const hzIn  = auToScene(hz.inner)
   const hzOut = auToScene(hz.outer)
+  // Star visual properties derived from stellar_params — not hardcoded.
+  const starSize  = useMemo(() => starSceneSize(stellarRadius), [stellarRadius])
+  const starHex   = useMemo(() => starColor(stellarTeff), [stellarTeff])
 
   return (
     <>
@@ -164,10 +186,10 @@ function SceneContent({ vets, stellarTeff, stellarRadius, lumLsun }: {
       <pointLight position={[0, 0, 0]} intensity={2.0} distance={20} decay={2} />
       <directionalLight position={[5, 5, 5]} intensity={0.4} />
       <mesh>
-        <sphereGeometry args={[STAR_SCENE_SIZE_DEFAULT, 24, 24]} />
-        <meshStandardMaterial color="#C8963E" emissive="#C8963E" emissiveIntensity={1.2} />
+        <sphereGeometry args={[starSize, 24, 24]} />
+        <meshStandardMaterial color={starHex} emissive={starHex} emissiveIntensity={1.2} />
       </mesh>
-      <Text position={[0, STAR_SCENE_SIZE_DEFAULT + 0.07, 0]} fontSize={0.06} color="#5A5850" anchorX="center">
+      <Text position={[0, starSize + 0.07, 0]} fontSize={0.06} color="#5A5850" anchorX="center">
         {'host star'}
       </Text>
       <HZRing inner={hzIn} outer={hzOut} />
@@ -550,6 +572,13 @@ function OrbitalFigure() {
   const { report, jobStatus } = useStore()
   const [use3D, setUse3D] = useState(true)
 
+  // Reset view toggle to 3D whenever a new job report arrives so the orbital
+  // scene is always shown first (fixes: user toggled to list view on job A,
+  // then job B completed — they would see job B's data in list view only).
+  useEffect(() => {
+    setUse3D(true)
+  }, [report?.job_id])
+
   const vets          = report?.vet ?? []
   const stellar       = (report as any)?.stellar_params
   const stellarTeff   = stellar?.teff?.values?.[0]   ?? 5778
@@ -581,7 +610,11 @@ function OrbitalFigure() {
         <figure className="figure-inset">
           <hr className="figure-inset-rule-top" />
           <div className="figure-inset-plot" style={{ height: 320, position: 'relative' }}>
+            {/* key on Canvas forces full teardown + remount when job changes,
+                ensuring Three.js internal geometry/material state is rebuilt
+                from the new report rather than mutating the old scene objects. */}
             <Canvas
+              key={report.job_id}
               camera={{ position: [0, 3, 8], fov: 45, near: 0.01, far: 200 }}
               gl={{ antialias: true, alpha: false }}
               style={{ background: '#F9F6EE', width: '100%', height: '100%' }}

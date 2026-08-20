@@ -13,9 +13,7 @@
     "jsx": "react-jsx",
     "strict": false,
     "allowJs": true,
-    "checkJs": false,
-    "baseUrl": ".",
-    "paths": {}
+    "checkJs": false
   },
   "include": ["src"]
 }

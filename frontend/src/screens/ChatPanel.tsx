@@ -5,10 +5,50 @@
  * Monospace artifact-source chips beneath each answer.
  * Suggested prompts as buttons. Model may say "can't distinguish" — correct answer.
  */
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, Component, type ReactNode, type ErrorInfo } from 'react'
 import { useStore } from '../store'
 import { dataSource } from '../data/DataSource'
 import type { ChatMessage } from '../data/types'
+
+// ── Error Boundary ─────────────────────────────────────────────────────────
+interface ErrorBoundaryState { hasError: boolean; message: string }
+
+class ChatErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false, message: '' }
+  }
+
+  static getDerivedStateFromError(err: unknown): ErrorBoundaryState {
+    const message = err instanceof Error ? err.message : String(err)
+    return { hasError: true, message }
+  }
+
+  componentDidCatch(err: Error, info: ErrorInfo) {
+    // Log to console so developers can diagnose the failure.
+    console.error('[ChatPanel] Uncaught render error:', err, info.componentStack)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="screen" style={{ padding: '32px', color: 'var(--fail, #8b1a1a)' }}>
+          <strong>Chat panel error</strong>
+          <p style={{ marginTop: 8, fontSize: 13, fontFamily: 'var(--font-mono, monospace)' }}>
+            {this.state.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            style={{ marginTop: 12 }}
+            onClick={() => this.setState({ hasError: false, message: '' })}
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const SUGGESTED_PROMPTS = [
   'What would settle it?',
@@ -66,7 +106,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           ))}
         </div>
       )}
-      {msg.guardian_verdict && !msg.guardian_verdict.safe && (
+      {msg.guardian_verdict && msg.guardian_verdict.safe === false && (
         <div style={{
           marginTop: 6, padding: '4px 8px', background: 'var(--fail-dim)',
           border: '1px solid rgba(139,26,26,0.2)', borderRadius: 'var(--r)',
@@ -127,6 +167,7 @@ export default function ChatPanel() {
   }
 
   return (
+    <ChatErrorBoundary>
     <div className="screen chat-layout" style={{ minHeight: 0 }}>
       {/* Header strip with article dateline */}
       <div style={{
@@ -201,5 +242,6 @@ export default function ChatPanel() {
         </button>
       </div>
     </div>
+    </ChatErrorBoundary>
   )
 }

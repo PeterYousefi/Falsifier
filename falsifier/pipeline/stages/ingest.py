@@ -159,6 +159,22 @@ def run_ingest(
     host_star_id = normalise_target_id(ingest_input.target_id)
     provenance_records: list[DatasetProvenance] = []
 
+    # Trace-level breadcrumb: confirms exactly which target is being
+    # requested and which cache key will be used.  Visible at DEBUG level;
+    # safe to leave in production (no network call happens here).
+    mast_cache_key = _mast_cache_query(ingest_input)
+    log.info(
+        "run_ingest: target=%r  normalised=%r  mission=%s  cadence=%s  "
+        "sectors=%s  cache_key=%s  run_id=%s",
+        ingest_input.target_id,
+        host_star_id,
+        ingest_input.mission,
+        ingest_input.cadence,
+        ingest_input.sectors,
+        mast_cache_key,
+        ingest_input.pipeline_run_id,
+    )
+
     # ------------------------------------------------------------------
     # 1. Light curves
     # ------------------------------------------------------------------
@@ -321,7 +337,16 @@ def _fetch_lightcurves(
             f"Run ingest with offline=False first to populate the cache."
         )
 
-    log.info("Fetching from MAST: %s", inp.target_id)
+    log.info(
+        "_fetch_lightcurves: cache miss — requesting MAST  "
+        "target=%r  mission=%s  author=%s  cadence=%s  sectors=%s  cache_key=%s",
+        inp.target_id,
+        inp.mission,
+        inp.author,
+        inp.cadence,
+        inp.sectors,
+        cache_query,
+    )
     segments_and_meta = fetch_lightcurve(
         inp.target_id,
         mission=inp.mission,
@@ -336,6 +361,13 @@ def _fetch_lightcurves(
             endpoint=MAST_API_URL,
             query=inp.target_id,
         )
+
+    log.info(
+        "_fetch_lightcurves: MAST fetch succeeded  "
+        "target=%r  n_segments=%d",
+        inp.target_id,
+        len(segments_and_meta),
+    )
 
     # Serialize all segments into one combined FITS for caching
     combined_fits = _segments_to_fits_bytes(
