@@ -52,8 +52,17 @@ function _hashPhase(tce_id: string): number {
 }
 
 // ── Example targets across missions ─────────────────────────────────────
+// Aliases that the user may type and that should resolve to the fixture target.
+// Normalised with _normAlias before comparison (lower-case, collapse spaces).
+const FIXTURE_TARGET_ALIASES = ['kepler-10', 'kepler 10', 'kic11904151', 'kic 11904151']
+function _normAlias(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+/** Canonical fixture display name shown to the user. */
+const FIXTURE_DISPLAY_NAME = 'Kepler-10 (KIC 11904151)'
+
 const EXAMPLE_TARGETS = [
-  { id: 'KIC 11904151', mission: 'Kepler',  cadence: 'long',  label: 'Kepler-10b host',            gloss: 'KIC 11904151 — a star in NASA\'s Kepler Input Catalogue, hosting the confirmed planet Kepler-10b' },
+  { id: 'KIC 11904151', mission: 'Kepler',  cadence: 'long',  label: 'Kepler-10 (KIC 11904151)', gloss: 'Kepler-10 (KIC 11904151) — a star in NASA\'s Kepler Input Catalogue, hosting the confirmed planet Kepler-10b' },
   { id: 'TIC 150428135', mission: 'TESS',   cadence: 'long',  label: 'TOI-700 (TESS)',              gloss: 'TOI-700 — a star observed by NASA\'s TESS satellite, hosting planet candidates in its habitable zone' },
   { id: 'TIC 200322593', mission: 'TESS',   cadence: 'long',  label: 'TRAPPIST-1 (TESS)',          gloss: 'TRAPPIST-1 — an ultra-cool dwarf star hosting seven confirmed planets, observed by NASA\'s TESS satellite' },
   { id: 'KIC 6965293',   mission: 'Kepler', cadence: 'long',  label: 'KIC 6965293 (Kepler EB)',    gloss: 'KIC 6965293 — a star in the Kepler Input Catalogue; its signal is an eclipsing binary (not a planet)' },
@@ -307,19 +316,23 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
     e.preventDefault()
     const id = targetId.trim()
     if (!id) return
-    if (IS_DEMO_MODE && id !== FIXTURE_TARGET_ID) {
+    // Resolve known aliases to the canonical fixture target ID.
+    const resolvedId = IS_DEMO_MODE && FIXTURE_TARGET_ALIASES.includes(_normAlias(id))
+      ? FIXTURE_TARGET_ID
+      : id
+    if (IS_DEMO_MODE && resolvedId !== FIXTURE_TARGET_ID) {
       // In demo mode there is no backend. Running any target other than the
       // committed fixture would silently return KIC 11904151 data, which is
       // misleading. Show an inline notice and do not run.
       setDemoNotice(
         `Demo mode — live catalogue lookup requires the pipeline backend. ` +
-        `Only ${FIXTURE_TARGET_ID} has a committed fixture. ` +
-        `Use "Run the Kepler-10b example →" to see the full pipeline output.`
+        `Only ${FIXTURE_DISPLAY_NAME} has a committed fixture. ` +
+        `Use "Run the ${FIXTURE_DISPLAY_NAME} example →" to see the full pipeline output.`
       )
       return
     }
     setDemoNotice(null)
-    submitJob(id, mission, cadence)
+    submitJob(resolvedId, mission, cadence)
   }, [targetId, mission, cadence, submitJob])
 
   return (
@@ -332,7 +345,7 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
         <input
           value={targetId}
           onChange={(e) => { setTargetId(e.target.value); setDemoNotice(null) }}
-          placeholder={IS_DEMO_MODE ? 'Demo mode — only KIC 11904151 available' : 'e.g. KIC 11904151 · TIC 150428135 · TIC 200322593'}
+          placeholder={IS_DEMO_MODE ? `Demo mode — only ${FIXTURE_DISPLAY_NAME} available` : 'e.g. KIC 11904151 · TIC 150428135 · TIC 200322593'}
           disabled={busy}
           aria-label="Target catalogue identifier"
           style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
@@ -523,7 +536,7 @@ function LandingContent() {
           DEMO MODE — NO BACKEND DEPLOYED
         </strong>
         <br />
-        All runs replay the committed Kepler-10b fixture (KIC 11904151). Entering any catalogue ID
+        All runs replay the committed {FIXTURE_DISPLAY_NAME} fixture. Entering any catalogue ID
         produces the same fixture result — this is by design for a frontend-only deployment.
         The pipeline backend is not required to explore every screen.
       </div>
@@ -534,12 +547,12 @@ function LandingContent() {
             className="btn-primary"
             onClick={runExample}
             disabled={busy}
-            aria-label="Run the Kepler-10b example"
+            aria-label={`Run the ${FIXTURE_DISPLAY_NAME} example`}
             style={{ fontSize: 16, padding: '13px 28px' }}
           >
             {busy
               ? <><span className="spinner" /> Running…</>
-              : 'Run the Kepler-10b example →'
+              : `Run the ${FIXTURE_DISPLAY_NAME} example →`
             }
           </button>
           <span style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', marginLeft: 14 }}>
