@@ -65,16 +65,25 @@ type ParsedPreview = {
   columns: string[]
   rows: Record<string, string>[]
   n_rows: number
+  comment_lines: string[]
 }
 
 async function parseCsv(file: File): Promise<ParsedPreview | { error: string }> {
   const text = await file.text()
-  const lines = text.split('\n').filter((l) => l.trim().length > 0)
-  if (lines.length < 2) return { error: 'File must have at least one header row and one data row.' }
-  const sep = lines[0].includes('\t') ? '\t' : ','
-  const cols = lines[0].split(sep).map((c) => c.trim().replace(/^"|"$/g, ''))
+  const allLines = text.split('\n').filter((l) => l.trim().length > 0)
+
+  // Astronomical CSVs commonly begin with # comment lines (FITS provenance,
+  // column descriptions, etc.). Strip them before delimiter detection and
+  // preserve them as metadata — never treat a comment as the header row.
+  const commentLines = allLines.filter((l) => l.trimStart().startsWith('#'))
+  const dataLines    = allLines.filter((l) => !l.trimStart().startsWith('#'))
+
+  if (dataLines.length < 2) return { error: 'File must have at least one header row and one data row.' }
+
+  const sep = dataLines[0].includes('\t') ? '\t' : ','
+  const cols = dataLines[0].split(sep).map((c) => c.trim().replace(/^"|"$/g, ''))
   if (cols.length < 2) return { error: `Could not detect columns. Expected comma or tab delimiters. Found ${cols.length} column(s).` }
-  const rows = lines.slice(1, 11).map((l) => {
+  const rows = dataLines.slice(1, 11).map((l) => {
     const vals = l.split(sep).map((v) => v.trim().replace(/^"|"$/g, ''))
     const row: Record<string, string> = {}
     cols.forEach((c, i) => { row[c] = vals[i] ?? '' })
@@ -85,7 +94,7 @@ async function parseCsv(file: File): Promise<ParsedPreview | { error: string }> 
       return { error: `Column "${col}" contains non-numeric value "${val}" in the first data row. This upload expects a numeric light curve table.` }
     }
   }
-  return { columns: cols, rows, n_rows: lines.length - 1 }
+  return { columns: cols, rows, n_rows: dataLines.length - 1, comment_lines: commentLines }
 }
 
 // ── Preview plot (SVG) ─────────────────────────────────────────────────────
@@ -260,6 +269,7 @@ export default function UploadFlow() {
                 {preview && (
                   <span style={{ fontFamily: 'var(--font-mono)', marginLeft: 8, color: 'var(--np-muted)' }}>
                     · {preview.n_rows.toLocaleString()} rows · {preview.columns.length} columns
+                    {preview.comment_lines.length > 0 && ` · ${preview.comment_lines.length} comment line${preview.comment_lines.length === 1 ? '' : 's'} skipped`}
                   </span>
                 )}
               </div>

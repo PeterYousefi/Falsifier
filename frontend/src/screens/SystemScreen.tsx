@@ -6,7 +6,7 @@
  * Orbital 3D view as a bordered figure-inset with caption.
  * All visual properties driven from data layer — no scientific literals.
  */
-import React, { useRef, useMemo, useState, useEffect } from 'react'
+import React, { useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Line, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -26,6 +26,12 @@ import {
 } from '../physics'
 import type { VetResult } from '../data/types'
 import { DispoChip } from './CandidateDetail'
+import { dataSource, FixtureDataSource } from '../data/DataSource'
+
+/** True when running against committed fixtures (no live backend). */
+const IS_DEMO_MODE = dataSource instanceof FixtureDataSource
+/** The one fixture target that demo mode can actually show results for. */
+const FIXTURE_TARGET_ID = 'KIC 11904151'
 
 // Host-star visual defaults when stellar_params absent.
 // These constants are fallback display values, not scientific claims.
@@ -288,6 +294,7 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
   const { targetId, setTargetId, isSubmitting, jobStatus, submitJob } = useStore()
   const [mission, setMission] = useState(defaultMission ?? 'Kepler')
   const [cadence, setCadence] = useState(defaultCadence ?? 'long')
+  const [demoNotice, setDemoNotice] = useState<string | null>(null)
   const busy = isSubmitting || jobStatus === 'running' || jobStatus === 'queued'
 
   useEffect(() => {
@@ -296,36 +303,67 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
     if (defaultCadence) setCadence(defaultCadence)
   }, [defaultTarget, defaultMission, defaultCadence])
 
+  const handleSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    const id = targetId.trim()
+    if (!id) return
+    if (IS_DEMO_MODE && id !== FIXTURE_TARGET_ID) {
+      // In demo mode there is no backend. Running any target other than the
+      // committed fixture would silently return KIC 11904151 data, which is
+      // misleading. Show an inline notice and do not run.
+      setDemoNotice(
+        `Demo mode — live catalogue lookup requires the pipeline backend. ` +
+        `Only ${FIXTURE_TARGET_ID} has a committed fixture. ` +
+        `Use "Run the Kepler-10b example →" to see the full pipeline output.`
+      )
+      return
+    }
+    setDemoNotice(null)
+    submitJob(id, mission, cadence)
+  }, [targetId, mission, cadence, submitJob])
+
   return (
-    <form
-      className="search-row"
-      style={{ margin: '16px 0' }}
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (targetId.trim()) submitJob(targetId.trim(), mission, cadence)
-      }}
-    >
-      <input
-        value={targetId}
-        onChange={(e) => setTargetId(e.target.value)}
-        placeholder="e.g. KIC 11904151 · TIC 150428135 · TIC 200322593"
-        disabled={busy}
-        aria-label="Target catalogue identifier"
-        style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
-      />
-      <select value={mission} onChange={(e) => setMission(e.target.value)} disabled={busy} aria-label="Mission">
-        <option>Kepler</option>
-        <option>K2</option>
-        <option>TESS</option>
-      </select>
-      <select value={cadence} onChange={(e) => setCadence(e.target.value)} disabled={busy} aria-label="Cadence">
-        <option value="long">long cadence</option>
-        <option value="short">short cadence</option>
-      </select>
-      <button type="submit" className="btn-primary" disabled={busy || !targetId.trim()}>
-        {busy ? <><span className="spinner" aria-label="Running" /> Running…</> : 'Run'}
-      </button>
-    </form>
+    <div>
+      <form
+        className="search-row"
+        style={{ margin: '16px 0' }}
+        onSubmit={handleSubmit}
+      >
+        <input
+          value={targetId}
+          onChange={(e) => { setTargetId(e.target.value); setDemoNotice(null) }}
+          placeholder={IS_DEMO_MODE ? 'Demo mode — only KIC 11904151 available' : 'e.g. KIC 11904151 · TIC 150428135 · TIC 200322593'}
+          disabled={busy}
+          aria-label="Target catalogue identifier"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
+        />
+        <select value={mission} onChange={(e) => setMission(e.target.value)} disabled={busy || IS_DEMO_MODE} aria-label="Mission">
+          <option>Kepler</option>
+          <option>K2</option>
+          <option>TESS</option>
+        </select>
+        <select value={cadence} onChange={(e) => setCadence(e.target.value)} disabled={busy || IS_DEMO_MODE} aria-label="Cadence">
+          <option value="long">long cadence</option>
+          <option value="short">short cadence</option>
+        </select>
+        <button type="submit" className="btn-primary" disabled={busy || !targetId.trim()}>
+          {busy ? <><span className="spinner" aria-label="Running" /> Running…</> : 'Run'}
+        </button>
+      </form>
+      {demoNotice && (
+        <div role="alert" aria-live="assertive" style={{
+          marginTop: 4, padding: '8px 12px',
+          background: 'var(--np-surface)',
+          border: '1px solid var(--np-rule)',
+          borderLeft: '3px solid var(--warn)',
+          fontFamily: 'var(--font-serif)', fontSize: 13,
+          color: 'var(--np-muted)', lineHeight: 1.55,
+        }}>
+          <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--warn)', letterSpacing: '0.06em' }}>DEMO MODE</strong>
+          {' '}{demoNotice}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -519,7 +557,11 @@ function LandingContent() {
         <div>
           <div className="section-label" style={{ marginBottom: 8 }}>Example targets</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {EXAMPLE_TARGETS.map((t, i) => (
+            {EXAMPLE_TARGETS
+              // In demo mode only show the fixture target — others silently
+              // return the same fixture data, which is more confusing than helpful.
+              .filter((t) => !IS_DEMO_MODE || t.id === FIXTURE_TARGET_ID)
+              .map((t, i) => (
               <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   className="target-chip"

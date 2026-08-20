@@ -50,12 +50,15 @@ class ChatErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundary
   }
 }
 
+// Prompts that have committed offline answers assembled from fixture artifacts.
+// "Refit at half the period" is omitted — it requires the pipeline to actually
+// run a new search and has no committed fixture answer. Shipping a stub for it
+// is worse than not shipping the button at all.
 const SUGGESTED_PROMPTS = [
-  'What would settle it?',
-  'Refit at half the period',
   'Why was this classified as a candidate?',
   'What does the stellar density test show?',
   'Could the data distinguish this from an eclipsing binary?',
+  'What would settle it?',
 ]
 
 // ── Source chip ────────────────────────────────────────────────────────────
