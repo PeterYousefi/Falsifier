@@ -38,6 +38,20 @@ export interface VettingTestResult {
 export interface PhasedLC {
   phase: number[]
   flux: number[]
+  /** Secondary (EB companion) flux array — present only for EB false positives */
+  flux_secondary?: number[]
+  /** Primary eclipse depth in ppm — present only for EB false positives */
+  primary_depth_ppm?: number
+  /** Secondary eclipse depth in ppm — present only for EB false positives */
+  secondary_depth_ppm?: number
+}
+
+export interface VettingTestResultSummary {
+  test_name: string
+  outcome: string
+  metric_value: number | null
+  metric_unit: string | null
+  reason: string
 }
 
 export interface VetResult {
@@ -46,12 +60,12 @@ export interface VetResult {
   triggering_test: VettingTestName | null
   triggering_reason: string | null
   wall_time_seconds: number
-  test_results?: VettingTestResult[]
-  period_days?: number
-  depth_ppm?: number
-  duration_hours?: number
-  epoch_bkjd?: number
-  inclination_deg?: number
+  test_results?: VettingTestResultSummary[]
+  period_days?: number | null
+  depth_ppm?: number | null
+  duration_hours?: number | null
+  epoch_bkjd?: number | null
+  inclination_deg?: number | null
   phased_lc?: PhasedLC | null
 }
 
@@ -86,10 +100,25 @@ export interface SearchResult {
   tce_ids: string[]
 }
 
-export interface StellarParams {
+/** Legacy shape from fixture JSON (nested teff.values[], radius.values[]) */
+export interface StellarParamsLegacy {
   teff: UnitedArray
   radius: UnitedArray
   luminosity_lsun: number
+}
+
+/** New flat shape from API (StellarParamsSummary in models.py) */
+export interface StellarParamsSummary {
+  teff_K: number
+  radius_rsun: number
+  luminosity_lsun: number | null
+}
+
+export type StellarParams = StellarParamsLegacy | StellarParamsSummary
+
+/** Type guard: new flat shape */
+export function isStellarParamsSummary(sp: StellarParams): sp is StellarParamsSummary {
+  return 'teff_K' in sp
 }
 
 export interface DetectionReport {

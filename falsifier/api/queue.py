@@ -55,8 +55,11 @@ from .models import (
     JobRecord,
     JobRequest,
     JobStatus,
+    PhasedLC,
     SearchResult,
     StageEvent,
+    StellarParamsSummary,
+    VettingTestResultSummary,
     VetResult,
 )
 from ..pipeline.contracts.ingest import IngestInput
@@ -574,16 +577,43 @@ def _build_report(
             tce_ids=[t.tce_id for t in search_out.tces],
         )
 
-    vet_rs = [
-        VetResult(
+    # Build a tce_id → TCE lookup for populating VetResult orbital params
+    tce_by_id: dict = {}
+    if search_out is not None:
+        for t in search_out.tces:
+            tce_by_id[t.tce_id] = t
+
+    def _vet_result(vo) -> VetResult:
+        tce = tce_by_id.get(vo.tce_id)
+        return VetResult(
             tce_id=vo.tce_id,
             disposition=vo.disposition,
             triggering_test=vo.triggering_test,
             triggering_reason=vo.triggering_reason,
             wall_time_seconds=vo.manifest.wall_time_seconds,
+            period_days=tce.period.values[0] if tce else None,
+            depth_ppm=tce.depth.values[0] if tce else None,
+            duration_hours=tce.duration.values[0] if tce else None,
+            epoch_bkjd=tce.epoch.values[0] if tce else None,
+            # inclination is not computed in the search stage; left None so
+            # the 3-D viewer defaults to near-edge-on geometry visually.
+            inclination_deg=None,
+            test_results=[
+                VettingTestResultSummary(
+                    test_name=tr.test_name,
+                    outcome=tr.outcome,
+                    metric_value=tr.metric_value,
+                    metric_unit=tr.metric_unit,
+                    reason=tr.reason,
+                )
+                for tr in vo.test_results
+            ] if vo.test_results else None,
+            # Phase-folded LC is not yet produced by the stub search/vet stages.
+            # It will be populated once the real TLS stage is wired.
+            phased_lc=None,
         )
-        for vo in vet_outs
-    ]
+
+    vet_rs = [_vet_result(vo) for vo in vet_outs]
 
     classify_rs = [
         ClassifyResult(
@@ -594,6 +624,17 @@ def _build_report(
         )
         for co in classify_outs
     ]
+
+    # Populate stellar_params from ingest_out.stellar_params when available.
+    # The StellarParams contract stores Teff and radius as UnitedArrays.
+    stellar_r: StellarParamsSummary | None = None
+    if ingest_out is not None and ingest_out.stellar_params is not None:
+        sp = ingest_out.stellar_params
+        stellar_r = StellarParamsSummary(
+            teff_K=sp.teff.values[0],
+            radius_rsun=sp.radius.values[0],
+            luminosity_lsun=None,  # not in StellarParams contract yet
+        )
 
     return DetectionReport(
         job_id=job_id,
@@ -606,6 +647,7 @@ def _build_report(
         search=search_r,
         vet=vet_rs,
         classify=classify_rs,
+        stellar_params=stellar_r,
     )
 
 

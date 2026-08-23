@@ -123,8 +123,8 @@
       "Disposition is determined exclusively by the vet stage."
     ],
     "stellar_params": {
-      "teff": { "values": [5627], "unit": "K" },
-      "radius": { "values": [1.065], "unit": "solRad" },
+      "teff_K": 5627,
+      "radius_rsun": 1.065,
       "luminosity_lsun": 1.12
     }
   },

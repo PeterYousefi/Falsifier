@@ -25,6 +25,40 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+
+# ---------------------------------------------------------------------------
+# Shared sub-models
+# ---------------------------------------------------------------------------
+
+class PhasedLC(BaseModel):
+    """Phase-folded light curve arrays for 3-D / chart display."""
+
+    phase: list[float]
+    flux: list[float]
+
+
+class VettingTestResultSummary(BaseModel):
+    """Slimmed test result forwarded to the API layer."""
+
+    test_name: str
+    outcome: str
+    metric_value: float | None = None
+    metric_unit: str | None = None
+    reason: str
+
+
+class StellarParamsSummary(BaseModel):
+    """Subset of ingest StellarParams included in the detection report."""
+
+    teff_K: float
+    """Effective temperature in Kelvin."""
+
+    radius_rsun: float
+    """Stellar radius in solar radii."""
+
+    luminosity_lsun: float | None = None
+    """Luminosity in solar luminosities (optional; absent if not in Gaia DR3)."""
+
 # ---------------------------------------------------------------------------
 # Job lifecycle
 # ---------------------------------------------------------------------------
@@ -115,6 +149,19 @@ class VetResult(BaseModel):
     triggering_reason: str | None
     wall_time_seconds: float
 
+    # TCE orbital parameters — populated from TCE when available
+    period_days: float | None = None
+    depth_ppm: float | None = None
+    duration_hours: float | None = None
+    epoch_bkjd: float | None = None
+    inclination_deg: float | None = None
+
+    # Full test-result list for the 3-D scene branching
+    test_results: list[VettingTestResultSummary] | None = None
+
+    # Phase-folded LC for the synced chart
+    phased_lc: PhasedLC | None = None
+
 
 class ClassifyResult(BaseModel):
     """Per-TCE classify result.  Absent when run_classify=False or xgboost unavailable."""
@@ -145,6 +192,9 @@ class DetectionReport(BaseModel):
     search: SearchResult | None = None
     vet: list[VetResult] = Field(default_factory=list)
     classify: list[ClassifyResult] = Field(default_factory=list)
+
+    stellar_params: StellarParamsSummary | None = None
+    """Host-star parameters included when ingest found Gaia DR3 stellar data."""
 
     non_claims: list[str] = Field(
         default_factory=lambda: [
