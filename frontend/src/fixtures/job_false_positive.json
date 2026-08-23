@@ -1,0 +1,77 @@
+{
+  "job_id": "fixture-job-eb-001",
+  "status": "done",
+  "request": {
+    "target_id": "KIC 6965293",
+    "mission": "Kepler",
+    "author": "Kepler",
+    "cadence": "long",
+    "sectors": null,
+    "run_classify": true
+  },
+  "pipeline_run_id": "fixture-run-eb-2024-01-15",
+  "started_at": "2024-01-15T14:00:00Z",
+  "finished_at": "2024-01-15T14:01:12Z",
+  "report": {
+    "job_id": "fixture-job-eb-001",
+    "target_id": "KIC 6965293",
+    "pipeline_run_id": "fixture-run-eb-2024-01-15",
+    "started_at": "2024-01-15T14:00:00Z",
+    "finished_at": "2024-01-15T14:01:12Z",
+    "ingest": {
+      "host_star_id": "KIC 6965293",
+      "n_segments": 17,
+      "has_stellar_params": false,
+      "code_version": "0.1.0-dev",
+      "input_hash": "b7e3d2a1f0c948b5e3d2a1f0c948b5e3d2a1f0c948b5e3d2a1f0c948b5e3d2",
+      "wall_time_seconds": 11.42
+    },
+    "detrend": {
+      "host_star_id": "KIC 6965293",
+      "n_segments": 17,
+      "detrending_method": "biweight",
+      "wall_time_seconds": 9.03
+    },
+    "search": {
+      "host_star_id": "KIC 6965293",
+      "n_tces": 1,
+      "tls_version": "1.0.31",
+      "wall_time_seconds": 28.61,
+      "tce_ids": ["KIC-6965293-00"]
+    },
+    "vet": [
+      {
+        "tce_id": "KIC-6965293-00",
+        "disposition": "false_positive",
+        "triggering_test": "odd_even_depth",
+        "triggering_reason": "Odd and even transit depths differ by 6.68 (primary 0.1396 vs secondary 0.0209 fractional depth), far exceeding the 2-sigma threshold. Eclipsing binary confirmed.",
+        "wall_time_seconds": 1.97,
+        "test_results": [
+          {
+            "test_name": "odd_even_depth",
+            "outcome": "FAIL",
+            "metric_value": 6.68,
+            "metric_unit": "dimensionless",
+            "reason": "Primary eclipse depth 0.1396 vs secondary 0.0209 — ratio 6.68 far exceeds 2-sigma threshold. Eclipsing binary signature."
+          }
+        ],
+        "period_days": 2.6045,
+        "depth_ppm": 139600,
+        "duration_hours": null,
+        "epoch_bkjd": null,
+        "inclination_deg": null,
+        "phased_lc": null
+      }
+    ],
+    "classify": [],
+    "non_claims": [
+      "This project is not a biosignature detector.",
+      "No exoplanet biosignature has ever been confirmed.",
+      "The classifier probability is a ranking score only, not a verdict.",
+      "Disposition is determined exclusively by the vet stage."
+    ],
+    "stellar_params": null
+  },
+  "error": null,
+  "events": []
+}

@@ -51,20 +51,42 @@ export interface DataSource {
 // ---------------------------------------------------------------------------
 
 import fixtureJob from '../fixtures/job.json'
+import fixtureJobEB from '../fixtures/job_false_positive.json'
 import fixtureProvenance from '../fixtures/provenance.json'
 import fixtureEvents from '../fixtures/events.json'
 import fixtureChat from '../fixtures/chat.json'
 import fixtureTraining from '../fixtures/training.json'
 
+// Maps normalised target IDs to their committed fixtures.
+// Only targets with a committed fixture file are listed here.
+const _FIXTURE_MAP: Record<string, unknown> = {
+  'kic 11904151': fixtureJob,
+  'kic11904151':  fixtureJob,
+  'kepler-10':    fixtureJob,
+  'kepler 10':    fixtureJob,
+  'kic 6965293':  fixtureJobEB,
+  'kic6965293':   fixtureJobEB,
+}
+
+function _jobForTarget(target_id: string): unknown {
+  const key = target_id.trim().toLowerCase()
+  return _FIXTURE_MAP[key] ?? fixtureJob
+}
+
 export class FixtureDataSource implements DataSource {
-  async submitJob(_params: SubmitJobParams): Promise<string> {
+  async submitJob(params: SubmitJobParams): Promise<string> {
     // Simulate async submission
     await _delay(180)
-    return fixtureJob.job_id
+    const job = _jobForTarget(params.target_id) as { job_id: string }
+    return job.job_id
   }
 
-  async getJob(_job_id: string): Promise<JobRecord> {
+  async getJob(job_id: string): Promise<JobRecord> {
     await _delay(80)
+    // Allow lookup by job_id for the EB fixture as well
+    if (job_id === (fixtureJobEB as any).job_id) {
+      return fixtureJobEB as unknown as JobRecord
+    }
     return fixtureJob as unknown as JobRecord
   }
 
@@ -124,8 +146,11 @@ export class FixtureDataSource implements DataSource {
 export class ApiDataSource implements DataSource {
   private base: string
 
-  constructor(base = '') {
+  constructor(base?: string) {
+    // Prefer explicit argument; fall back to the Vite env var baked at build
+    // time; then fall back to empty string (same-origin, for dev-server proxy).
     this.base = base
+      ?? (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_API_BASE_URL ?? '' : '')
   }
 
   async submitJob(params: SubmitJobParams): Promise<string> {
@@ -214,6 +239,11 @@ const _mode = typeof import.meta !== 'undefined'
 
 export const dataSource: DataSource =
   _mode === 'api' ? new ApiDataSource() : new FixtureDataSource()
+
+// ---------------------------------------------------------------------------
+// Re-export for use in store and screens that need a target-aware fixture job
+// ---------------------------------------------------------------------------
+export { _jobForTarget as getFixtureJobForTarget }
 
 // ---------------------------------------------------------------------------
 // Helpers

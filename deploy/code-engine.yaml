@@ -1,0 +1,64 @@
+# IBM Code Engine — Falsifier backend application manifest
+#
+# Deploy with:
+#   ibmcloud ce application create --file deploy/code-engine.yaml
+#
+# Or update an existing application:
+#   ibmcloud ce application update --file deploy/code-engine.yaml
+#
+# Prerequisites:
+#   ibmcloud plugin install code-engine
+#   ibmcloud login
+#   ibmcloud ce project select --name <your-project>
+#
+# After deploying, set the returned application URL as VITE_API_BASE_URL in
+# your Vercel project environment variables, then redeploy the frontend.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: falsifier-backend
+  annotations:
+    # IBM Code Engine annotations — adjust as needed
+    serving.knative.dev/creator: falsifier
+spec:
+  template:
+    metadata:
+      annotations:
+        # Always keep at least one instance alive so the first request is fast.
+        autoscaling.knative.dev/minScale: "1"
+        # Scale down after 10 minutes of inactivity (pipeline jobs take ~60s).
+        autoscaling.knative.dev/window: "600s"
+    spec:
+      containerConcurrency: 4
+      timeoutSeconds: 300
+      containers:
+        - name: falsifier-backend
+          # Replace with your IBM Container Registry image reference, e.g.:
+          #   au.icr.io/your-namespace/falsifier-backend:latest
+          image: YOUR_REGISTRY/falsifier-backend:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          env:
+            # OPENAI_API_KEY: inject from a Code Engine secret, not inline.
+            # ibmcloud ce secret create --name falsifier-secrets \
+            #   --from-literal OPENAI_API_KEY=sk-...
+            # Then reference it:
+            # - name: OPENAI_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: falsifier-secrets
+            #       key: OPENAI_API_KEY
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # CORS: restrict to the Vercel frontend origin in production.
+            # The app.py factory reads this at startup.
+            # - name: ALLOWED_ORIGINS
+            #   value: "https://falsifier.vercel.app"

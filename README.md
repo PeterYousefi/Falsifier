@@ -51,10 +51,23 @@ The script exits 1 on any drift.  It is a required CI gate.
 
 **https://falsifier.vercel.app** — no account or API key required to view.
 
-The live deployment runs the FastAPI backend and Vite/React frontend.
-POST `/jobs` with a KIC or TIC identifier to enqueue a detection run;
-GET `/jobs/{id}/stream` to watch the five pipeline stages complete via
-Server-Sent Events; GET `/provenance` to see which data versions were used.
+> **The hosted build is a frontend-only fixture replay. No pipeline backend is
+> deployed at this URL.** The FastAPI server (`POST /jobs`, SSE streaming,
+> `GET /health`) is not reachable from the Vercel deployment.
+
+The hosted Vite/React frontend replays two committed pipeline artifacts:
+- **KIC 11904151** (Kepler-10b) — a candidate planet that passes all seven vetting tests.
+- **KIC 6965293** — an eclipsing binary that is rejected by the `odd_even_depth` test.
+
+These produce visibly different orbital renders in the Three.js view.
+Any other catalogue identifier entered in the search box will show an inline
+message explaining that the backend is not deployed and linking to local run
+instructions.
+
+To run the full live pipeline against any Kepler/TESS target, run the backend
+locally (see [Install prerequisites](#install-prerequisites) below) and set
+`VITE_DATA_SOURCE=api` and `VITE_API_BASE_URL=http://localhost:8000` in
+`frontend/.env.local`.
 
 ---
 
@@ -676,6 +689,7 @@ unreachable from `scripts/reproduce.sh` is a policy violation (AGENTS.md Rule 6)
 
 | Module | Status | Not in live path because |
 |---|---|---|
+| `falsifier/api/` (entire FastAPI backend) | **Not deployed** — hosted build is frontend-only | The FastAPI process (`uvicorn falsifier.api.app:app`) is not running at falsifier.vercel.app. Vercel serves only the static `dist/` bundle. Running the backend requires a container host (see README → Local run) or a local `uvicorn` process. |
 | `falsifier/pipeline/stages/classify.py` | Wired via API queue; **no valid model committed** | Classifier training is blocked by a train/serve feature skew defect (see `docs/SKIPPED_TESTS.md`); no `artifacts/classify/xgb_classifier.ubj` exists |
 | `falsifier/pipeline/stages/retrieve.py` | **Exploratory** — wired only via `scripts/run_batch.py` | Requires petitRADTRANS + dynesty; not part of the real-time pipeline |
 | `falsifier/pipeline/stages/disequilibrium.py` | **Exploratory** — wired only via `scripts/run_batch.py` | Requires FastChem + VULCAN; not part of the real-time pipeline |

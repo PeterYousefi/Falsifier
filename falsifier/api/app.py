@@ -28,6 +28,7 @@ from AGENTS.md so it is visible in every curl trace and client log:
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
@@ -37,6 +38,20 @@ from .queue import init_queue, shutdown_queue
 from .routes.jobs import router as jobs_router
 from .routes.provenance import router as provenance_router
 from .routes.chat import router as chat_router
+
+# ---------------------------------------------------------------------------
+# CORS origins
+# ---------------------------------------------------------------------------
+# In development (env var unset), allow all origins so local testing works.
+# In production (container on Code Engine), set ALLOWED_ORIGINS to the
+# Vercel frontend URL, e.g.:
+#   ALLOWED_ORIGINS=https://falsifier.vercel.app
+# Multiple origins are comma-separated.
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+_CORS_ORIGINS: list[str] = (
+    ["*"] if _raw_origins.strip() == "*"
+    else [o.strip() for o in _raw_origins.split(",") if o.strip()]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +107,8 @@ def create_app() -> FastAPI:
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_CORS_ORIGINS,
+        allow_credentials=len(_CORS_ORIGINS) > 0 and _CORS_ORIGINS != ["*"],
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )

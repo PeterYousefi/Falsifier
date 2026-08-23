@@ -30,8 +30,10 @@ import { dataSource, FixtureDataSource } from '../data/DataSource'
 
 /** True when running against committed fixtures (no live backend). */
 const IS_DEMO_MODE = dataSource instanceof FixtureDataSource
-/** The one fixture target that demo mode can actually show results for. */
+/** The fixture targets that demo mode can show results for. */
 const FIXTURE_TARGET_ID = 'KIC 11904151'
+/** All target IDs that have a committed fixture and can be replayed. */
+const FIXTURE_TARGET_IDS = new Set(['KIC 11904151', 'KIC 6965293'])
 
 // Host-star visual defaults when stellar_params absent.
 // These constants are fallback display values, not scientific claims.
@@ -55,6 +57,7 @@ function _hashPhase(tce_id: string): number {
 // Aliases that the user may type and that should resolve to the fixture target.
 // Normalised with _normAlias before comparison (lower-case, collapse spaces).
 const FIXTURE_TARGET_ALIASES = ['kepler-10', 'kepler 10', 'kic11904151', 'kic 11904151']
+const FIXTURE_EB_ALIASES = ['kic6965293', 'kic 6965293']
 function _normAlias(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim()
 }
@@ -62,10 +65,10 @@ function _normAlias(s: string): string {
 const FIXTURE_DISPLAY_NAME = 'Kepler-10 (KIC 11904151)'
 
 const EXAMPLE_TARGETS = [
-  { id: 'KIC 11904151', mission: 'Kepler',  cadence: 'long',  label: 'Kepler-10 (KIC 11904151)', gloss: 'Kepler-10 (KIC 11904151) — a star in NASA\'s Kepler Input Catalogue, hosting the confirmed planet Kepler-10b' },
-  { id: 'TIC 150428135', mission: 'TESS',   cadence: 'long',  label: 'TOI-700 (TESS)',              gloss: 'TOI-700 — a star observed by NASA\'s TESS satellite, hosting planet candidates in its habitable zone' },
-  { id: 'TIC 200322593', mission: 'TESS',   cadence: 'long',  label: 'TRAPPIST-1 (TESS)',          gloss: 'TRAPPIST-1 — an ultra-cool dwarf star hosting seven confirmed planets, observed by NASA\'s TESS satellite' },
-  { id: 'KIC 6965293',   mission: 'Kepler', cadence: 'long',  label: 'KIC 6965293 (Kepler EB)',    gloss: 'KIC 6965293 — a star in the Kepler Input Catalogue; its signal is an eclipsing binary (not a planet)' },
+  { id: 'KIC 11904151', mission: 'Kepler',  cadence: 'long',  label: 'Kepler-10 (KIC 11904151)', hasFixture: true, gloss: 'Kepler-10 (KIC 11904151) — a star in NASA\'s Kepler Input Catalogue, hosting the confirmed planet Kepler-10b' },
+  { id: 'TIC 150428135', mission: 'TESS',   cadence: 'long',  label: 'TOI-700 (TESS)',             hasFixture: false, gloss: 'TOI-700 — a star observed by NASA\'s TESS satellite, hosting planet candidates in its habitable zone' },
+  { id: 'TIC 200322593', mission: 'TESS',   cadence: 'long',  label: 'TRAPPIST-1 (TESS)',          hasFixture: false, gloss: 'TRAPPIST-1 — an ultra-cool dwarf star hosting seven confirmed planets, observed by NASA\'s TESS satellite' },
+  { id: 'KIC 6965293',   mission: 'Kepler', cadence: 'long',  label: 'KIC 6965293 (Kepler EB)',    hasFixture: true, gloss: 'KIC 6965293 — a star in the Kepler Input Catalogue; its signal is an eclipsing binary (not a planet). Has committed fixture.' },
 ]
 
 // ── Orbit ring ────────────────────────────────────────────────────────────
@@ -316,18 +319,23 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
     e.preventDefault()
     const id = targetId.trim()
     if (!id) return
-    // Resolve known aliases to the canonical fixture target ID.
-    const resolvedId = IS_DEMO_MODE && FIXTURE_TARGET_ALIASES.includes(_normAlias(id))
-      ? FIXTURE_TARGET_ID
+    const norm = _normAlias(id)
+    // Resolve known aliases to canonical fixture target IDs.
+    const resolvedId = IS_DEMO_MODE
+      ? (FIXTURE_TARGET_ALIASES.includes(norm)
+          ? FIXTURE_TARGET_ID
+          : FIXTURE_EB_ALIASES.includes(norm)
+            ? 'KIC 6965293'
+            : id)
       : id
-    if (IS_DEMO_MODE && resolvedId !== FIXTURE_TARGET_ID) {
+    if (IS_DEMO_MODE && !FIXTURE_TARGET_IDS.has(resolvedId)) {
       // In demo mode there is no backend. Running any target other than the
-      // committed fixture would silently return KIC 11904151 data, which is
+      // committed fixtures would silently return KIC 11904151 data, which is
       // misleading. Show an inline notice and do not run.
       setDemoNotice(
-        `Demo mode — live catalogue lookup requires the pipeline backend. ` +
-        `Only ${FIXTURE_DISPLAY_NAME} has a committed fixture. ` +
-        `Use "Run the ${FIXTURE_DISPLAY_NAME} example →" to see the full pipeline output.`
+        `Backend not deployed — only KIC 11904151 (candidate) and KIC 6965293 (eclipsing binary) ` +
+        `have committed fixtures. Use the example buttons below, or run the backend locally ` +
+        `(see README → Install prerequisites).`
       )
       return
     }
@@ -345,7 +353,9 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
         <input
           value={targetId}
           onChange={(e) => { setTargetId(e.target.value); setDemoNotice(null) }}
-          placeholder={IS_DEMO_MODE ? `Demo mode — only ${FIXTURE_DISPLAY_NAME} available` : 'e.g. KIC 11904151 · TIC 150428135 · TIC 200322593'}
+          placeholder={IS_DEMO_MODE
+            ? 'KIC 11904151 or KIC 6965293 (fixtures only — backend not deployed)'
+            : 'e.g. KIC 11904151 · TIC 150428135 · TIC 200322593'}
           disabled={busy}
           aria-label="Target catalogue identifier"
           style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
@@ -360,7 +370,7 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
           <option value="short">short cadence</option>
         </select>
         <button type="submit" className="btn-primary" disabled={busy || !targetId.trim()}>
-          {busy ? <><span className="spinner" aria-label="Running" /> Running…</> : 'Run'}
+          {busy ? <><span className="spinner" aria-label="Running" /> Running…</> : 'Replay fixture'}
         </button>
       </form>
       {demoNotice && (
@@ -533,12 +543,23 @@ function LandingContent() {
         marginBottom: 18,
       }} role="note">
         <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)', letterSpacing: '0.06em' }}>
-          DEMO MODE — NO BACKEND DEPLOYED
+          HOSTED BUILD — FRONTEND-ONLY FIXTURE REPLAY
         </strong>
         <br />
-        All runs replay the committed {FIXTURE_DISPLAY_NAME} fixture. Entering any catalogue ID
-        produces the same fixture result — this is by design for a frontend-only deployment.
-        The pipeline backend is not required to explore every screen.
+        <strong>No pipeline backend is running here.</strong>{' '}
+        The hosted build at falsifier.vercel.app replays two committed pipeline artifacts:
+        KIC 11904151 (Kepler-10, candidate planet) and KIC 6965293 (eclipsing binary false positive).
+        Live pipeline runs — any other catalogue ID, any TESS target — require running the
+        backend locally. See{' '}
+        <a
+          href="https://github.com/ajdarstudio/Falsifier#install-prerequisites"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--np-muted)', textDecoration: 'underline' }}
+        >
+          README → Install prerequisites
+        </a>
+        {' '}for local setup instructions.
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, margin: '0 0 24px' }}>
@@ -547,12 +568,12 @@ function LandingContent() {
             className="btn-primary"
             onClick={runExample}
             disabled={busy}
-            aria-label={`Run the ${FIXTURE_DISPLAY_NAME} example`}
+            aria-label={`Replay committed artifact: ${FIXTURE_DISPLAY_NAME}`}
             style={{ fontSize: 16, padding: '13px 28px' }}
           >
             {busy
-              ? <><span className="spinner" /> Running…</>
-              : `Run the ${FIXTURE_DISPLAY_NAME} example →`
+              ? <><span className="spinner" /> Loading…</>
+              : `Replay committed artifact: ${FIXTURE_DISPLAY_NAME} →`
             }
           </button>
           <span style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', marginLeft: 14 }}>
@@ -571,9 +592,8 @@ function LandingContent() {
           <div className="section-label" style={{ marginBottom: 8 }}>Example targets</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {EXAMPLE_TARGETS
-              // In demo mode only show the fixture target — others silently
-              // return the same fixture data, which is more confusing than helpful.
-              .filter((t) => !IS_DEMO_MODE || t.id === FIXTURE_TARGET_ID)
+              // In demo mode show only targets with committed fixtures.
+              .filter((t) => !IS_DEMO_MODE || t.hasFixture)
               .map((t, i) => (
               <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
