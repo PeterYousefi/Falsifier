@@ -26,14 +26,8 @@ import {
 } from '../physics'
 import type { VetResult } from '../data/types'
 import { DispoChip } from './CandidateDetail'
-import { dataSource, FixtureDataSource } from '../data/DataSource'
-
-/** True when running against committed fixtures (no live backend). */
-const IS_DEMO_MODE = dataSource instanceof FixtureDataSource
-/** The fixture targets that demo mode can show results for. */
+/** Canonical KIC target for the primary example button. */
 const FIXTURE_TARGET_ID = 'KIC 11904151'
-/** All target IDs that have a committed fixture and can be replayed. */
-const FIXTURE_TARGET_IDS = new Set(['KIC 11904151', 'KIC 6965293'])
 
 // Host-star visual defaults when stellar_params absent.
 // These constants are fallback display values, not scientific claims.
@@ -303,10 +297,9 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
   defaultMission?: string
   defaultCadence?: string
 }) {
-  const { targetId, setTargetId, isSubmitting, jobStatus, submitJob } = useStore()
+  const { targetId, setTargetId, isSubmitting, jobStatus, jobError, submitJob, progressStage, progressElapsed } = useStore()
   const [mission, setMission] = useState(defaultMission ?? 'Kepler')
   const [cadence, setCadence] = useState(defaultCadence ?? 'long')
-  const [demoNotice, setDemoNotice] = useState<string | null>(null)
   const busy = isSubmitting || jobStatus === 'running' || jobStatus === 'queued'
 
   useEffect(() => {
@@ -320,28 +313,22 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
     const id = targetId.trim()
     if (!id) return
     const norm = _normAlias(id)
-    // Resolve known aliases to canonical fixture target IDs.
-    const resolvedId = IS_DEMO_MODE
-      ? (FIXTURE_TARGET_ALIASES.includes(norm)
-          ? FIXTURE_TARGET_ID
-          : FIXTURE_EB_ALIASES.includes(norm)
-            ? 'KIC 6965293'
-            : id)
-      : id
-    if (IS_DEMO_MODE && !FIXTURE_TARGET_IDS.has(resolvedId)) {
-      // In demo mode there is no backend. Running any target other than the
-      // committed fixtures would silently return KIC 11904151 data, which is
-      // misleading. Show an inline notice and do not run.
-      setDemoNotice(
-        `Backend not deployed — only KIC 11904151 (candidate) and KIC 6965293 (eclipsing binary) ` +
-        `have committed fixtures. Use the example buttons below, or run the backend locally ` +
-        `(see README → Install prerequisites).`
-      )
-      return
-    }
-    setDemoNotice(null)
+    // Resolve common aliases (Kepler-10 → KIC 11904151, etc.) before submit
+    const resolvedId =
+      FIXTURE_TARGET_ALIASES.includes(norm)
+        ? FIXTURE_TARGET_ID
+        : FIXTURE_EB_ALIASES.includes(norm)
+          ? 'KIC 6965293'
+          : id
     submitJob(resolvedId, mission, cadence)
   }, [targetId, mission, cadence, submitJob])
+
+  // Compose a human-readable progress label
+  const progressLabel = busy && progressStage
+    ? progressElapsed != null
+      ? `${progressStage} — ${progressElapsed.toFixed(1)}s`
+      : `${progressStage}…`
+    : null
 
   return (
     <div>
@@ -352,38 +339,57 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
       >
         <input
           value={targetId}
-          onChange={(e) => { setTargetId(e.target.value); setDemoNotice(null) }}
-          placeholder={IS_DEMO_MODE
-            ? 'KIC 11904151 or KIC 6965293 (fixtures only — backend not deployed)'
-            : 'e.g. KIC 11904151 · TIC 150428135 · TIC 200322593'}
+          onChange={(e) => setTargetId(e.target.value)}
+          placeholder="e.g. KIC 11904151 · TIC 150428135 · TIC 200322593"
           disabled={busy}
           aria-label="Target catalogue identifier"
           style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
         />
-        <select value={mission} onChange={(e) => setMission(e.target.value)} disabled={busy || IS_DEMO_MODE} aria-label="Mission">
+        <select value={mission} onChange={(e) => setMission(e.target.value)} disabled={busy} aria-label="Mission">
           <option>Kepler</option>
           <option>K2</option>
           <option>TESS</option>
         </select>
-        <select value={cadence} onChange={(e) => setCadence(e.target.value)} disabled={busy || IS_DEMO_MODE} aria-label="Cadence">
+        <select value={cadence} onChange={(e) => setCadence(e.target.value)} disabled={busy} aria-label="Cadence">
           <option value="long">long cadence</option>
           <option value="short">short cadence</option>
         </select>
         <button type="submit" className="btn-primary" disabled={busy || !targetId.trim()}>
-          {busy ? <><span className="spinner" aria-label="Running" /> Running…</> : 'Replay fixture'}
+          {busy
+            ? <><span className="spinner" aria-label="Running" /> {progressLabel ?? 'Running…'}</>
+            : 'Investigate →'
+          }
         </button>
       </form>
-      {demoNotice && (
-        <div role="alert" aria-live="assertive" style={{
-          marginTop: 4, padding: '8px 12px',
+
+      {/* Live progress indicator */}
+      {busy && progressStage && (
+        <div aria-live="polite" style={{
+          marginTop: 4, padding: '6px 12px',
           background: 'var(--np-surface)',
           border: '1px solid var(--np-rule)',
-          borderLeft: '3px solid var(--warn)',
+          fontFamily: 'var(--font-mono)', fontSize: 12,
+          color: 'var(--np-muted)', letterSpacing: '0.04em',
+        }}>
+          <span style={{ color: 'var(--rust)' }}>●</span>
+          {' '}{progressStage}{progressElapsed != null ? ` ✓ ${progressElapsed.toFixed(1)}s` : '…'}
+        </div>
+      )}
+
+      {/* Error display — surfaces ingest / network errors immediately */}
+      {jobStatus === 'failed' && jobError && (
+        <div role="alert" aria-live="assertive" style={{
+          marginTop: 8, padding: '8px 12px',
+          background: 'var(--np-surface)',
+          border: '1px solid var(--np-rule)',
+          borderLeft: '3px solid var(--fail)',
           fontFamily: 'var(--font-serif)', fontSize: 13,
           color: 'var(--np-muted)', lineHeight: 1.55,
         }}>
-          <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--warn)', letterSpacing: '0.06em' }}>DEMO MODE</strong>
-          {' '}{demoNotice}
+          <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fail)', letterSpacing: '0.06em' }}>
+            PIPELINE ERROR
+          </strong>
+          {' '}{jobError}
         </div>
       )}
     </div>
@@ -407,7 +413,7 @@ function VerdictPreview() {
 
   return (
     <div className="verdict-card">
-      <div className="section-label">Worked verdict — fixture: {report.target_id}</div>
+      <div className="section-label">Latest result — {report.target_id}</div>
       <h2 style={{ fontFamily: 'var(--font-head)', fontSize: 20, marginBottom: 8 }}>{headline}</h2>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <DispoChip disposition={vet.disposition} />
@@ -530,60 +536,28 @@ function LandingContent() {
       <hr className="rule-double" style={{ marginTop: 28 }} />
       <div className="section-label" style={{ marginBottom: 14 }}>III. Begin</div>
 
-      {/* Fixture-mode notice */}
-      <div style={{
-        background: 'var(--np-surface)',
-        border: '1px solid var(--np-rule)',
-        borderLeft: '3px solid var(--warn)',
-        padding: '10px 14px',
-        fontFamily: 'var(--font-serif)',
-        fontSize: 13,
-        color: 'var(--np-muted)',
-        lineHeight: 1.6,
-        marginBottom: 18,
-      }} role="note">
-        <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)', letterSpacing: '0.06em' }}>
-          HOSTED BUILD — FRONTEND-ONLY FIXTURE REPLAY
-        </strong>
-        <br />
-        <strong>No pipeline backend is running here.</strong>{' '}
-        The hosted build at falsifier.vercel.app replays two committed pipeline artifacts:
-        KIC 11904151 (Kepler-10, candidate planet) and KIC 6965293 (eclipsing binary false positive).
-        Live pipeline runs — any other catalogue ID, any TESS target — require running the
-        backend locally. See{' '}
-        <a
-          href="https://github.com/ajdarstudio/Falsifier#install-prerequisites"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: 'var(--np-muted)', textDecoration: 'underline' }}
-        >
-          README → Install prerequisites
-        </a>
-        {' '}for local setup instructions.
-      </div>
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, margin: '0 0 24px' }}>
         <div>
           <button
             className="btn-primary"
             onClick={runExample}
             disabled={busy}
-            aria-label={`Replay committed artifact: ${FIXTURE_DISPLAY_NAME}`}
+            aria-label={`Investigate ${FIXTURE_DISPLAY_NAME}`}
             style={{ fontSize: 16, padding: '13px 28px' }}
           >
             {busy
-              ? <><span className="spinner" /> Loading…</>
-              : `Replay committed artifact: ${FIXTURE_DISPLAY_NAME} →`
+              ? <><span className="spinner" /> Running…</>
+              : `Investigate ${FIXTURE_DISPLAY_NAME} →`
             }
           </button>
           <span style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', marginLeft: 14 }}>
-            Kepler-10b is a confirmed hot rocky planet — every challenge passes.
+            Kepler-10b — a confirmed hot rocky planet. Every challenge should pass.
           </span>
         </div>
 
         <div>
           <div style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 8 }}>
-            Or enter any catalogue identifier:
+            Or enter any Kepler / TESS catalogue identifier:
           </div>
           <TargetForm />
         </div>
@@ -591,10 +565,7 @@ function LandingContent() {
         <div>
           <div className="section-label" style={{ marginBottom: 8 }}>Example targets</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {EXAMPLE_TARGETS
-              // In demo mode show only targets with committed fixtures.
-              .filter((t) => !IS_DEMO_MODE || t.hasFixture)
-              .map((t, i) => (
+            {EXAMPLE_TARGETS.map((t, i) => (
               <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   className="target-chip"

@@ -175,19 +175,85 @@ export class ApiDataSource implements DataSource {
     onEvent: (evt: StageEvent) => void,
     onDone: () => void,
   ): () => void {
-    const sse = new EventSource(`${this.base}/jobs/${job_id}/stream`)
+    let cancelled = false
+    let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+    // --- Polling fallback ---------------------------------------------------
+    // Code Engine's Knative ingress may buffer SSE responses and only flush
+    // them in bulk when the connection closes, defeating incremental progress.
+    // We use SSE as the primary path and automatically fall back to polling
+    // GET /jobs/{id} on the first SSE error.
+    const startPolling = () => {
+      if (cancelled) return
+      const POLL_MS = 3000
+      const poll = async () => {
+        if (cancelled) return
+        try {
+          const rec = await this.getJob(job_id)
+          // Synthesise a stage event so the UI still shows progress
+          const synth: StageEvent = {
+            event: rec.status === 'done' ? 'job_done'
+              : rec.status === 'failed' ? 'job_failed'
+              : 'stage_start',
+            stage: 'pipeline',
+            status: rec.status === 'failed' ? 'error' : 'ok',
+            detail: `[poll] job status: ${rec.status}`,
+            artifact_path: null,
+            elapsed_seconds: null,
+          }
+          onEvent(synth)
+          if (rec.status === 'done' || rec.status === 'failed') {
+            onDone()
+            return
+          }
+        } catch (_) { /* network hiccup — retry */ }
+        if (!cancelled) pollTimer = setTimeout(poll, POLL_MS)
+      }
+      pollTimer = setTimeout(poll, POLL_MS)
+    }
+
+    // --- SSE primary path ---------------------------------------------------
+    let sseConnected = false
+    let sse: EventSource | null = null
+    try {
+      sse = new EventSource(`${this.base}/jobs/${job_id}/stream`)
+    } catch (_) {
+      // EventSource constructor throws synchronously in some environments
+      startPolling()
+      return () => { cancelled = true; if (pollTimer) clearTimeout(pollTimer) }
+    }
+
+    sse.onopen = () => { sseConnected = true }
+
     sse.onmessage = (e) => {
+      sseConnected = true
       try {
         const evt: StageEvent = JSON.parse(e.data)
         onEvent(evt)
         if (evt.event === 'job_done' || evt.event === 'job_failed') {
-          sse.close()
+          sse!.close()
           onDone()
         }
       } catch (_) {}
     }
-    sse.onerror = () => { sse.close(); onDone() }
-    return () => sse.close()
+
+    sse.onerror = () => {
+      sse!.close()
+      // If we never received a message, the ingress is likely buffering.
+      // Fall back to polling.
+      if (!sseConnected) {
+        startPolling()
+      } else {
+        // Connection dropped after at least one message — treat as done
+        onDone()
+      }
+    }
+
+    return () => {
+      cancelled = true
+      sse?.close()
+      if (pollTimer) clearTimeout(pollTimer)
+    }
   }
 
   async getProvenance(): Promise<ProvenanceReport> {
@@ -230,12 +296,19 @@ export class ApiDataSource implements DataSource {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — driven by VITE_DATA_SOURCE env var
+// Factory — driven by VITE_DATA_SOURCE and VITE_API_BASE_URL env vars
+//
+// Switching rules (first match wins):
+//   1. VITE_DATA_SOURCE=api         → ApiDataSource (live backend)
+//   2. VITE_API_BASE_URL is set     → ApiDataSource (live backend)
+//   3. otherwise                    → FixtureDataSource (committed JSON)
+//
+// This means a production Vercel deploy just needs VITE_API_BASE_URL set;
+// no separate VITE_DATA_SOURCE=api is required.
 // ---------------------------------------------------------------------------
 
-const _mode = typeof import.meta !== 'undefined'
-  ? (import.meta as any).env?.VITE_DATA_SOURCE ?? 'fixture'
-  : 'fixture'
+const _env = typeof import.meta !== 'undefined' ? (import.meta as any).env ?? {} : {}
+const _mode = _env.VITE_DATA_SOURCE ?? (_env.VITE_API_BASE_URL ? 'api' : 'fixture')
 
 export const dataSource: DataSource =
   _mode === 'api' ? new ApiDataSource() : new FixtureDataSource()

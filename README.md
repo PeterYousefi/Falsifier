@@ -49,25 +49,47 @@ The script exits 1 on any drift.  It is a required CI gate.
 
 ## Live application
 
-**https://falsifier.vercel.app** — no account or API key required to view.
+**https://falsifier.vercel.app** — no account or API key required.
 
-> **The hosted build is a frontend-only fixture replay. No pipeline backend is
-> deployed at this URL.** The FastAPI server (`POST /jobs`, SSE streaming,
-> `GET /health`) is not reachable from the Vercel deployment.
+The Vite/React frontend at this URL calls the FastAPI backend deployed on
+**IBM Cloud Code Engine** (`POST /jobs`, SSE streaming, `GET /health`).
+Entering any valid Kepler or TESS catalogue identifier in the search box
+runs the full ingest → detrend → search → vet → classify pipeline and
+returns a disposition.
 
-The hosted Vite/React frontend replays two committed pipeline artifacts:
-- **KIC 11904151** (Kepler-10b) — a candidate planet that passes all seven vetting tests.
-- **KIC 6965293** — an eclipsing binary that is rejected by the `odd_even_depth` test.
+**Architecture:**
 
-These produce visibly different orbital renders in the Three.js view.
-Any other catalogue identifier entered in the search box will show an inline
-message explaining that the backend is not deployed and linking to local run
-instructions.
+| Layer | Where |
+|---|---|
+| Frontend | Vercel (static Vite/React build) |
+| Backend | IBM Cloud Code Engine (single instance, always warm) |
+| Cache | IBM Cloud File Storage volume mounted at `/data/cache/ingest` |
+| API base URL | Set via `VITE_API_BASE_URL` in Vercel project env vars |
 
-To run the full live pipeline against any Kepler/TESS target, run the backend
-locally (see [Install prerequisites](#install-prerequisites) below) and set
-`VITE_DATA_SOURCE=api` and `VITE_API_BASE_URL=http://localhost:8000` in
-`frontend/.env.local`.
+**Constraints enforced in the deployment:**
+
+- `min-scale=1`, `max-scale=1` — one instance always alive; in-process
+  `_job_store` is not replicated, so a second instance would lose jobs.
+- `request-timeout=600s` — long enough for a first-time MAST fetch
+  (30–120 s) plus a TLS search on a 4-year Kepler light curve.
+- `memory=4Gi` — TLS on a long Kepler LC peaks near 3 GB.
+- Concurrent jobs capped at 3; per-IP rate limit of 10 POST /jobs per minute.
+- CORS restricted to `https://falsifier.vercel.app` only.
+
+**To run the backend locally:**
+
+```bash
+# Backend
+pip install -e ".[dev]"
+ALLOWED_ORIGINS="http://localhost:5173" uvicorn falsifier.api.app:app --reload
+
+# Frontend (separate terminal)
+cd frontend
+VITE_API_BASE_URL=http://localhost:8000 npm run dev
+```
+
+Or set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env.local`
+(which auto-activates `ApiDataSource`; no separate `VITE_DATA_SOURCE=api` needed).
 
 ---
 

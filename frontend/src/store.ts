@@ -28,6 +28,11 @@ interface AppState {
   jobStatus: string | null
   report: DetectionReport | null
   isSubmitting: boolean
+  jobError: string | null
+
+  // Live progress (stage name + elapsed time from SSE / poll)
+  progressStage: string | null
+  progressElapsed: number | null
 
   // Selected TCE
   selectedTceId: string | null
@@ -55,6 +60,8 @@ interface AppState {
   // Actions
   submitJob: (targetId: string, mission: string, cadence: string) => Promise<void>
   loadProvenance: () => Promise<void>
+  /** @deprecated loadFixtureJob is no longer called automatically.
+   *  Kept for backward compatibility; call explicitly to pre-load fixture data. */
   loadFixtureJob: () => Promise<void>
 }
 
@@ -81,6 +88,10 @@ export const useStore = create<AppState>((set, get) => ({
   jobStatus: null,
   report: null,
   isSubmitting: false,
+  jobError: null,
+
+  progressStage: null,
+  progressElapsed: null,
 
   selectedTceId: null,
   setSelectedTceId: (id) => set({ selectedTceId: id }),
@@ -112,7 +123,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   submitJob: async (targetId, mission, cadence) => {
     const { pushConsoleLine, replaceLastConsole } = get()
-    set({ isSubmitting: true, jobId: null, jobStatus: null, report: null, stageEvents: [] })
+    set({
+      isSubmitting: true,
+      jobId: null,
+      jobStatus: null,
+      report: null,
+      stageEvents: [],
+      jobError: null,
+      progressStage: null,
+      progressElapsed: null,
+    })
     const t0 = performance.now()
     pushConsoleLine({ ts: ts(), method: 'POST', url: '/jobs', status: null, ms: null, pending: true })
 
@@ -128,6 +148,16 @@ export const useStore = create<AppState>((set, get) => ({
         jobId,
         (evt) => {
           set((s) => ({ stageEvents: [...s.stageEvents, evt] }))
+
+          // Update live progress display
+          if (evt.event === 'stage_start') {
+            set({ progressStage: evt.stage, progressElapsed: null })
+          } else if (evt.event === 'stage_done') {
+            set({ progressStage: evt.stage, progressElapsed: evt.elapsed_seconds })
+          } else if (evt.event === 'stage_error') {
+            set({ progressStage: evt.stage, progressElapsed: evt.elapsed_seconds })
+          }
+
           get().pushConsoleLine({
             ts: ts(),
             method: 'SSE',
@@ -139,8 +169,13 @@ export const useStore = create<AppState>((set, get) => ({
           const panelMap: Record<string, string> = { ingest: 'ingest', detrend: 'detrend', search: 'search', vet: 'vet' }
           const panel = panelMap[evt.stage]
           if (panel && evt.event === 'stage_done') get().setHighlightedPanel(panel)
-          if (evt.event === 'job_done') set({ jobStatus: 'done' })
-          if (evt.event === 'job_failed') set({ jobStatus: 'failed' })
+          if (evt.event === 'job_done') {
+            set({ jobStatus: 'done', progressStage: null })
+          }
+          if (evt.event === 'job_failed') {
+            // Extract the error detail from the event for user-facing display
+            set({ jobStatus: 'failed', jobError: evt.detail, progressStage: null })
+          }
         },
         async () => {
           replaceLastConsole({ status: 200, ms: Math.round(performance.now() - sseT0) })
@@ -148,12 +183,14 @@ export const useStore = create<AppState>((set, get) => ({
           try {
             const record = await dataSource.getJob(jobId)
             if (record.report) set({ report: record.report })
+            if (record.error) set({ jobError: record.error })
           } catch (_) {}
         },
       )
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
       replaceLastConsole({ status: 'ERR', ms: Math.round(performance.now() - t0) })
-      set({ isSubmitting: false, jobStatus: 'failed' })
+      set({ isSubmitting: false, jobStatus: 'failed', jobError: msg, progressStage: null })
     }
   },
 

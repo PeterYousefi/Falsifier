@@ -40,6 +40,7 @@ import asyncio
 import datetime
 import hashlib
 import math
+import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -394,14 +395,44 @@ async def _run_job(job_id: str) -> None:
             pipeline_run_id=run_id,
         )
 
+        # Honour the FALSIFIER_CACHE_ROOT env var so the Code Engine
+        # persistent volume mount is used for the content-addressed cache.
+        _cache_root_str = os.environ.get("FALSIFIER_CACHE_ROOT")
+        _cache_root = Path(_cache_root_str) if _cache_root_str else None
+
         from ..pipeline.stages.ingest import run_ingest as _run_ingest
         ok, result = await _run_stage(
             job_id, "ingest",
-            lambda _inp=ingest_input: _run_ingest(_inp),
+            lambda _inp=ingest_input, _cr=_cache_root: _run_ingest(
+                _inp, cache_root=_cr
+            ),
             loop,
         )
         if not ok:
-            raise result  # type: ignore[misc]
+            exc = result
+            # Translate known ingest errors into human-readable messages that
+            # will surface directly in the UI via the job_failed SSE event.
+            from ..pipeline.ingest.exceptions import (
+                TargetNotFoundError,
+                MastFetchError,
+                NoProductMatchError,
+            )
+            if isinstance(exc, TargetNotFoundError):
+                raise RuntimeError(
+                    f"Target {req.target_id!r} was not found in the "
+                    f"{req.mission} archive. Check the identifier and mission."
+                ) from exc
+            if isinstance(exc, NoProductMatchError):
+                raise RuntimeError(
+                    f"No matching light-curve products for {req.target_id!r} "
+                    f"({req.mission}, {req.cadence} cadence). "
+                    "Try a different cadence or mission."
+                ) from exc
+            if isinstance(exc, MastFetchError):
+                raise RuntimeError(
+                    f"MAST fetch failed for {req.target_id!r}: {exc}"
+                ) from exc
+            raise exc  # type: ignore[misc]
         ingest_out = result
 
         # ------------------------------------------------------------------

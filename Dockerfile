@@ -32,6 +32,11 @@ COPY pyproject.toml ./
 # Install all runtime + dev deps (dev includes fastapi, lightkurve, etc.)
 RUN pip install --no-cache-dir -e ".[dev]"
 
+# --- Verify critical imports at build time -----------------------------
+# If xgboost cannot load (missing libomp, broken wheel) the build fails
+# here rather than silently at runtime.
+RUN python -c "import xgboost; print('xgboost OK:', xgboost.__version__)"
+
 # --- application source ------------------------------------------------
 COPY . .
 
