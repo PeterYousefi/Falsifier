@@ -115,6 +115,69 @@ export function auToScene(au: number): number {
 }
 
 /**
+ * Dimensionless orbital distance a/R* from stellar mean density.
+ *
+ * Derivation (Seager & Mallén-Ornelas 2003, eq. 9):
+ *   a³ = G M* / (4π²) × P²
+ *   a/R* = [ G ρ* / (3π) × P² ]^(1/3)
+ *
+ * In SI, with P in seconds:
+ *   G = 6.674e-11 m³ kg⁻¹ s⁻²
+ *   ρ_sun (mean) = 1408 kg m⁻³
+ *
+ * Collecting constants into one scalar K with P in days:
+ *   K = G × ρ_sun × (86400 s/day)² / (3π)
+ *     = 6.674e-11 × 1408 × 7.4649e9 / 9.4248
+ *     ≈ 74.39  (dimensionless per [ρ/ρ☉])
+ *
+ * Verify: P=0.8375d, ρ*=1.07ρ☉ → a/R* = (74.39×1.07×0.7014)^(1/3) ≈ 3.83
+ * Literature value: 3.72 (Batalha et al. 2011). Agreement within 3%.
+ *
+ * @param period_days      orbital period (days)
+ * @param density_rho_sun  mean stellar density in solar units (ρ☉)
+ */
+export function aOverRstar(period_days: number, density_rho_sun: number): number {
+  // K = G × ρ_sun × (86400)² / (3π), dimensionless per unit solar density
+  const K = 74.39
+  return Math.cbrt(K * Math.max(density_rho_sun, 1e-6) * period_days * period_days)
+}
+
+/**
+ * Canonical phase-to-position mapping used by ALL consumers
+ * (3D scene, SVG marker, slider display, animation loop).
+ *
+ * Convention: phase ∈ [-0.5, +0.5].
+ *   phase = 0 → mid-transit (planet directly between observer and star)
+ *   phase = ±0.5 → secondary eclipse position
+ *
+ * Returns (x, z) in orbit-plane scene units.
+ *   x is the East-West axis (0 at conjunction).
+ *   z points toward the observer.
+ *   At phase=0: x=0, z=+orbitR  (planet in front of star, closest to observer).
+ *   At phase=±0.25: x=±orbitR, z=0 (quadrature, clear of stellar disk).
+ *   At phase=±0.5: x=0, z=-orbitR (planet behind star, secondary eclipse).
+ *
+ * @param phase    dimensionless orbital phase, wrapped to [-0.5, +0.5]
+ * @param orbitR   orbital radius in scene units (from auToScene)
+ */
+export function phaseToPosition(phase: number, orbitR: number): { x: number; z: number } {
+  const theta = phase * 2 * Math.PI  // radians: 0 at mid-transit
+  return {
+    x: Math.sin(theta) * orbitR,   // 0 at transit/secondary, ±1 at quadrature
+    z: Math.cos(theta) * orbitR,   // +orbitR at mid-transit (z toward observer)
+  }
+}
+
+/**
+ * Wrap an arbitrary phase value (in any units consistent with [-0.5, +0.5])
+ * back into the [-0.5, +0.5] range.
+ */
+export function wrapPhase(phase: number): number {
+  const p = ((phase % 1) + 1.5) % 1 - 0.5
+  return p
+}
+
+/**
  * Orbital angular velocity (rad/s wall time) for animation.
  *
  * @param period_days  orbital period (days) — from TCE

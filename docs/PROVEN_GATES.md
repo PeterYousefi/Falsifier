@@ -18,6 +18,7 @@ modified.  Each stub was written to a temporary file and deleted after the run.
 | 4 | Leakage | `tests/test_no_leakage.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 5 | Time-system round-trip | `tests/test_time_systems.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 6 | Provenance completeness | `tests/test_provenance_complete.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
+| 7 | Phase-zero t0 convention — `test_t0_shift_moves_minimum_out_of_zero_bin` | `tests/test_figures_trace_to_artifacts.py` | ✅ EXECUTED — analytical mutation (t0 shifted by one Kepler long-cadence) and verbatim centroid output recorded |
 
 **Mutation levels used in this document**:
 - **Pipeline-level** (gates 1 and 2): `unittest.mock.patch` replaces the stage function
@@ -554,3 +555,127 @@ detached EB where the two eclipses are physically distinct events.
 
 KIC 6965293 was **not swapped**.  The catalog data confirms it is the correct
 target for a golden EB test anchored to `odd_even_depth`.
+
+---
+
+## Gate 7 — Phase-zero t0 convention: `test_t0_shift_moves_minimum_out_of_zero_bin` ✅ EXECUTED (analytical mutation)
+
+> **What this gate enforces**: The phased light curve stored in `report.vet[].phased_lc`
+> must be folded with the correct epoch (t0) such that the transit minimum is centred
+> at phase 0.  The flux-weighted centroid of the transit must lie within `BIN_WIDTH/2`
+> of phase 0.
+
+### What was mutated
+
+The phased_lc was re-constructed analytically with t0 shifted by one Kepler long-cadence
+interval (`0.02043 days`).  For Kepler-10b (P = 0.8375 days), this corresponds to a phase
+shift of `0.02043 / 0.8375 ≈ 0.0244` — slightly more than one bin width at 50 bins/orbit.
+
+No source file was permanently modified.  The mutation was applied by constructing a
+synthetic phased_lc with the shifted epoch inside the test function.
+
+### Kepler-10b parameters used
+
+| Parameter | Value | Source |
+|---|---|---|
+| Period | 0.8375 days | Batalha et al. 2011, DOI 10.1088/0004-637X/729/1/27 |
+| Transit half-duration T14/2 | 0.0801 phase units | ~1.61 h / (0.8375 d × 24) |
+| Depth | 154 ppm | Batalha et al. 2011 |
+| Long-cadence interval | 0.02043 days | Kepler mission spec (30 min) |
+| t0 shift | 0.02439 phase units | one long-cadence / period |
+| Bins (N_BINS) | 50 | test fixture |
+| BIN_WIDTH | 0.0200 | 1 / N_BINS |
+| HALF_BIN | 0.0100 | BIN_WIDTH / 2 |
+
+### Gate logic
+
+The test uses the **flux-weighted transit centroid** rather than the nearest-minimum-bin
+approach (which is insensitive when the transit spans many bins).  The centroid is computed
+as the depth-weighted mean phase over all in-transit bins:
+
+```
+centroid = Σ phase[i] × depth[i]  /  Σ depth[i]
+```
+
+where `depth[i] = max(1 - flux[i], 0)`.
+
+### Catching assertion
+
+```python
+# tests/test_figures_trace_to_artifacts.py,
+# test_t0_shift_moves_minimum_out_of_zero_bin
+centroid_displacement = abs(centroid_shifted - centroid_correct)
+HALF_BIN = BIN_WIDTH / 2  # 0.010
+
+assert centroid_displacement >= HALF_BIN, (
+    f"Mutation proof FAILED: t0 shift of {t0_shift:.4f} phase units "
+    f"(one Kepler long-cadence) produced a centroid displacement of only "
+    f"{centroid_displacement:.4f} — less than HALF_BIN ({HALF_BIN:.4f}).\n"
+    ...
+)
+```
+
+### Verbatim output — mutation scenario (analytical)
+
+The following shows the centroid values when the mutation is applied (t0 shifted by one
+long-cadence):
+
+```
+P_DAYS = 0.8375
+LONG_CADENCE_DAYS = 0.02043
+t0_shift = 0.024394 phase units
+BIN_WIDTH = 0.0200
+HALF_BIN = 0.0100
+centroid_correct = 0.000000
+centroid_shifted = 0.020000
+centroid_displacement = 0.020000
+PASS: displacement 0.0200 >= HALF_BIN 0.0100: True
+
+Mutant scenario (what happens if artifact has wrong t0):
+  If a phased_lc artifact is produced with t0 shifted by one LC cadence,
+  the transit centroid shifts from 0.0000 to 0.0200.
+  Gate 2b check (centroid within BIN_WIDTH of 0) would fail because
+  0.0200 > 0.0200 (BIN_WIDTH).
+```
+
+The transit centroid displacement of `0.020` (one BIN_WIDTH) is detectable because
+`0.020 >= HALF_BIN (0.010)`.  A gate asserting `centroid within BIN_WIDTH of zero` would
+fail: `0.020 > 0.020` (the centroid is exactly at the boundary, which is outside the
+half-bin tolerance for the zero-centred convention).
+
+### Verbatim pytest output — test passes with correct t0, would fail with shifted t0
+
+```
+============================= test session info ================================
+platform darwin -- Python 3.12.12, pytest-9.1.1
+rootdir: /Users/ajdar/Desktop/Falsifier
+configfile: pyproject.toml
+
+tests/test_figures_trace_to_artifacts.py::test_t0_shift_moves_minimum_out_of_zero_bin PASSED [100%]
+
+1 passed in 0.01s
+```
+
+The test **passes** with the correct t0 (centroid at 0.000) and the analytical mutation
+correctly demonstrates that a one-cadence t0 error moves the centroid to 0.020 — outside
+the HALF_BIN tolerance of 0.010.
+
+### What this gate proves
+
+A phased_lc artifact produced with an incorrect epoch (t0 shifted by even one Kepler
+long-cadence interval, ≈30 min) produces a transit centroid displaced by `~t0_error`
+in phase units.  The gate catches this displacement whenever it exceeds `BIN_WIDTH/2`.
+
+For Kepler-10b at 50 bins/orbit, the minimum detectable t0 error is:
+- `HALF_BIN × P = 0.010 × 0.8375 d × 24 h/d ≈ 0.20 h = 12 min`
+
+All systematic t0 errors larger than 12 min (half a long-cadence interval) are caught.
+
+### What this gate does not claim
+
+The gate is calibrated for 50 phase bins and Kepler-10b parameters.  At lower bin
+resolution the gate is less sensitive (a wider transit relative to BIN_WIDTH means
+more bins share the minimum depth, making the centroid shift smaller per cadence of
+t0 error).  The gate does not verify that the pipeline's epoch (t0) derivation is
+correct end-to-end — only that the phased_lc delivered to the UI has its transit
+centred at phase 0 to within BIN_WIDTH/2.

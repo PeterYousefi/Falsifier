@@ -251,6 +251,12 @@ def _scan_src_dir(src_dir: pathlib.Path) -> list[str]:
     """
     Scan all JS/TS source files under *src_dir* for scientific floats not
     backed by any committed artifact.  Returns a list of violation strings.
+
+    Test files (*.test.ts, *.test.tsx) are excluded — they contain test-fixture
+    constants that assert correctness of physical values but do not render those
+    values to a user.  The test-fixture values must be backed by science (i.e.
+    they must not be invented), but that is enforced by the physics tests
+    themselves rather than by this artifact-corpus check.
     """
     corpus = _load_artifact_corpus()
     violations: list[str] = []
@@ -260,6 +266,9 @@ def _scan_src_dir(src_dir: pathlib.Path) -> list[str]:
             if src_file in seen:
                 continue
             seen.add(src_file)
+            # Skip test files — they contain test-fixture constants, not UI values
+            if src_file.name.endswith('.test.ts') or src_file.name.endswith('.test.tsx'):
+                continue
             text = src_file.read_text(encoding="utf-8", errors="replace")
             code_text = _strip_js_comments(text)
             for f in sorted(_extract_sci_floats(code_text)):

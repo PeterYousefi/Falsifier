@@ -6,14 +6,25 @@
  * The exaggeration factor is computed at runtime from payload values — never
  * hardcoded. (AGENTS.md Rule 1)
  *
+ * Phase convention — SINGLE DEFINITION, used by every consumer here:
+ *   phase ∈ [-0.5, +0.5], dimensionless fractional orbit
+ *   phase = 0  → mid-transit (planet directly between observer and star)
+ *   phase = ±0.5 → secondary eclipse position
+ *   Implemented by physics.phaseToPosition() — no consumer may redefine this.
+ *
  * Scene branches on disposition:
  *   candidate                 — single transiting body silhouette
  *   false_positive/odd_even   — two-star EB with both eclipses animated
  *   false_positive/centroid   — off-target contamination signal
  *   ambiguous / caveats       — geometry with "uncertain" visual treatment
  *
- * Animation defaults to PAUSED at mid-transit so the view is legible
- * before any interaction.
+ * Animation:
+ *   Play/Pause button toggles a requestAnimationFrame loop in the parent.
+ *   The loop advances phase by (elapsed_wall_ms / period_wall_ms) and calls
+ *   setPhase(wrapPhase(phase + delta)), so speed is frame-rate independent.
+ *   The 3D scene reads the phase prop; no child component runs its own loop.
+ *   The loop is cancelled on unmount and whenever playing becomes false.
+ *   Dragging the slider pauses the loop first.
  */
 import React, {
   useRef,
@@ -22,7 +33,7 @@ import React, {
   useEffect,
   useCallback,
 } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Line, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import {
@@ -30,12 +41,15 @@ import {
   starSceneSize,
   starColor,
   auToScene,
-  orbitalAngularVelocity,
-  depthToRadiusRearth,
+  phaseToPosition,
+  wrapPhase,
 } from '../physics'
 import type { VetResult, PhasedLC } from '../data/types'
 import { isStellarParamsSummary } from '../data/types'
 import type { StellarParams } from '../data/types'
+
+// Play speed: one full orbit in this many real seconds.
+const ORBIT_WALL_SECONDS = 8.0
 
 // ── Stellar param extraction (handles both old nested and new flat shapes) ──
 export function extractStellarParams(sp: StellarParams | null | undefined): {
@@ -92,7 +106,8 @@ function OrbitRing({ radius, color = '#8A8880', opacity = 0.6, dashed = false }:
     const a: THREE.Vector3[] = []
     for (let i = 0; i <= 96; i++) {
       const t = (i / 96) * Math.PI * 2
-      a.push(new THREE.Vector3(Math.cos(t) * radius, 0, Math.sin(t) * radius))
+      // Build orbit ring in x-z plane (consistent with phaseToPosition)
+      a.push(new THREE.Vector3(Math.sin(t) * radius, 0, Math.cos(t) * radius))
     }
     return a
   }, [radius])
@@ -161,63 +176,43 @@ function StarSphere({
   )
 }
 
-// ── Animated transiting body (candidate scene) ────────────────────────────
+// ── Transiting body (candidate scene) ─────────────────────────────────────
+// Position is driven entirely by the phase prop from the parent.
+// This component does NOT run its own animation loop.
 function TransitingBody({
   starR,
   orbitR,
   bodyR,
   inclRad,
-  phase,           // 0 = mid-transit (in front of star at phase 0)
-  playing,
-  omega,
+  phase,
 }: {
   starR: number
   orbitR: number
   bodyR: number
   inclRad: number
-  phase: number
-  playing: boolean
-  omega: number
+  phase: number   // dimensionless phase in [-0.5, +0.5]; 0 = mid-transit
 }) {
-  const pivotRef = useRef<THREE.Group>(null!)
-  const currentPhase = useRef(phase)
-
-  // Sync to controlled phase when paused
-  useEffect(() => {
-    currentPhase.current = phase
-  }, [phase])
-
-  useFrame((_, delta) => {
-    if (!pivotRef.current) return
-    if (playing) {
-      currentPhase.current += omega * delta
-    }
-    pivotRef.current.rotation.y = currentPhase.current
-  })
+  const { x, z } = phaseToPosition(phase, orbitR)
 
   return (
     <group rotation={[inclRad, 0, 0]}>
-      <group ref={pivotRef}>
-        <mesh position={[orbitR, 0, 0]}>
-          <sphereGeometry args={[bodyR, 20, 20]} />
-          {/* Dark silhouette — no emissive, so it reads as dark against star */}
-          <meshStandardMaterial
-            color="#1A1510"
-            roughness={0.9}
-            metalness={0.0}
-            emissive="#000000"
-            emissiveIntensity={0}
-          />
-        </mesh>
-      </group>
+      <mesh position={[x, 0, z]}>
+        <sphereGeometry args={[bodyR, 20, 20]} />
+        {/* Dark silhouette — no emissive, so it reads as dark against star */}
+        <meshStandardMaterial
+          color="#1A1510"
+          roughness={0.9}
+          metalness={0.0}
+          emissive="#000000"
+          emissiveIntensity={0}
+        />
+      </mesh>
       <OrbitRing radius={orbitR} />
     </group>
   )
 }
 
 // ── EB: two-star scene ─────────────────────────────────────────────────────
-// Renders a primary star at origin plus a companion at orbitR.
-// Both stars animate through primary and secondary eclipses.
 function EclipsingBinaryScene({
   starR,
   teffK,
@@ -225,11 +220,7 @@ function EclipsingBinaryScene({
   companionTeffK,
   orbitR,
   inclRad,
-  primaryDepthPpm,
-  secondaryDepthPpm,
   phase,
-  playing,
-  omega,
 }: {
   starR: number
   teffK: number
@@ -237,53 +228,35 @@ function EclipsingBinaryScene({
   companionTeffK: number
   orbitR: number
   inclRad: number
-  primaryDepthPpm: number
-  secondaryDepthPpm: number
   phase: number
-  playing: boolean
-  omega: number
 }) {
-  const pivotRef = useRef<THREE.Group>(null!)
-  const currentPhase = useRef(phase)
-
-  useEffect(() => {
-    currentPhase.current = phase
-  }, [phase])
-
-  useFrame((_, delta) => {
-    if (!pivotRef.current) return
-    if (playing) currentPhase.current += omega * delta
-    pivotRef.current.rotation.y = currentPhase.current
-  })
-
+  const { x, z } = phaseToPosition(phase, orbitR)
   const compHex = useMemo(() => starColor(companionTeffK), [companionTeffK])
 
   return (
     <group rotation={[inclRad, 0, 0]}>
       {/* Primary star */}
       <StarSphere radius={starR} teffK={teffK} label="primary" />
-      {/* Companion orbits the barycentre (simplified: orbits around origin) */}
-      <group ref={pivotRef}>
-        <group position={[orbitR, 0, 0]}>
-          <mesh>
-            <sphereGeometry args={[companionR, 24, 24]} />
-            <meshStandardMaterial
-              color={compHex}
-              emissive={compHex}
-              emissiveIntensity={1.0}
-              roughness={0.4}
-            />
-          </mesh>
-          <Text
-            position={[0, companionR + companionR * 0.4, 0]}
-            fontSize={companionR * 0.5}
-            color="#5A5850"
-            anchorX="center"
-            anchorY="bottom"
-          >
-            companion
-          </Text>
-        </group>
+      {/* Companion at phase-driven position */}
+      <group position={[x, 0, z]}>
+        <mesh>
+          <sphereGeometry args={[companionR, 24, 24]} />
+          <meshStandardMaterial
+            color={compHex}
+            emissive={compHex}
+            emissiveIntensity={1.0}
+            roughness={0.4}
+          />
+        </mesh>
+        <Text
+          position={[0, companionR + companionR * 0.4, 0]}
+          fontSize={companionR * 0.5}
+          color="#5A5850"
+          anchorX="center"
+          anchorY="bottom"
+        >
+          companion
+        </Text>
       </group>
       <OrbitRing radius={orbitR} color="#CC8855" />
     </group>
@@ -375,13 +348,11 @@ function SceneContent({
   stellarTeffK,
   stellarRadiusRsun,
   phase,
-  playing,
 }: {
   vet: VetResult
   stellarTeffK: number
   stellarRadiusRsun: number
-  phase: number
-  playing: boolean
+  phase: number   // dimensionless [-0.5, +0.5]; 0 = mid-transit
 }) {
   const starR = useMemo(() => starSceneSize(stellarRadiusRsun), [stellarRadiusRsun])
   const depthPpm = vet.depth_ppm ?? 100
@@ -391,7 +362,6 @@ function SceneContent({
 
   const sma = useMemo(() => semiMajorAxisFromPeriod(periodDays), [periodDays])
   const orbitR = useMemo(() => auToScene(sma), [sma])
-  const omega = useMemo(() => orbitalAngularVelocity(periodDays, 365.25), [periodDays])
 
   const { visualR, exaggerationFactor } = useMemo(
     () => computePlanetScene(depthPpm, stellarRadiusRsun, starR),
@@ -442,11 +412,7 @@ function SceneContent({
           companionTeffK={companionTeffK}
           orbitR={orbitR}
           inclRad={inclRad}
-          primaryDepthPpm={primaryDepthPpm}
-          secondaryDepthPpm={secondaryDepthPpm}
           phase={phase}
-          playing={playing}
-          omega={omega}
         />
       ) : isCentroid ? (
         <>
@@ -468,8 +434,6 @@ function SceneContent({
             bodyR={visualR}
             inclRad={inclRad}
             phase={phase}
-            playing={playing}
-            omega={omega}
           />
           {isUncertain && <UncertainOverlay starR={starR} />}
         </>
@@ -510,33 +474,51 @@ function ScenePlaceholder({ message }: { message: string }) {
 }
 
 // ── Folded light curve with animated marker ───────────────────────────────
+// Renders the artifact's phased_lc as scatter points (binned data).
+// A vertical marker tracks the current phase.
+// If phased_lc is null or empty: explicit empty state — no shape is synthesized.
 function FoldedLCWithMarker({
   phasedLC,
   currentPhase,
   disposition,
 }: {
   phasedLC: PhasedLC & { flux_secondary?: number[]; primary_depth_ppm?: number; secondary_depth_ppm?: number } | null | undefined
-  currentPhase: number   // 0 = mid-transit, -0.5..+0.5
+  currentPhase: number   // dimensionless [-0.5, +0.5]; 0 = mid-transit
   disposition: string
 }) {
   const W = 560
   const H = 110
   const PAD = { l: 8, r: 8, t: 10, b: 20 }
 
-  const isEB = disposition === 'false_positive' && phasedLC?.flux_secondary
+  const isEB = disposition === 'false_positive' && !!phasedLC?.flux_secondary
 
-  if (!phasedLC?.phase?.length) {
+  // ── Empty state — never synthesize ───────────────────────────────────────
+  if (!phasedLC?.phase?.length || !phasedLC?.flux?.length) {
     return (
-      <div style={{
-        height: H,
-        background: 'var(--np-surface)',
-        border: '1px solid var(--np-border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: 12, color: 'var(--np-faint)' }}>
+      <svg
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        style={{
+          display: 'block',
+          background: 'var(--np-surface)',
+          border: '1px solid var(--np-border)',
+        }}
+        aria-label="Phase-folded light curve — no data available"
+        role="img"
+      >
+        <text
+          x={W / 2}
+          y={H / 2}
+          fill="var(--np-faint)"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize="11"
+          fontFamily="var(--font-serif)"
+          fontStyle="italic"
+        >
           No phase-folded light curve available for this result
-        </span>
-      </div>
+        </text>
+      </svg>
     )
   }
 
@@ -554,23 +536,19 @@ function FoldedLCWithMarker({
   const toX = (p: number) => PAD.l + (p + 0.5) * plotW
   const toY = (f: number) => PAD.t + (1 - (f - minF) / rng) * plotH
 
-  const pts = phase.map((p, i) => `${toX(p).toFixed(1)},${toY(flux[i]).toFixed(1)}`).join(' ')
-  const ptsSec = fluxSec
-    ? phase.map((p, i) => `${toX(p).toFixed(1)},${toY(fluxSec[i]).toFixed(1)}`).join(' ')
-    : null
+  // Marker x from the current phase (already in [-0.5, +0.5])
+  const markerX = toX(currentPhase)
 
-  // Marker x position from the current animation phase (wrapped to -0.5..0.5)
-  const normPhase = ((((currentPhase / (Math.PI * 2)) % 1) + 1) % 1)
-  const markerPhase = normPhase > 0.5 ? normPhase - 1 : normPhase
-  const markerX = toX(markerPhase)
-
-  // Interpolate flux at markerPhase for the marker dot Y
+  // Interpolate flux at currentPhase for the marker dot Y
   const markerY = (() => {
     if (phase.length < 2) return toY(flux[0] ?? 1)
-    const idx = phase.findIndex((p) => p >= markerPhase) ?? phase.length - 1
-    const i = Math.max(0, Math.min(phase.length - 1, idx))
+    const idx = phase.findIndex((p) => p >= currentPhase)
+    const i = idx < 0 ? phase.length - 1 : Math.max(0, Math.min(phase.length - 1, idx))
     return toY(flux[i] ?? 1)
   })()
+
+  // Point radius for scatter plot — small so individual bins are visible
+  const PR = 2.0
 
   return (
     <svg
@@ -589,18 +567,34 @@ function FoldedLCWithMarker({
       <text x={W - PAD.r - 16} y={H - 5} fill="var(--np-faint)" fontSize="8" fontFamily="var(--font-mono)">+0.5</text>
       <text x={W / 2} y={H - 5} fill="var(--np-faint)" fontSize="8" fontFamily="var(--font-mono)" textAnchor="middle">phase</text>
 
-      {/* Mid-transit reference */}
+      {/* Mid-transit reference at phase 0 */}
       <line x1={W / 2} y1={PAD.t} x2={W / 2} y2={H - PAD.b} stroke="var(--np-border)" strokeWidth="0.5" strokeDasharray="2,2" />
 
-      {/* Primary LC */}
-      <polyline points={pts} fill="none" stroke="var(--rust)" strokeWidth="1.4" />
+      {/* Primary LC — scatter points (binned data) */}
+      {phase.map((p, i) => (
+        <circle
+          key={i}
+          cx={toX(p).toFixed(1)}
+          cy={toY(flux[i]).toFixed(1)}
+          r={PR}
+          fill="var(--rust)"
+          opacity="0.75"
+        />
+      ))}
 
-      {/* Secondary (EB) LC — dimmer colour to distinguish */}
-      {ptsSec && (
-        <polyline points={ptsSec} fill="none" stroke="#5577AA" strokeWidth="1.2" strokeDasharray="4,2" />
-      )}
+      {/* Secondary (EB) LC — different colour to distinguish */}
+      {fluxSec && phase.map((p, i) => (
+        <circle
+          key={`sec-${i}`}
+          cx={toX(p).toFixed(1)}
+          cy={toY(fluxSec[i]).toFixed(1)}
+          r={PR}
+          fill="#5577AA"
+          opacity="0.75"
+        />
+      ))}
 
-      {/* Animated phase marker */}
+      {/* Animated phase marker — driven by parent phase state */}
       <line
         x1={markerX}
         y1={PAD.t}
@@ -615,10 +609,10 @@ function FoldedLCWithMarker({
       {/* Legend for EB */}
       {isEB && (
         <>
-          <line x1={W - 90} y1={12} x2={W - 72} y2={12} stroke="var(--rust)" strokeWidth="1.4" />
-          <text x={W - 68} y={15} fill="var(--np-muted)" fontSize="8" fontFamily="var(--font-mono)">primary</text>
-          <line x1={W - 90} y1={23} x2={W - 72} y2={23} stroke="#5577AA" strokeWidth="1.2" strokeDasharray="4,2" />
-          <text x={W - 68} y={26} fill="var(--np-muted)" fontSize="8" fontFamily="var(--font-mono)">secondary</text>
+          <circle cx={W - 84} cy={11} r={PR} fill="var(--rust)" opacity="0.75" />
+          <text x={W - 78} y={14} fill="var(--np-muted)" fontSize="8" fontFamily="var(--font-mono)">primary</text>
+          <circle cx={W - 84} cy={22} r={PR} fill="#5577AA" opacity="0.75" />
+          <text x={W - 78} y={25} fill="var(--np-muted)" fontSize="8" fontFamily="var(--font-mono)">secondary</text>
         </>
       )}
     </svg>
@@ -640,11 +634,16 @@ export default function OrbitalViewer({
     [stellarParams],
   )
 
+  // Phase is dimensionless [-0.5, +0.5]; 0 = mid-transit.
+  // This is the SINGLE phase state that ALL consumers (3D, SVG, slider) read.
   const [playing, setPlaying] = useState(false)
-  // Phase in radians; 0 = mid-transit (transiting body in front of star)
   const [phase, setPhase] = useState(0)
   const [canvasOk, setCanvasOk] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // RAF handle — kept in a ref so it can be cancelled without triggering re-renders
+  const rafRef = useRef<number | null>(null)
+  const prevTimestampRef = useRef<number | null>(null)
 
   // Verify canvas parent has non-zero height on mount
   useEffect(() => {
@@ -663,8 +662,45 @@ export default function OrbitalViewer({
     setPhase(0)
   }, [jobId])
 
-  // Scrub handler
+  // Animation loop — advances phase by wall-clock time, wraps at ±0.5.
+  // Started/stopped by the playing state.  Cancelled on unmount.
+  useEffect(() => {
+    if (!playing) {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+      prevTimestampRef.current = null
+      return
+    }
+
+    function tick(ts: number) {
+      if (prevTimestampRef.current === null) {
+        prevTimestampRef.current = ts
+      }
+      const elapsedMs = ts - prevTimestampRef.current
+      prevTimestampRef.current = ts
+
+      // Advance phase by fraction of one orbit elapsed this frame.
+      // phase changes by elapsedMs / (ORBIT_WALL_SECONDS * 1000) per frame.
+      setPhase((prev) => wrapPhase(prev + elapsedMs / (ORBIT_WALL_SECONDS * 1000)))
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+      prevTimestampRef.current = null
+    }
+  }, [playing])
+
+  // Scrub handler — pauses first, then updates phase
   const handleScrub = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setPlaying(false)
     setPhase(parseFloat(e.target.value))
   }, [])
 
@@ -741,7 +777,6 @@ export default function OrbitalViewer({
               key={jobId ?? 'no-job'}
               gl={{ antialias: true, alpha: false }}
               style={{ width: '100%', height: '100%', background: '#F5F2EA' }}
-              frameloop={playing ? 'always' : 'demand'}
             >
               <OrbitControls
                 enablePan={false}
@@ -756,7 +791,6 @@ export default function OrbitalViewer({
                   stellarTeffK={teffK}
                   stellarRadiusRsun={radiusRsun}
                   phase={phase}
-                  playing={playing}
                 />
               ) : (
                 <ScenePlaceholder message="No TCE data available" />
@@ -823,19 +857,19 @@ export default function OrbitalViewer({
         >
           {playing ? '⏸ Pause' : '▶ Play'}
         </button>
+        {/* Slider range matches the phase convention: [-0.5, +0.5] */}
         <input
           type="range"
-          min={-Math.PI}
-          max={Math.PI}
-          step={0.01}
+          min={-0.5}
+          max={0.5}
+          step={0.002}
           value={phase}
           onChange={handleScrub}
-          onMouseDown={() => setPlaying(false)}
           style={{ flex: 1, maxWidth: 200, accentColor: 'var(--rust)' }}
           aria-label="Scrub animation phase"
         />
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--np-faint)', minWidth: 60 }}>
-          phase {(phase / (Math.PI * 2)).toFixed(3)}
+          phase {phase.toFixed(3)}
         </span>
       </div>
 
@@ -858,8 +892,9 @@ export default function OrbitalViewer({
           fontFamily: 'var(--font-serif)', fontStyle: 'italic',
           fontSize: 11, color: 'var(--np-faint)', marginTop: 4,
         }}>
-          Green marker tracks the 3D animation above. Source: <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
-          {isEB && ' · blue dashed = secondary eclipse folded at primary period'}
+          Green marker tracks the 3D animation above. Source:{' '}
+          <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
+          {isEB && ' · blue = secondary eclipse folded at primary period'}
         </div>
       </div>
     </div>
