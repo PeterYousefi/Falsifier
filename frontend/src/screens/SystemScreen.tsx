@@ -373,6 +373,7 @@ function OrbitalFigure() {
         vet={activeVet}
         stellarParams={report.stellar_params}
         jobId={report.job_id}
+        isFixture={!!report.fixture_provenance}
       />
     </div>
   )

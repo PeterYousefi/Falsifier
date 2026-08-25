@@ -624,10 +624,14 @@ export default function OrbitalViewer({
   vet,
   stellarParams,
   jobId,
+  isFixture,
 }: {
   vet: VetResult | null | undefined
   stellarParams: StellarParams | null | undefined
   jobId: string | null | undefined
+  /** When true the report is fixture-backed, not a live pipeline artifact.
+   *  The 3D scene is suppressed (same policy as the light-curve panel). */
+  isFixture?: boolean
 }) {
   const { teffK, radiusRsun } = useMemo(
     () => extractStellarParams(stellarParams),
@@ -730,18 +734,110 @@ export default function OrbitalViewer({
     ? 'Planet candidate: a single body transiting the host star'
     : 'Uncertain geometry: disposition is ambiguous or has caveats'
 
-  if (!vet) {
+  // ── No pipeline artifact: show empty state identical to the light-curve panel ──
+  // This covers both (a) no vet at all and (b) a fixture-backed report where no
+  // live pipeline run has produced orbital geometry.  Interactive controls that
+  // drive a scene containing only a star are suppressed — they imply something is
+  // being displayed.
+  if (!vet || isFixture) {
     return (
-      <div style={{
-        border: '1px solid var(--np-rule)',
-        padding: '16px',
-        background: 'var(--np-surface)',
-        fontFamily: 'var(--font-serif)',
-        fontStyle: 'italic',
-        fontSize: 13,
-        color: 'var(--np-muted)',
-      }}>
-        Run a target above to see the orbital diagram.
+      <div>
+        <figure style={{ margin: 0 }}>
+          <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '0 0 8px' }} />
+          <div style={{
+            height: 340,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--np-surface)',
+            border: '1px solid var(--np-border)',
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-serif)',
+              fontStyle: 'italic',
+              fontSize: 13,
+              color: 'var(--np-muted)',
+            }}>
+              {!vet
+                ? 'Run a target above to see the orbital diagram.'
+                : 'Orbital diagram unavailable — no pipeline artifact. The transiting body cannot be placed without computed geometry.'}
+            </span>
+          </div>
+          <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '8px 0 4px' }} />
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.10em', color: 'var(--np-muted)', textTransform: 'uppercase', marginBottom: 3 }}>
+            FIG. 1
+          </div>
+          <figcaption style={{
+            fontFamily: 'var(--font-serif)',
+            fontStyle: 'italic',
+            fontSize: 12,
+            color: 'var(--np-muted)',
+            lineHeight: 1.5,
+            marginBottom: 8,
+          }}>
+            Orbital diagram — no pipeline artifact present.
+          </figcaption>
+        </figure>
+
+        {/* Controls — disabled */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 12px', opacity: 0.4, pointerEvents: 'none' }}>
+          <button
+            disabled
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              padding: '4px 12px',
+              border: '1px solid var(--np-rule)',
+              background: 'var(--np-surface)',
+              color: 'var(--np-muted)',
+              letterSpacing: '0.05em',
+            }}
+            aria-label="Play animation — unavailable"
+            aria-disabled="true"
+          >
+            ▶ Play
+          </button>
+          <input
+            type="range"
+            min={-0.5}
+            max={0.5}
+            step={0.002}
+            value={0}
+            readOnly
+            disabled
+            style={{ flex: 1, maxWidth: 200, accentColor: 'var(--rust)' }}
+            aria-label="Scrub animation phase — unavailable"
+            aria-disabled="true"
+          />
+        </div>
+
+        {/* Folded LC label — no dangling marker caption when no LC data */}
+        {vet && (
+          <div style={{ marginBottom: 4 }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: 'var(--np-muted)', marginBottom: 4,
+            }}>
+              Phase-folded light curve — {vet.tce_id}
+              {isEB && <span style={{ color: '#5577AA', marginLeft: 8 }}>· EB dual-depth</span>}
+            </div>
+            <FoldedLCWithMarker
+              phasedLC={phasedLC}
+              currentPhase={phase}
+              disposition={disposition}
+            />
+            {phasedLC?.phase?.length ? (
+              <div style={{
+                fontFamily: 'var(--font-serif)', fontStyle: 'italic',
+                fontSize: 11, color: 'var(--np-faint)', marginTop: 4,
+              }}>
+                Source:{' '}
+                <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
+                {isEB && ' · blue = secondary eclipse folded at primary period'}
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     )
   }
@@ -785,16 +881,12 @@ export default function OrbitalViewer({
                 enableDamping
                 dampingFactor={0.08}
               />
-              {vet ? (
-                <SceneContent
-                  vet={vet}
-                  stellarTeffK={teffK}
-                  stellarRadiusRsun={radiusRsun}
-                  phase={phase}
-                />
-              ) : (
-                <ScenePlaceholder message="No TCE data available" />
-              )}
+              <SceneContent
+                vet={vet}
+                stellarTeffK={teffK}
+                stellarRadiusRsun={radiusRsun}
+                phase={phase}
+              />
             </Canvas>
           )}
 
@@ -892,9 +984,15 @@ export default function OrbitalViewer({
           fontFamily: 'var(--font-serif)', fontStyle: 'italic',
           fontSize: 11, color: 'var(--np-faint)', marginTop: 4,
         }}>
-          Green marker tracks the 3D animation above. Source:{' '}
-          <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
-          {isEB && ' · blue = secondary eclipse folded at primary period'}
+          {phasedLC?.phase?.length
+            ? <>Green marker tracks the 3D animation above. Source:{' '}
+                <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
+                {isEB && ' · blue = secondary eclipse folded at primary period'}
+              </>
+            : <>Source: <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
+                {isEB && ' · blue = secondary eclipse folded at primary period'}
+              </>
+          }
         </div>
       </div>
     </div>

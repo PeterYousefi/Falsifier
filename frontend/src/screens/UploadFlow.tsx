@@ -53,7 +53,97 @@ const FLUX_CONVENTIONS = [
   { value: 'pdcsap',     label: 'PDCSAP flux',      desc: 'Pre-search Data Conditioning — systematic-corrected counts.' },
   { value: 'normalized', label: 'Normalised flux',  desc: 'Flux divided by the out-of-transit baseline, centred near 1.0.' },
   { value: 'relative',   label: 'Relative flux',    desc: 'Dimensionless ratio; values should dip below 1.0 during transit.' },
+  { value: 'magnitude',  label: 'Magnitude',        desc: 'Astronomical magnitude — values near 8–16; transits appear as upward spikes.' },
 ]
+
+// ── Plausibility check logic ───────────────────────────────────────────────
+// Returns a string describing the mismatch, or null when plausible.
+
+type PlausibilityMismatch = {
+  field: 'time' | 'flux'
+  message: string
+  observedRange: string
+  expectedRange: string
+}
+
+function checkTimePlausibility(
+  timeValues: number[],
+  declaredSystem: string,
+): PlausibilityMismatch | null {
+  if (!timeValues.length || !declaredSystem) return null
+  const tMin = Math.min(...timeValues)
+  const tMax = Math.max(...timeValues)
+  const midVal = (tMin + tMax) / 2
+
+  const card = TIME_SYSTEM_CARDS.find((c) => c.value === declaredSystem)
+  if (!card) return null
+
+  // ISOT is a string format — cannot be range-checked numerically
+  if (declaredSystem === 'isot') return null
+
+  const plausible = card.match(midVal)
+  if (plausible) return null
+
+  // Find which card the data actually matches
+  const actualCard = TIME_SYSTEM_CARDS.find((c) => c.value !== 'isot' && c.match(midVal))
+
+  return {
+    field: 'time',
+    message: `Declared time system is ${card.name}, but the observed value range [${tMin.toFixed(1)}–${tMax.toFixed(1)}] is outside the expected range for ${card.name}. ${actualCard ? `This looks like ${actualCard.name}.` : 'No standard time system matches this range.'}`,
+    observedRange: `${tMin.toFixed(1)} – ${tMax.toFixed(1)}`,
+    expectedRange: card.desc,
+  }
+}
+
+function checkFluxPlausibility(
+  fluxValues: number[],
+  declaredConvention: string,
+): PlausibilityMismatch | null {
+  if (!fluxValues.length || !declaredConvention) return null
+
+  const sorted = [...fluxValues].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)]
+  const fMin = sorted[0]
+  const fMax = sorted[sorted.length - 1]
+
+  // SAP / PDCSAP: counts, typically tens of thousands to millions; always large positive
+  if (declaredConvention === 'sap' || declaredConvention === 'pdcsap') {
+    if (median < 100) {
+      return {
+        field: 'flux',
+        message: `Declared flux convention is ${declaredConvention.toUpperCase()} (raw counts — values typically > 1,000), but the observed median flux is ${median.toFixed(4)}. This magnitude is inconsistent with raw photon counts.`,
+        observedRange: `median ${median.toFixed(4)}, range [${fMin.toFixed(4)}, ${fMax.toFixed(4)}]`,
+        expectedRange: 'Counts (SAP/PDCSAP): typically 1,000 – 10,000,000, always positive',
+      }
+    }
+  }
+
+  // Normalised: centred near 1.0; values within ~[0.9, 1.1] for most missions
+  if (declaredConvention === 'normalized' || declaredConvention === 'relative') {
+    if (Math.abs(median - 1.0) > 0.5) {
+      return {
+        field: 'flux',
+        message: `Declared flux convention is ${declaredConvention === 'normalized' ? 'Normalised' : 'Relative'} (centred near 1.0), but the observed median flux is ${median.toFixed(4)}, which is far from 1.0.`,
+        observedRange: `median ${median.toFixed(4)}, range [${fMin.toFixed(4)}, ${fMax.toFixed(4)}]`,
+        expectedRange: 'Normalised/relative flux: median near 1.0 (typically 0.5 – 1.5)',
+      }
+    }
+  }
+
+  // Magnitude: typically 8–16; transits spike upward
+  if (declaredConvention === 'magnitude') {
+    if (median < 5 || median > 22) {
+      return {
+        field: 'flux',
+        message: `Declared flux convention is Magnitude (typically 8–16 for Kepler/TESS targets), but the observed median is ${median.toFixed(4)}.`,
+        observedRange: `median ${median.toFixed(4)}, range [${fMin.toFixed(4)}, ${fMax.toFixed(4)}]`,
+        expectedRange: 'Magnitude: 5 – 22 for typical survey targets',
+      }
+    }
+  }
+
+  return null
+}
 
 type ColMapping = {
   time: string
@@ -175,6 +265,10 @@ export default function UploadFlow() {
   })
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Plausibility-check state
+  const [plausibilityMismatches, setPlausibilityMismatches] = useState<PlausibilityMismatch[]>([])
+  const [overrideConfirmed, setOverrideConfirmed] = useState(false)
+  const [overrideAttempted, setOverrideAttempted] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(async (f: File) => {
@@ -183,6 +277,9 @@ export default function UploadFlow() {
     setParseError(null)
     setMapping({ time: '', flux: '', flux_err: '', time_format: '', flux_convention: '' })
     setSubmitted(false)
+    setPlausibilityMismatches([])
+    setOverrideConfirmed(false)
+    setOverrideAttempted(false)
 
     const result = await parseCsv(f)
     if ('error' in result) {
@@ -206,6 +303,14 @@ export default function UploadFlow() {
     }
   }, [])
 
+  // Reset override when mapping changes so a new plausibility check runs on submit
+  const handleMappingChange = useCallback((updater: (m: ColMapping) => ColMapping) => {
+    setMapping(updater)
+    setOverrideConfirmed(false)
+    setOverrideAttempted(false)
+    setPlausibilityMismatches([])
+  }, [])
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
@@ -215,8 +320,32 @@ export default function UploadFlow() {
 
   const mappingComplete = mapping.time && mapping.flux && mapping.flux_err && mapping.time_format && mapping.flux_convention
 
+  // Compute plausibility mismatches from all preview rows (up to 10 parsed rows)
+  const allTimeValues: number[] = (preview && mapping.time)
+    ? preview.rows.map((r) => Number(r[mapping.time])).filter(isFinite)
+    : []
+  const allFluxValues: number[] = (preview && mapping.flux)
+    ? preview.rows.map((r) => Number(r[mapping.flux])).filter(isFinite)
+    : []
+
   const handleSubmit = async () => {
     if (!mappingComplete || !file) return
+
+    // Run plausibility checks if override not yet confirmed
+    if (!overrideConfirmed) {
+      const mismatches: PlausibilityMismatch[] = []
+      const timeMismatch = checkTimePlausibility(allTimeValues, mapping.time_format)
+      const fluxMismatch = checkFluxPlausibility(allFluxValues, mapping.flux_convention)
+      if (timeMismatch) mismatches.push(timeMismatch)
+      if (fluxMismatch) mismatches.push(fluxMismatch)
+
+      if (mismatches.length > 0) {
+        setPlausibilityMismatches(mismatches)
+        setOverrideAttempted(true)
+        return  // Block submission — user must acknowledge
+      }
+    }
+
     setSubmitting(true)
     await new Promise((r) => setTimeout(r, 900))
     setSubmitting(false)
@@ -339,7 +468,7 @@ export default function UploadFlow() {
                         }
                         onChange={(e) => {
                           const role = e.target.value
-                          setMapping((m) => ({
+                          handleMappingChange((m) => ({
                             ...m,
                             time:     m.time === col ? '' : m.time,
                             flux:     m.flux === col ? '' : m.flux,
@@ -381,11 +510,11 @@ export default function UploadFlow() {
                 <div
                   key={card.value}
                   className={`time-card${mapping.time_format === card.value ? ' selected' : ''}`}
-                  onClick={() => setMapping((m) => ({ ...m, time_format: card.value }))}
+                  onClick={() => handleMappingChange((m) => ({ ...m, time_format: card.value }))}
                   role="radio"
                   aria-checked={mapping.time_format === card.value}
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setMapping((m) => ({ ...m, time_format: card.value })) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMappingChange((m) => ({ ...m, time_format: card.value })) }}
                 >
                   <div className="time-card-name">{card.name}</div>
                   <div className="time-card-desc">{card.desc}</div>
@@ -414,11 +543,11 @@ export default function UploadFlow() {
                     key={fc.value}
                     className={`time-card${mapping.flux_convention === fc.value ? ' selected' : ''}`}
                     style={{ flex: '1 1 180px', minWidth: 160 }}
-                    onClick={() => setMapping((m) => ({ ...m, flux_convention: fc.value }))}
+                    onClick={() => handleMappingChange((m) => ({ ...m, flux_convention: fc.value }))}
                     role="radio"
                     aria-checked={mapping.flux_convention === fc.value}
                     tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setMapping((m) => ({ ...m, flux_convention: fc.value })) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMappingChange((m) => ({ ...m, flux_convention: fc.value })) }}
                   >
                     <div className="time-card-name">{fc.label}</div>
                     <div className="time-card-desc">{fc.desc}</div>
@@ -457,9 +586,86 @@ export default function UploadFlow() {
               {' '}— No backend is deployed. Submit validates your column mapping and time system
               but does not enqueue a real pipeline run.
             </div>
+
+            {/* Plausibility mismatch block — shown before submission and while override is pending */}
+            {overrideAttempted && plausibilityMismatches.length > 0 && !overrideConfirmed && (
+              <div
+                role="alert"
+                aria-live="assertive"
+                style={{
+                  background: 'var(--np-surface)',
+                  border: '1px solid var(--np-rule)',
+                  borderLeft: '3px solid var(--fail)',
+                  padding: '12px 14px',
+                  marginBottom: 14,
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 13,
+                  color: 'var(--np-muted)',
+                  lineHeight: 1.6,
+                }}
+              >
+                <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fail)', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
+                  PLAUSIBILITY CHECK FAILED — SUBMISSION BLOCKED
+                </strong>
+                {plausibilityMismatches.map((m, i) => (
+                  <div key={i} style={{ marginBottom: 10 }}>
+                    <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-text)', textTransform: 'uppercase' }}>
+                      {m.field === 'time' ? 'Time system' : 'Flux convention'}
+                    </strong>
+                    <p style={{ margin: '4px 0 2px' }}>{m.message}</p>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-faint)' }}>
+                      Observed: {m.observedRange}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-faint)' }}>
+                      Expected: {m.expectedRange}
+                    </div>
+                  </div>
+                ))}
+                <p style={{ marginTop: 10, fontStyle: 'italic' }}>
+                  If you are certain your declaration is correct (e.g. the data uses an unusual calibration),
+                  you may override below. The override will be recorded in the job record.
+                </p>
+                <button
+                  className="btn-secondary"
+                  style={{ marginTop: 8, borderColor: 'var(--fail)', color: 'var(--fail)' }}
+                  onClick={() => setOverrideConfirmed(true)}
+                  aria-label="Override plausibility check and proceed with submission"
+                >
+                  I confirm the declarations are correct — proceed with override
+                </button>
+              </div>
+            )}
+
+            {/* Override recorded notice */}
+            {overrideConfirmed && !submitted && (
+              <div style={{
+                background: 'var(--np-surface)',
+                border: '1px solid var(--np-rule)',
+                borderLeft: '3px solid var(--warn)',
+                padding: '8px 12px',
+                fontFamily: 'var(--font-serif)',
+                fontSize: 13,
+                color: 'var(--np-muted)',
+                lineHeight: 1.55,
+                marginBottom: 12,
+              }} role="note">
+                <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--warn)', letterSpacing: '0.06em' }}>
+                  OVERRIDE ACTIVE
+                </strong>
+                {' '}— Plausibility check was overridden. This override will be recorded in the job record.
+              </div>
+            )}
+
             {submitted ? (
-              <div style={{ color: 'var(--pass)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                ✓ Upload accepted — mapping validated (demo mode, no pipeline run)
+              <div>
+                <div style={{ color: 'var(--pass)', fontFamily: 'var(--font-mono)', fontSize: 13, marginBottom: 6 }}>
+                  ✓ Upload accepted — mapping validated (demo mode, no pipeline run)
+                </div>
+                {overrideConfirmed && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)' }}>
+                    ⚑ Plausibility override recorded: user confirmed non-standard time system or flux convention.
+                  </div>
+                )}
               </div>
             ) : (
               <div>
@@ -470,7 +676,7 @@ export default function UploadFlow() {
                 <button
                   className="btn-primary"
                   onClick={handleSubmit}
-                  disabled={!mappingComplete || submitting}
+                  disabled={!mappingComplete || submitting || (overrideAttempted && plausibilityMismatches.length > 0 && !overrideConfirmed)}
                   aria-label="Submit light curve upload"
                 >
                   {submitting ? <><span className="spinner" /> Submitting…</> : 'Submit'}

@@ -66,6 +66,10 @@ export interface VetResult {
   duration_hours?: number | null
   epoch_bkjd?: number | null
   inclination_deg?: number | null
+  /** Photometric stellar density in solar density units (ρ☉). */
+  stellar_density_rho_sun?: number | null
+  /** Planet-to-star radius ratio Rp/Rs (dimensionless). */
+  rp_rs?: number | null
   phased_lc?: PhasedLC | null
 }
 
