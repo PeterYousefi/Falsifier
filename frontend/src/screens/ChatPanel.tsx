@@ -9,6 +9,7 @@ import React, { useState, useRef, useEffect, Component, type ReactNode, type Err
 import { useStore } from '../store'
 import { dataSource } from '../data/DataSource'
 import type { ChatMessage } from '../data/types'
+import { FixtureProvenanceBadge } from './CandidateDetail'
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; message: string }
@@ -125,6 +126,9 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 // ── Main export ─────────────────────────────────────────────────────────────
 export default function ChatPanel() {
   const { report, jobId, chatHistory, setChatHistory } = useStore()
+  // Use active job_id; fall back to report job_id; never fall back to a fixture id
+  // (binding chat to fixture-job-001 would surface the fixture id in citations).
+  const activeJobId = jobId ?? (report?.fixture_provenance ? null : report?.job_id ?? null)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loadedFixture, setLoadedFixture] = useState(false)
@@ -152,7 +156,7 @@ export default function ChatPanel() {
     setInput('')
     try {
       const reply = await dataSource.chat(
-        jobId ?? report?.job_id ?? null,
+        activeJobId,
         message,
         history,
       )
@@ -179,8 +183,10 @@ export default function ChatPanel() {
         gap: 12, flexShrink: 0,
       }}>
         <div>
+          {/* Fixture provenance badge when chat is operating on fixture data */}
+          {report && <FixtureProvenanceBadge report={report} />}
           <div className="article-dateline" style={{ textAlign: 'left', marginBottom: 4 }}>
-            ASK · PIPELINE CHAT{jobId ? ` · ${jobId}` : ''}
+            ASK · PIPELINE CHAT{activeJobId ? ` · ${activeJobId}` : ''}
           </div>
           <h2 style={{ fontSize: 18, marginBottom: 2 }}>Ask the pipeline</h2>
           <p className="standfirst" style={{ fontSize: 13, marginBottom: 0 }}>

@@ -76,6 +76,12 @@
       "The classifier probability is a ranking score only, not a verdict.",
       "Disposition is determined exclusively by the vet stage."
     ],
+    "fixture_provenance": {
+      "schema_version": "1",
+      "fixture_id": "fixture-job-eb-001",
+      "generated_date": "2024-01-15",
+      "note": "Hand-authored EB fixture; no live pipeline run has been performed. Values in this fixture are NOT pipeline outputs. Do not treat these values as measured quantities."
+    },
     "stellar_params": {
       "teff_K": 5200,
       "radius_rsun": 0.92,

@@ -100,25 +100,24 @@
         "period_days": 0.8375,
         "depth_ppm": 154,
         "duration_hours": 1.61,
-        "epoch_bkjd": 2454833.528,
+        "epoch_bkjd": 131.5576,
         "inclination_deg": 88.7,
         "phased_lc": null
       }
     ],
-    "classify": [
-      {
-        "tce_id": "KIC-11904151-00",
-        "probability": 0.812,
-        "probability_uncertainty": 0.041,
-        "model_version": "xgb-v0.3.1"
-      }
-    ],
+    "classify": [],
     "non_claims": [
       "This project is not a biosignature detector.",
       "No exoplanet biosignature has ever been confirmed.",
       "The classifier probability is a ranking score only, not a verdict.",
       "Disposition is determined exclusively by the vet stage."
     ],
+    "fixture_provenance": {
+      "schema_version": "1",
+      "fixture_id": "fixture-job-001",
+      "generated_date": "2024-01-15",
+      "note": "Hand-authored fixture; no live pipeline run has been performed. Values in this fixture are NOT pipeline outputs. The classifier result is a stub and no trained model artifact exists. Do not treat these values as measured quantities."
+    },
     "stellar_params": {
       "teff_K": 5627,
       "radius_rsun": 1.065,

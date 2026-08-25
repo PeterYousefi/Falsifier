@@ -134,6 +134,24 @@ export interface DetectionReport {
   classify: ClassifyResult[]
   non_claims: string[]
   stellar_params?: StellarParams | null
+  /** Present when this report was served from a committed fixture, not a live run.
+   *  Carries the fixture schema version and generation context. */
+  fixture_provenance?: FixtureProvenance | null
+}
+
+/**
+ * Sidecar present on every fixture-backed report.
+ * A live pipeline run never carries this field.
+ */
+export interface FixtureProvenance {
+  /** Schema version so future fields can be added without breaking old tests. */
+  schema_version: string
+  /** Fixture identifier — e.g. "fixture-job-001" */
+  fixture_id: string
+  /** ISO-8601 date the fixture was generated or last validated. */
+  generated_date: string
+  /** Short human-readable note explaining how the fixture was produced. */
+  note: string
 }
 
 export interface JobRecord {

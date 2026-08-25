@@ -4,13 +4,14 @@
  * Headline states the physical finding. Standfirst names the deciding test.
  * Two-column body with phase LC as a bordered figure-inset.
  * All 7 tests always shown; metrics behind "Show the numbers" expander.
- * Calibrated probability labelled a ranking signal only.
+ * Classifier panel shown only when a trained model artifact produced a score;
+ * renders an explicit unavailable state otherwise.
  *
  * Also exports shared helpers used by other screens.
  */
 import React, { useMemo, useState, useRef } from 'react'
 import { useStore } from '../store'
-import type { VettingTestOutcome, Disposition, PhasedLC, VetResult, ClassifyResult } from '../data/types'
+import type { VettingTestOutcome, Disposition, PhasedLC, VetResult, ClassifyResult, DetectionReport } from '../data/types'
 
 export const VETTING_TEST_ORDER = [
   'odd_even_depth',
@@ -40,8 +41,8 @@ export const TEST_LABELS: Record<string, { short: string; headline: string; why:
   },
   transit_shape: {
     short:    'Transit shape',
-    headline: 'The dip is flat-bottomed, not V-shaped',
-    why:      'A planet crossing a much larger star produces a characteristic flat bottom. A V-shape suggests a stellar companion of comparable size.',
+    headline: 'The dip has a limb-darkened profile, not a V-shape',
+    why:      'A planet transiting a limb-darkened star produces a U-shaped dip with a curved floor. A sharp V-shape is the eclipsing-binary heuristic — it indicates a companion of comparable size.',
   },
   stellar_density: {
     short:    'Stellar density',
@@ -231,7 +232,7 @@ function reportHeadline(vet: VetResult, targetId: string): string {
 function reportStandfirst(vet: VetResult, classify: ClassifyResult | null): string {
   if (vet.disposition === 'candidate') {
     const n = vet.test_results?.length ?? 0
-    const prob = classify ? ` Ranking score ${(classify.probability * 100).toFixed(1)}% (signal only, not a verdict).` : ''
+    const prob = classify ? ` Ranking score ${(classify.probability * 100).toFixed(1)}\u202f% (signal only, not a verdict).` : ''
     return `All ${n} automated tests returned negative.${prob}`
   }
   if (vet.disposition === 'false_positive' && vet.triggering_test) {
@@ -271,6 +272,67 @@ function TceSelector({ tce_id, disposition }: { tce_id: string; disposition: Dis
   )
 }
 
+// ── Fixture provenance badge ───────────────────────────────────────────────
+export function FixtureProvenanceBadge({ report }: { report: DetectionReport }) {
+  if (!report.fixture_provenance) return null
+  return (
+    <div
+      role="note"
+      data-testid="fixture-provenance-badge"
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '8px 14px',
+        background: 'var(--np-surface)',
+        border: '1px solid var(--np-rule)',
+        borderLeft: '3px solid var(--warn)',
+        marginBottom: 16,
+        fontFamily: 'var(--font-serif)',
+        fontSize: 13,
+        color: 'var(--np-muted)',
+        lineHeight: 1.55,
+      }}
+    >
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--warn)', letterSpacing: '0.06em', whiteSpace: 'nowrap', paddingTop: 2 }}>
+        FIXTURE
+      </span>
+      <span>
+        <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-text)' }}>
+          This report was not computed by the pipeline.
+        </strong>
+        {' '}It is a committed hand-authored fixture ({report.fixture_provenance.fixture_id}).
+        Values shown are illustrative and are <strong>not</strong> outputs of a live run.
+        {' '}No trained classifier model exists; the ranking score cannot be computed.
+        {' '}See the Provenance page for pipeline status.
+      </span>
+    </div>
+  )
+}
+
+// ── Classifier unavailable panel ───────────────────────────────────────────
+function ClassifierUnavailablePanel({ reason }: { reason: string }) {
+  return (
+    <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
+      <div className="section-label">II. Ranking score — not a verdict</div>
+      <div style={{
+        background: 'var(--np-surface)', border: '1px solid var(--np-rule)',
+        borderLeft: '3px solid var(--np-rule)', padding: '12px 14px',
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--np-muted)', marginBottom: 4 }}>
+          — unavailable
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.55, marginBottom: 4 }}>
+          {reason}
+        </p>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-faint)' }}>
+          Source: classify.probability · blocker: no model artifact
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main screen ────────────────────────────────────────────────────────────
 export default function CandidateDetail() {
   const { report, selectedTceId } = useStore()
@@ -302,9 +364,23 @@ export default function CandidateDetail() {
   const headline = vetResult ? reportHeadline(vetResult, report.target_id) : report.target_id
   const standfirst = vetResult ? reportStandfirst(vetResult, classifyResult) : ''
 
+  // Determine classifier unavailable reason for item 3
+  const classifierUnavailableReason = useMemo(() => {
+    if (classifyResult) return null
+    if (report.fixture_provenance) {
+      return 'No trained classifier model artifact exists (artifacts/classify/xgb_classifier.ubj is absent). ' +
+        'The training pipeline is blocked by train/serve feature skew — see README for details. ' +
+        'This fixture value was a stub; it has been removed.'
+    }
+    return 'No classifier result is available for this TCE. Run the pipeline with run_classify=true and a trained model artifact present.'
+  }, [classifyResult, report.fixture_provenance])
+
   return (
     <div className="screen" style={{ overflowY: 'auto' }}>
       <div className="page-body">
+
+        {/* Fixture provenance badge — always shown at top when fixture-backed */}
+        <FixtureProvenanceBadge report={report} />
 
         {/* TCE selector (multiple TCEs) */}
         {report.vet.length > 1 && (
@@ -340,10 +416,11 @@ export default function CandidateDetail() {
               <hr className="figure-inset-rule-bottom" />
               <div className="figure-label">FIG. 1</div>
               <figcaption>
-                Phase-folded light curve for <span style={{ fontFamily: 'var(--font-mono)' }}>{vetResult.tce_id}</span>.
-                The star's brightness (vertical axis) is plotted against orbital phase.
-                A genuine planet transit appears as a symmetric, flat-bottomed dip centred at phase zero.
-                Source: <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
+                Phase-folded light curve for <span style={{ fontFamily: 'var(--font-mono)' }}>{vetResult.tce_id}</span>,
+                plotted point-by-point from <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>.
+                Each point is one binned observation; flux is normalised to the out-of-transit baseline.
+                A genuine limb-darkened planet transit appears as a U-shaped dip with a curved floor, symmetric about phase zero.
+                An empty panel here means no phased light curve is present in the artifact — the pipeline has not run.
               </figcaption>
             </figure>
 
@@ -351,17 +428,17 @@ export default function CandidateDetail() {
             <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
               <div className="section-label">I. Orbital parameters</div>
               <div style={{ background: 'var(--np-surface)', border: '1px solid var(--np-rule)', padding: '10px 14px' }}>
-                <Row label="Period"      value={vetResult.period_days != null ? `${vetResult.period_days.toFixed(6)} d` : null}      source="vet.period_days" />
+                <Row label="Period"      value={vetResult.period_days != null ? `${vetResult.period_days} d` : null}                  source="vet.period_days" />
                 <Row label="Depth"       value={vetResult.depth_ppm != null ? `${vetResult.depth_ppm.toFixed(0)} ppm` : null}         source="vet.depth_ppm" />
-                <Row label="Duration"    value={vetResult.duration_hours != null ? `${vetResult.duration_hours.toFixed(3)} h` : null}  source="vet.duration_hours" />
-                <Row label="Epoch"       value={vetResult.epoch_bkjd != null ? `${vetResult.epoch_bkjd.toFixed(4)} BKJD` : null}       source="vet.epoch_bkjd" />
-                <Row label="Inclination" value={vetResult.inclination_deg != null ? `${vetResult.inclination_deg.toFixed(1)} °` : null} source="vet.inclination_deg" />
-                <Row label="TCE ID"      value={vetResult.tce_id}                                                                       source="vet.tce_id" />
+                <Row label="Duration"    value={vetResult.duration_hours != null ? `${vetResult.duration_hours} h` : null}            source="vet.duration_hours" />
+                <Row label="Epoch"       value={vetResult.epoch_bkjd != null ? `${vetResult.epoch_bkjd} BKJD` : null}                source="vet.epoch_bkjd" />
+                <Row label="Inclination" value={vetResult.inclination_deg != null ? `${vetResult.inclination_deg} °` : null}          source="vet.inclination_deg" />
+                <Row label="TCE ID"      value={vetResult.tce_id}                                                                     source="vet.tce_id" />
               </div>
             </div>
 
-            {/* II. RANKING SCORE */}
-            {classifyResult && (
+            {/* II. RANKING SCORE — live result or explicit unavailable state */}
+            {classifyResult ? (
               <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
                 <div className="section-label">II. Ranking score — not a verdict</div>
                 <div style={{
@@ -370,10 +447,10 @@ export default function CandidateDetail() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 26, fontWeight: 500, color: 'var(--np-text)' }}>
-                      {(classifyResult.probability * 100).toFixed(1)} %
+                      {(classifyResult.probability * 100).toFixed(1)}\u202f%
                     </span>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--np-muted)' }}>
-                      ± {(classifyResult.probability_uncertainty * 100).toFixed(1)} %
+                      ±\u202f{(classifyResult.probability_uncertainty * 100).toFixed(1)}\u202f%
                     </span>
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.55, marginBottom: 4 }}>
@@ -386,6 +463,8 @@ export default function CandidateDetail() {
                   </div>
                 </div>
               </div>
+            ) : (
+              <ClassifierUnavailablePanel reason={classifierUnavailableReason ?? 'No classifier result available.'} />
             )}
 
             {/* III. VETTING TESTS */}

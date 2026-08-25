@@ -11,31 +11,33 @@ const TIME_SYSTEM_CARDS = [
   {
     value: 'bjd',
     name: 'BJD',
-    desc: 'Barycentric Julian Date — values near 2,458,000, most ground-based software.',
+    // Kepler-era BJD is near 2,455,000; TESS-era is near 2,458,000.
+    desc: 'Barycentric Julian Date — values near 2,455,000 (Kepler/K2) or 2,458,000 (TESS). Most ground-based and space-based software.',
     match: (v: number) => v > 2400000 && v < 2500000,
   },
   {
     value: 'btjd',
     name: 'BTJD',
-    desc: 'TESS Barycentric Julian Date — values near 2,000. If this came from the TESS pipeline.',
+    desc: 'TESS Barycentric Julian Date — values near 1,000–3,000. Produced by the TESS pipeline (BJD − 2,457,000.0).',
     match: (v: number) => v > 1000 && v < 10000,
   },
   {
     value: 'bkjd',
     name: 'BKJD',
-    desc: 'Barycentric Kepler Julian Date — values near 100–1600. Standard for Kepler data products.',
+    desc: 'Barycentric Kepler Julian Date — values near 100–1600. Standard for Kepler data products (BJD − 2,454,833.0).',
     match: (v: number) => v > 100 && v < 2000,
   },
   {
     value: 'mjd',
     name: 'MJD',
-    desc: 'Modified Julian Date — values near 58,000. Common in general-purpose astronomy software.',
+    // Kepler-era MJD is near 55,000; TESS-era is near 58,000.
+    desc: 'Modified Julian Date — values near 55,000 (Kepler/K2) or 58,000 (TESS). Common in general-purpose astronomy software.',
     match: (v: number) => v > 50000 && v < 70000,
   },
   {
     value: 'jd',
     name: 'JD',
-    desc: 'Julian Date — values near 2,458,000. The unreduced form of BJD.',
+    desc: 'Julian Date — values near 2,455,000 (Kepler/K2) or 2,458,000 (TESS). The unreduced form of BJD.',
     match: (v: number) => v > 2400000 && v < 2500000,
   },
   {
@@ -241,8 +243,8 @@ export default function UploadFlow() {
         <h1 style={{ marginBottom: 8 }}>Upload a light curve</h1>
         <p className="standfirst">
           Provide a CSV or TSV file with a time column and a flux column.
-          The pipeline requires explicit confirmation of the time system and flux convention —
-          no defaults are preselected.
+          Column roles are inferred from headers where possible — you must verify them.
+          Time system and flux convention are never inferred; you must select both explicitly.
         </p>
         <hr className="rule-hair" />
 
@@ -302,11 +304,12 @@ export default function UploadFlow() {
         {preview && !parseError && (
           <div className="step-section">
             <div className="section-label">II. Confirm column mapping</div>
-            <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 10, lineHeight: 1.55 }}>
-              The table below shows each detected column with its first two values.
-              Assign each column a role — or leave it as "ignore" if not needed.
-              No role is preselected.
-            </p>
+              <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 10, lineHeight: 1.55 }}>
+                The table below shows each detected column with its first two values.
+                Roles are inferred from column headers where possible — verify each assignment
+                and correct any that are wrong. Use "— ignore —" for columns you do not need.
+                The time system and flux convention below must still be selected explicitly.
+              </p>
             <table className="col-map-table" aria-label="Column mapping">
               <thead>
                 <tr>

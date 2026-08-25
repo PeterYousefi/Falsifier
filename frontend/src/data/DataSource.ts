@@ -360,18 +360,17 @@ const _OFFLINE_ANSWERS: Array<{ match: string[]; entry: _OfflineEntry }> = [
         'Key results from the fixture artifact:\n' +
         '  • Odd/even depth mismatch: 0.018 (dimensionless) — within the 2σ threshold. ' +
         'Equal depths rule out an eclipsing binary. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n' +
+        '[source: get_vetting_results(KIC-11904151-00)]\n' +
         '  • Secondary eclipse test: PASS — no secondary event detected at phase 0.5. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n' +
+        '[source: get_vetting_results(KIC-11904151-00)]\n' +
         '  • Centroid displacement: 0.21 arcsec — below the 0.5 arcsec threshold. ' +
         'The brightness centroid did not shift during transit, ruling out a contaminating background star. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n' +
-        '  • Classifier ranking score: 81.2% ± 4.1%. This is a ranking signal only — ' +
-        'it does not determine disposition. Disposition is set exclusively by the vetting tests. ' +
-        '[source: get_planet_params(fixture-job-001, KIC-11904151-00)]',
+        '[source: get_vetting_results(KIC-11904151-00)]\n' +
+        '  • Classifier ranking score: unavailable — no trained model artifact is present. ' +
+        'Disposition is set exclusively by the vetting tests. ' +
+        '[source: get_vetting_results(KIC-11904151-00)]',
       sources: [
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]',
-        '[source: get_planet_params(fixture-job-001, KIC-11904151-00)]',
+        '[source: get_vetting_results(KIC-11904151-00)]',
       ],
     },
   },
@@ -383,15 +382,18 @@ const _OFFLINE_ANSWERS: Array<{ match: string[]; entry: _OfflineEntry }> = [
         'The stellar density test compares the density implied by the transit geometry ' +
         '(duration, depth, period) with the spectroscopic value from Gaia DR3.\n\n' +
         'Fixture result for KIC-11904151-00:\n' +
-        '  • Photometric stellar density: 1.07 ρ☉ — consistent with the Gaia DR3 ' +
-        'spectroscopic estimate, confirming the transit geometry is self-consistent. ' +
-        'Outcome: PASS. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n\n' +
+        '  • Photometric stellar density reported in the fixture: 1.07 — but note this fixture ' +
+        'was hand-authored and the unit label (rho_sun) may be incorrect. ' +
+        'The published density of Kepler-10 is ~1.07 g/cm³ = ~0.76 ρ☉; ' +
+        'the fixture mislabels g/cm³ as solar densities. ' +
+        'Outcome shown is PASS, but the geometry does not close under either unit reading — ' +
+        'this is a known fixture defect. ' +
+        '[source: get_vetting_results(KIC-11904151-00)]\n\n' +
         'A large discrepancy between photometric and spectroscopic density would indicate ' +
         'that the transiting object is not in front of this star (e.g. a blended background EB). ' +
-        'No such discrepancy is present here.',
+        'The stellar density check on a fixture cannot be trusted — it must run on real pipeline output.',
       sources: [
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]',
+        '[source: get_vetting_results(KIC-11904151-00)]',
       ],
     },
   },
@@ -410,18 +412,18 @@ const _OFFLINE_ANSWERS: Array<{ match: string[]; entry: _OfflineEntry }> = [
         '  1. Odd/even depth test: the odd and even transit depths agree within 0.018 ' +
         '(dimensionless), well within the 2σ threshold. An EB would produce alternating ' +
         'deep and shallow dips. Outcome: PASS. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n\n' +
+        '[source: get_vetting_results(KIC-11904151-00)]\n\n' +
         '  2. Secondary eclipse test: no significant dimming was detected at phase 0.5 ' +
         '(half an orbit). A detached EB would show a secondary eclipse at this phase. Outcome: PASS. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n\n' +
+        '[source: get_vetting_results(KIC-11904151-00)]\n\n' +
         '  3. Transit shape test: the profile χ² ratio is 0.94 — consistent with a ' +
-        'limb-darkened planetary transit rather than a V-shaped stellar eclipse. Outcome: PASS. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n\n' +
-        'Taken together, these three tests establish that the data is inconsistent with ' +
-        'the most common EB false-positive scenarios. The data can distinguish this signal ' +
-        'from the major EB configurations given the available photometry.',
+        'limb-darkened U-shaped transit rather than a V-shaped stellar eclipse. Outcome: PASS. ' +
+        '[source: get_vetting_results(KIC-11904151-00)]\n\n' +
+        'Taken together, these three tests establish that the fixture data is inconsistent with ' +
+        'the most common EB false-positive scenarios. Note that these are fixture values — ' +
+        'a live pipeline run is required to confirm the tests on real photometry.',
       sources: [
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]',
+        '[source: get_vetting_results(KIC-11904151-00)]',
       ],
     },
   },
@@ -433,20 +435,20 @@ const _OFFLINE_ANSWERS: Array<{ match: string[]; entry: _OfflineEntry }> = [
         'The vetting tests remove the main photometric false-positive scenarios, ' +
         'but photometry alone cannot confirm a planetary nature. What would settle it:\n\n' +
         '  1. Radial velocity follow-up: measuring the stellar reflex velocity at the ' +
-        'orbital period (0.8375 d) [source: get_planet_params(fixture-job-001, KIC-11904151-00)] ' +
+        'orbital period (0.8375 d) [source: get_planet_params(KIC-11904151-00)] ' +
         'would determine the companion mass. A planetary mass (< 13 M_Jup) would confirm the candidate. ' +
         'This is the definitive test.\n\n' +
         '  2. High-resolution imaging: ruling out a blended background star within 1–2 arcsec. ' +
         'The centroid test shows 0.21 arcsec displacement — within threshold — but ' +
         'a background star closer than the Kepler PSF resolution would not shift the centroid. ' +
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]\n\n' +
+        '[source: get_vetting_results(KIC-11904151-00)]\n\n' +
         '  3. High-resolution spectroscopy: checking for a spectroscopic binary companion ' +
         'at the orbital period.\n\n' +
         'Note: this project is not a biosignature detector and makes no habitability claims. ' +
         'Confirmation of planetary nature is the appropriate next step for this candidate.',
       sources: [
-        '[source: get_planet_params(fixture-job-001, KIC-11904151-00)]',
-        '[source: get_vetting_results(fixture-job-001, KIC-11904151-00)]',
+        '[source: get_planet_params(KIC-11904151-00)]',
+        '[source: get_vetting_results(KIC-11904151-00)]',
       ],
     },
   },

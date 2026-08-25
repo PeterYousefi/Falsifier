@@ -8,7 +8,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { useStore } from '../store'
-import { DispoChip } from './CandidateDetail'
+import { DispoChip, FixtureProvenanceBadge } from './CandidateDetail'
 import OrbitalViewer from './OrbitalViewer'
 /** Canonical KIC target for the primary example button. */
 const FIXTURE_TARGET_ID = 'KIC 11904151'
@@ -153,6 +153,7 @@ function VerdictPreview() {
 
   return (
     <div className="verdict-card">
+      <FixtureProvenanceBadge report={report} />
       <div className="section-label">Latest result — {report.target_id}</div>
       <h2 style={{ fontFamily: 'var(--font-head)', fontSize: 20, marginBottom: 8 }}>{headline}</h2>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -282,16 +283,16 @@ function LandingContent() {
             className="btn-primary"
             onClick={runExample}
             disabled={busy}
-            aria-label={`Investigate ${FIXTURE_DISPLAY_NAME}`}
+            aria-label={`Load committed fixture for ${FIXTURE_DISPLAY_NAME}`}
             style={{ fontSize: 16, padding: '13px 28px' }}
           >
             {busy
               ? <><span className="spinner" /> Running…</>
-              : `Investigate ${FIXTURE_DISPLAY_NAME} →`
+              : `Load fixture: ${FIXTURE_DISPLAY_NAME} →`
             }
           </button>
           <span style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', marginLeft: 14 }}>
-            Kepler-10b — a confirmed hot rocky planet. Every challenge should pass.
+            Loads a committed fixture — no pipeline run. Backend is not deployed.
           </span>
         </div>
 

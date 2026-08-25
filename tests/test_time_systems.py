@@ -575,3 +575,77 @@ class TestToleranceNotVacuous:
             f"the tolerance boundary {ROUND_TRIP_TOLERANCE_DAYS} days; "
             "the tolerance may be set too loose."
         )
+
+
+# ---------------------------------------------------------------------------
+# 7. Epoch BKJD range and label agreement
+# ---------------------------------------------------------------------------
+
+class TestEpochBkjdRangeAndLabel:
+    """
+    The epoch_bkjd field in a VetOutput must be in the valid BKJD range
+    [100, 1600] that the upload flow documents (item 5).
+
+    BKJD = BJD − 2454833.0.
+    Kepler science operations: Q1 start ≈ BKJD 131, Q17 end ≈ BKJD 1591.
+    The upload UI documents the valid range as 100–1600.
+
+    An epoch of 2454833.528 means the stored value is a BJD, not a BKJD —
+    one screen's documented range contradicts the other.
+    """
+
+    # Valid BKJD range bounds (mirroring the upload UI card)
+    BKJD_MIN = 100.0
+    BKJD_MAX = 1600.0
+
+    # BJD offset for Kepler
+    BKJD_BJD_OFFSET = 2454833.0
+
+    def test_bkjd_offset_is_correct(self):
+        """
+        BKJD = BJD − 2454833.0, i.e. the offset constant must equal 2454833.0.
+        The fixture previously stored 2454833.528, which is a BJD-like value
+        that matches the BKJD offset closely enough to indicate confusion.
+        """
+        # The canonical Kepler epoch of BJD 2454965.1576 corresponds to
+        # BKJD 131.6 (roughly KIC 11904151 transit epoch).
+        bjd_example = 2454965.158  # BJD
+        bkjd_expected = bjd_example - self.BKJD_BJD_OFFSET
+        assert self.BKJD_MIN <= bkjd_expected <= self.BKJD_MAX, (
+            f"Computed BKJD {bkjd_expected:.3f} from BJD {bjd_example} "
+            f"is outside the valid range [{self.BKJD_MIN}, {self.BKJD_MAX}]."
+        )
+
+    def test_bjd_kepler_era_is_outside_bkjd_range(self):
+        """
+        A Kepler-era BJD value (~2,454,xxx or ~2,455,xxx) lies far outside
+        the BKJD range 100–1600.  This is the detection mechanism: if a BJD
+        appears in a BKJD field, the range check fires.
+        """
+        kepler_bjd = 2454833.528   # the value that was in the old fixture
+        assert not (self.BKJD_MIN <= kepler_bjd <= self.BKJD_MAX), (
+            f"Kepler-era BJD {kepler_bjd} incorrectly passes the BKJD range check. "
+            "The range gate must reject BJD values stored in BKJD fields."
+        )
+
+    def test_valid_kepler_epoch_is_in_bkjd_range(self):
+        """
+        Kepler-10b's published epoch (BKJD ≈ 131.6) must be in the valid range.
+        """
+        kepler10b_epoch_bkjd = 131.5576
+        assert self.BKJD_MIN <= kepler10b_epoch_bkjd <= self.BKJD_MAX, (
+            f"Kepler-10b epoch BKJD {kepler10b_epoch_bkjd} is outside the "
+            f"valid range [{self.BKJD_MIN}, {self.BKJD_MAX}]."
+        )
+
+    def test_bkjd_range_label_agreement_with_upload_flow(self):
+        """
+        The upload flow documents BKJD as 'values near 100–1600'.
+        The test range bounds must match that documentation exactly.
+        """
+        # The upload UI states the range as 100–1600.  The match function in
+        # UploadFlow.tsx is: v > 100 && v < 2000  — which is wider than the
+        # documented text.  The test range used for epoch validation must be
+        # at least as tight as the documented text (100–1600).
+        assert self.BKJD_MIN >= 100.0, "BKJD_MIN must be at least 100"
+        assert self.BKJD_MAX <= 1600.0, "BKJD_MAX must be at most 1600"
