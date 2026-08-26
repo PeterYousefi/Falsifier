@@ -45,11 +45,11 @@
       "n_tces": 1,
       "tls_version": "stub-0.0.0",
       "wall_time_seconds": 0.0,
-      "tce_ids": ["KIC 11904151-00"]
+      "tce_ids": ["KIC 11904151.01"]
     },
     "vet": [
       {
-        "tce_id": "KIC 11904151-00",
+        "tce_id": "KIC 11904151.01",
         "disposition": "candidate",
         "triggering_test": null,
         "triggering_reason": null,
@@ -67,7 +67,7 @@
     ],
     "classify": [
       {
-        "tce_id": "KIC 11904151-00",
+        "tce_id": "KIC 11904151.01",
         "probability": 0.5,
         "probability_uncertainty": 0.5,
         "model_version": "stub-0.0.0"

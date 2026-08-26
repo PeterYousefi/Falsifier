@@ -58,7 +58,7 @@
     "event": "stage_start",
     "stage": "vet",
     "status": "ok",
-    "detail": "Vetting KIC-11904151-00",
+    "detail": "Vetting KIC 11904151.01",
     "artifact_path": null,
     "elapsed_seconds": null
   },
@@ -76,7 +76,7 @@
     "event": "stage_start",
     "stage": "classify",
     "status": "ok",
-    "detail": "Classifying KIC-11904151-00",
+    "detail": "Classifying KIC 11904151.01",
     "artifact_path": null,
     "elapsed_seconds": null
   },

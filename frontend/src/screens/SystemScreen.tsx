@@ -14,6 +14,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useStore } from '../store'
 import { DispoChip, FixtureProvenanceBadge } from './CandidateDetail'
 import OrbitalViewer from './OrbitalViewer'
+import { isFixtureMode } from '../data/DataSource'
+import { dispositionStandfirst } from '../data/outcomeConfig'
 /** Canonical KIC target for the primary example button. */
 const FIXTURE_TARGET_ID = 'KIC 11904151'
 
@@ -45,6 +47,8 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
   const [mission, setMission] = useState(defaultMission ?? 'Kepler')
   const [cadence, setCadence] = useState(defaultCadence ?? 'long')
   const busy = isSubmitting || jobStatus === 'running' || jobStatus === 'queued'
+  // D4: form controls are non-functional when the backend is not deployed.
+  const backendAbsent = isFixtureMode
 
   useEffect(() => {
     if (defaultTarget) setTargetId(defaultTarget)
@@ -85,26 +89,48 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
           value={targetId}
           onChange={(e) => setTargetId(e.target.value)}
           placeholder="e.g. KIC 11904151 · TIC 150428135 · TIC 200322593"
-          disabled={busy}
+          disabled={busy || backendAbsent}
           aria-label="Target catalogue identifier"
+          aria-disabled={backendAbsent || undefined}
           style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
         />
-        <select value={mission} onChange={(e) => setMission(e.target.value)} disabled={busy} aria-label="Mission">
+        <select value={mission} onChange={(e) => setMission(e.target.value)} disabled={busy || backendAbsent} aria-label="Mission" aria-disabled={backendAbsent || undefined}>
           <option>Kepler</option>
           <option>K2</option>
           <option>TESS</option>
         </select>
-        <select value={cadence} onChange={(e) => setCadence(e.target.value)} disabled={busy} aria-label="Cadence">
+        <select value={cadence} onChange={(e) => setCadence(e.target.value)} disabled={busy || backendAbsent} aria-label="Cadence" aria-disabled={backendAbsent || undefined}>
           <option value="long">long cadence</option>
           <option value="short">short cadence</option>
         </select>
-        <button type="submit" className="btn-primary" disabled={busy || !targetId.trim()}>
+        <button type="submit" className="btn-primary" disabled={busy || backendAbsent || !targetId.trim()}>
           {busy
             ? <><span className="spinner" aria-label="Running" /> {progressLabel ?? 'Running…'}</>
             : 'Investigate →'
           }
         </button>
       </form>
+
+      {/* D4: degraded-backend notice — shown when no live backend is configured */}
+      {backendAbsent && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 6,
+            padding: '6px 12px',
+            background: 'var(--np-surface)',
+            border: '1px solid var(--np-rule)',
+            borderLeft: '3px solid var(--np-faint)',
+            fontFamily: 'var(--font-serif)',
+            fontSize: 13,
+            color: 'var(--np-muted)',
+            lineHeight: 1.55,
+          }}
+        >
+          Backend not deployed — live runs unavailable. Fixture targets only.
+        </div>
+      )}
 
       {/* Live progress indicator */}
       {busy && progressStage && (
@@ -148,12 +174,15 @@ function VerdictPreview() {
   const vet = report.vet?.[0]
   if (!vet) return null
 
-  const allPass = vet.test_results?.every((t) => t.outcome === 'PASS')
+  // D1: headline and standfirst derived from disposition via outcomeConfig —
+  // no inline string comparison with disposition value.
   const headline = vet.disposition === 'candidate'
     ? `${report.target_id} — candidate planet survives all ${vet.test_results?.length ?? 0} challenges`
     : vet.disposition === 'false_positive'
       ? `${report.target_id} — rejected: ${vet.triggering_reason ?? 'see vetting report'}`
       : `${report.target_id} — ${vet.disposition.replace(/_/g, ' ')}`
+
+  const standfirst = dispositionStandfirst(vet)
 
   return (
     <div className="verdict-card">
@@ -169,10 +198,7 @@ function VerdictPreview() {
         </span>
       </div>
       <p style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', lineHeight: 1.6, marginBottom: 12 }}>
-        {allPass
-          ? 'Every automated challenge returned negative: dip depths match across odd and even events, no secondary eclipse detected, the brightness centroid stays fixed, and the transit profile matches a limb-darkened planet. The stellar density inferred from transit geometry is consistent with the spectroscopic measurement.'
-          : `One or more automated challenges raised a flag. The triggering test was ${vet.triggering_test ?? 'unknown'}.`
-        }
+        {standfirst}
       </p>
       <button
         className="btn-secondary"
@@ -392,11 +418,17 @@ function OrbitalFigure() {
 
   return (
     <div className="page-body" style={{ paddingTop: 0 }}>
-      <hr className="rule-hair" />
-      <div className="section-label" style={{ marginBottom: 12 }}>
-        Orbital system — {report.target_id}
-        {jobStatus && <span className={`job-status-badge ${jobStatus}`} style={{ marginLeft: 10 }}>{jobStatus}</span>}
-      </div>
+    <hr className="rule-hair" />
+    <div className="section-label" style={{ marginBottom: 12 }}>
+      Orbital system — {report.target_id}
+      {/* D2: only show the job-status chip while a job is actively running.
+          Do not show "DONE" (green) alongside the "no pipeline artifact" message
+          — the orbital diagram is absent precisely because the job served a
+          fixture, not a live pipeline result. */}
+      {jobStatus && jobStatus !== 'done' && (
+        <span className={`job-status-badge ${jobStatus}`} style={{ marginLeft: 10 }}>{jobStatus}</span>
+      )}
+    </div>
       <OrbitalViewer
         vet={activeVet}
         stellarParams={report.stellar_params}

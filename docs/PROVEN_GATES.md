@@ -20,6 +20,7 @@ modified.  Each stub was written to a temporary file and deleted after the run.
 | 6 | Provenance completeness | `tests/test_provenance_complete.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 7 | Phase-zero t0 convention — `test_t0_shift_moves_minimum_out_of_zero_bin` | `tests/test_figures_trace_to_artifacts.py` | ✅ EXECUTED — analytical mutation (t0 shifted by one Kepler long-cadence) and verbatim centroid output recorded |
 | 8 | Unregistered-numeric scanner — `test_verify_readme_catches_unregistered.py` | `scripts/verify_readme.py` + `tests/test_verify_readme_catches_unregistered.py` | ✅ EXECUTED — fixture README injected with `4.7×10⁻⁶` outside CLAIM block; scanner exits 2 with token+line; verbatim output recorded |
+| 9 | Fixture disposition consistency — `test_fixtures_satisfy_contracts.py` | `tests/test_fixtures_satisfy_contracts.py` + `falsifier/api/models.py` `VetResult` | ✅ EXECUTED — `centroid_shift` outcome mutated from `INCONCLUSIVE` to `FLAG` while `disposition` remained `"ambiguous"`; `ValidationError` fires at `DetectionReport` construction; verbatim output recorded |
 
 **Mutation levels used in this document**:
 - **Pipeline-level** (gates 1 and 2): `unittest.mock.patch` replaces the stage function
@@ -783,3 +784,109 @@ protection.
   author adds the value to `_NUMERIC_ALLOWLIST` without wrapping it in a CLAIM
   block.  The gate catches *new* tokens that are not in the allowlist; it cannot
   catch tokens that a future author deliberately allowlists without a CLAIM block.
+
+
+## Gate 9 — Fixture disposition consistency: `test_fixtures_satisfy_contracts.py` ✅ EXECUTED
+
+> **What this gate guards**: A committed fixture JSON whose `VetResult.disposition` is
+> inconsistent with its `test_results` outcomes cannot be loaded by the Pydantic model.
+> This closes D3 (fixture never validated through Pydantic) and prevents a recurrence
+> of D1 (wrong copy for a disposition value).
+
+### What was mutated
+
+`frontend/src/fixtures/job.json` — the vet entry for `KIC 11904151.01` was temporarily
+mutated by changing `centroid_shift` outcome from `INCONCLUSIVE` to `FLAG` while leaving
+`disposition` at `"ambiguous"`.
+
+Under the truth table:
+```
+No FAIL + any FLAG → candidate_with_caveats
+```
+
+So `FLAG` present with `disposition = "ambiguous"` is a contradiction.
+
+**Mutation applied in memory (not committed):**
+```json
+{
+  "test_name": "centroid_shift",
+  "outcome": "FLAG",   // ← was INCONCLUSIVE
+  "reason": "[MUTATED FOR GATE TEST] Centroid FLAG injected."
+}
+```
+`disposition` remained `"ambiguous"` — contradicting the truth table.
+
+### Catching assertion
+
+[`tests/test_fixtures_satisfy_contracts.py`](../tests/test_fixtures_satisfy_contracts.py) —
+`test_fixture_satisfies_detection_report_contract[job.json]`
+
+The test calls `DetectionReport(**report_dict)` which constructs nested `VetResult` objects.
+`VetResult._disposition_consistent_with_test_results` fires on the inconsistent
+`(disposition="ambiguous", centroid_shift=FLAG)` pair and raises `ValidationError`.
+
+### Verbatim pytest failure output — mutation scenario
+
+```
+============================= test session starts ==============================
+collecting ... collected 1 item
+
+tests/test_fixtures_satisfy_contracts.py::test_fixture_satisfies_detection_report_contract[job.json] FAILED [100%]
+
+=================================== FAILURES ===================================
+__________ test_fixture_satisfies_detection_report_contract[job.json] __________
+tests/test_fixtures_satisfy_contracts.py:94: in test_fixture_satisfies_detection_report_contract
+    report = DetectionReport(**report_dict)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for DetectionReport
+E   vet.0
+E     Value error, VetResult.disposition is inconsistent with test_results.
+E     Declared  : 'ambiguous'
+E     Computed  : 'candidate_with_caveats'
+E     Outcomes  : odd_even_depth=PASS, secondary_eclipse=PASS, centroid_shift=FLAG,
+E                 transit_shape=PASS, stellar_density=INCONCLUSIVE, gaia_ruwe=INCONCLUSIVE,
+E                 systematics_coincidence=INCONCLUSIVE [type=value_error, ...]
+
+During handling of the above exception, another exception occurred:
+tests/test_fixtures_satisfy_contracts.py:96: in test_fixture_satisfies_detection_report_contract
+    pytest.fail(
+E   Failed: DetectionReport(**job.json['report']) raised ValidationError:
+E   [
+E     {
+E       "type": "value_error",
+E       "loc": ["vet", 0],
+E       "msg": "Value error, VetResult.disposition is inconsistent with test_results.\n
+E               Declared  : 'ambiguous'\n
+E               Computed  : 'candidate_with_caveats'\n
+E               Outcomes  : odd_even_depth=PASS, secondary_eclipse=PASS, centroid_shift=FLAG,
+E               transit_shape=PASS, stellar_density=INCONCLUSIVE, gaia_ruwe=INCONCLUSIVE,
+E               systematics_coincidence=INCONCLUSIVE",
+E       "ctx": {
+E         "error": "VetResult.disposition is inconsistent with test_results. ..."
+E       }
+E     }
+E   ]
+============================== 1 failed in 0.08s ==============================
+```
+
+Exit code: **1** (non-zero as required).
+
+### What this gate proves
+
+1. A fixture whose `disposition` contradicts its `test_results` outcomes cannot be loaded by
+   `DetectionReport` — it fails at `VetResult` construction time with a `ValidationError`.
+
+2. The D1 defect (wrong standfirst copy for `candidate_with_caveats` vs `ambiguous`) cannot
+   recur through a fixture: if someone stores `"candidate_with_caveats"` when all outcomes
+   are `INCONCLUSIVE`, `test_fixture_satisfies_detection_report_contract` fails at CI time.
+
+3. The API boundary is now the enforcement point (Option B): every `VetResult` — whether
+   constructed from a live pipeline response, a fixture file, or a direct unit test — is
+   checked against the same four-rule truth table as the pipeline-layer `VetOutput`.
+
+### What this gate does not claim
+
+- It does not validate that the underlying `test_results` metric values are physically
+  meaningful — that is the pipeline's responsibility.
+- It does not check that `triggering_test` and `triggering_reason` are set correctly;
+  those fields are validated by `VetOutput` in the pipeline layer, not by `VetResult`.

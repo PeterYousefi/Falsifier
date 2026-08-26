@@ -37,11 +37,11 @@
       "n_tces": 1,
       "tls_version": "1.32",
       "wall_time_seconds": 45.2,
-      "tce_ids": ["KIC 11904151-00"]
+      "tce_ids": ["KIC 11904151.01"]
     },
     "vet": [
       {
-        "tce_id": "KIC 11904151-00",
+        "tce_id": "KIC 11904151.01",
         "disposition": "ambiguous",
         "triggering_test": "centroid_shift",
         "triggering_reason": "Centroid time series not available for this target; centroid shift test skipped.",

@@ -1,6 +1,6 @@
 # Falsifier
 
-[![CI](https://github.com/ajdarstudio/Falsifier/actions/workflows/ci.yml/badge.svg)](https://github.com/ajdarstudio/Falsifier/actions/workflows/ci.yml)
+[![CI](https://github.com/PeterYousefi/Falsifier/actions/workflows/ci.yml/badge.svg)](https://github.com/PeterYousefi/Falsifier/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/demo-falsifier.vercel.app-blue)](https://falsifier.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
@@ -69,6 +69,7 @@ A candidate that survives is one that could not be killed.
 | Provenance completeness | Sidecar with `access_date` removed | Source mutation | Yes |
 | Phase-zero t0 convention | `phased_lc` constructed with t0 shifted by one Kepler long-cadence | Analytical | Yes |
 | Unregistered-numeric scanner | README contains `4.7×10⁻⁶` outside any CLAIM block | Fixture mutation | Yes |
+| Fixture disposition consistency | `centroid_shift` mutated to `FLAG` while `disposition` stays `"ambiguous"` — `VetResult` validator fires | Fixture mutation | Yes |
 
 ---
 
@@ -160,7 +161,7 @@ Harness defects caught before commit: 12
 Proven gates (mutation log with verbatim output):
 
 <!-- CLAIM:n_proven_gates -->
-Gates proven by mutation testing: 8
+Gates proven by mutation testing: 9
 <!-- /CLAIM:n_proven_gates -->
 
 Tests collected (CI, full-dev):

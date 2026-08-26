@@ -37,11 +37,11 @@
       "n_tces": 1,
       "tls_version": "1.0.31",
       "wall_time_seconds": 28.61,
-      "tce_ids": ["KIC-6965293-00"]
+      "tce_ids": ["KIC 6965293.01"]
     },
     "vet": [
       {
-        "tce_id": "KIC-6965293-00",
+        "tce_id": "KIC 6965293.01",
         "disposition": "false_positive",
         "triggering_test": "odd_even_depth",
         "triggering_reason": "Odd and even transit depths differ by 6.68 (primary 0.1396 vs secondary 0.0209 fractional depth), far exceeding the 2-sigma threshold. Eclipsing binary confirmed.",

@@ -10,11 +10,28 @@ hold no scientific values and make no computation claims.
 JobStatus lifecycle
 -------------------
     queued → running → done
-                     → failed
+               → failed
 
 The final report (`DetectionReport`) is assembled from the four pipeline
 *Output artifacts once all stages complete.  It never stores hardcoded
 numbers; every field is read from an artifact produced by a stage run.
+
+Truth-table enforcement (Option B)
+------------------------------------
+VetResult carries a model_validator that enforces the same disposition truth
+table as VetOutput in falsifier.pipeline.contracts.vet.  This means any
+VetResult construction — live pipeline, fixture load, or API deserialisation —
+fails immediately on an inconsistent (disposition, test_results) pair.
+
+The four-rule truth table (priority order):
+  Any FAIL                         → false_positive
+  No FAIL + any FLAG               → candidate_with_caveats
+  No FAIL + no FLAG + any INC      → ambiguous
+  All seven PASS                   → candidate
+
+When test_results is absent or empty the disposition check is skipped — this
+preserves backward compatibility with minimal API responses that omit the
+full test list.  The full list is required whenever test_results is provided.
 """
 
 from __future__ import annotations
@@ -23,7 +40,7 @@ import datetime
 import uuid
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -140,8 +157,30 @@ class SearchResult(BaseModel):
     tce_ids: list[str]
 
 
+# Canonical ordering and valid disposition values — mirrors pipeline contracts.
+_VETTING_TEST_ORDER: tuple[str, ...] = (
+    "odd_even_depth",
+    "secondary_eclipse",
+    "centroid_shift",
+    "transit_shape",
+    "stellar_density",
+    "gaia_ruwe",
+    "systematics_coincidence",
+)
+_VALID_DISPOSITIONS: frozenset[str] = frozenset(
+    {"candidate", "candidate_with_caveats", "false_positive", "ambiguous"}
+)
+
+
 class VetResult(BaseModel):
-    """Per-TCE vet result for the report."""
+    """Per-TCE vet result for the report.
+
+    When test_results is provided (non-empty), a model_validator enforces the
+    same truth table as VetOutput in falsifier.pipeline.contracts.vet.  The
+    validator is the Option B boundary check: it fires on every construction of
+    this model, whether from a live pipeline response, a fixture load, or a
+    direct unit test.
+    """
 
     tce_id: str
     disposition: str
@@ -161,6 +200,48 @@ class VetResult(BaseModel):
 
     # Phase-folded LC for the synced chart
     phased_lc: PhasedLC | None = None
+
+    @model_validator(mode="after")
+    def _disposition_consistent_with_test_results(self) -> "VetResult":
+        """
+        Enforce the truth table when test_results is provided.
+
+        Skipped when test_results is absent or empty (minimal API responses
+        that do not include the full test list are still valid).
+
+        Truth table (priority order):
+          Any FAIL                     → false_positive
+          No FAIL + any FLAG           → candidate_with_caveats
+          No FAIL + no FLAG + any INC  → ambiguous
+          All PASS                     → candidate
+        """
+        results = self.test_results
+        if not results:
+            return self  # no test list — skip check
+
+        outcomes = [r.outcome for r in results]
+
+        if any(o == "FAIL" for o in outcomes):
+            expected = "false_positive"
+        elif any(o == "FLAG" for o in outcomes):
+            expected = "candidate_with_caveats"
+        elif any(o == "INCONCLUSIVE" for o in outcomes):
+            expected = "ambiguous"
+        else:
+            expected = "candidate"
+
+        if self.disposition != expected:
+            outcome_summary = ", ".join(
+                f"{r.test_name}={r.outcome}" for r in results
+            )
+            raise ValueError(
+                f"VetResult.disposition is inconsistent with test_results.\n"
+                f"  Declared  : {self.disposition!r}\n"
+                f"  Computed  : {expected!r}\n"
+                f"  Outcomes  : {outcome_summary}"
+            )
+
+        return self
 
 
 class ClassifyResult(BaseModel):

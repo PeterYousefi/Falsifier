@@ -12,6 +12,7 @@
 import React, { useMemo, useState, useRef } from 'react'
 import { useStore } from '../store'
 import type { VettingTestOutcome, Disposition, PhasedLC, VetResult, ClassifyResult, DetectionReport } from '../data/types'
+import { dispositionStandfirst } from '../data/outcomeConfig'
 
 export const VETTING_TEST_ORDER = [
   'odd_even_depth',
@@ -230,16 +231,16 @@ function reportHeadline(vet: VetResult, targetId: string): string {
 }
 
 function reportStandfirst(vet: VetResult, classify: ClassifyResult | null): string {
-  if (vet.disposition === 'candidate') {
-    const n = vet.test_results?.length ?? 0
-    const prob = classify ? ` Ranking score ${(classify.probability * 100).toFixed(1)}\u202f% (signal only, not a verdict).` : ''
-    return `All ${n} automated tests returned negative.${prob}`
+  // Delegate to outcomeConfig so standfirst text is consistent across all screens.
+  const base = dispositionStandfirst(vet)
+  if (vet.disposition === 'candidate' && classify) {
+    return `${base} Ranking score ${(classify.probability * 100).toFixed(1)}\u202f% (signal only, not a verdict).`
   }
   if (vet.disposition === 'false_positive' && vet.triggering_test) {
     const label = TEST_LABELS[vet.triggering_test]?.short ?? vet.triggering_test
     return `The deciding test was "${label}". ${vet.triggering_reason ?? ''}`
   }
-  return vet.triggering_reason ?? 'See full vetting results below.'
+  return base
 }
 
 // ── Download helper ────────────────────────────────────────────────────────

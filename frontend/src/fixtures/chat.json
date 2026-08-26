@@ -1,6 +1,6 @@
 {
   "job_id": "fixture-job-001",
-  "tce_id": "KIC-11904151-00",
+  "tce_id": "KIC 11904151.01",
   "messages": [
     {
       "role": "user",
@@ -8,22 +8,22 @@
     },
     {
       "role": "assistant",
-      "content": "KIC-11904151-00 passed all seven vetting tests. The odd/even depth mismatch was 0.018 (dimensionless), well within the 2σ threshold [source: get_vetting_results(KIC-11904151-00)]. No secondary eclipse was detected and the centroid displacement was 0.21 arcsec, below the 0.5 arcsec threshold [source: get_vetting_results(KIC-11904151-00)]. The disposition is 'candidate'. No trained classifier model artifact is present — the ranking score is unavailable [source: get_planet_params(KIC-11904151-00)].",
+      "content": "KIC 11904151.01 passed all seven vetting tests. The odd/even depth mismatch was 0.018 (dimensionless), well within the 2σ threshold [source: get_vetting_results(KIC 11904151.01)]. No secondary eclipse was detected and the centroid displacement was 0.21 arcsec, below the 0.5 arcsec threshold [source: get_vetting_results(KIC 11904151.01)]. The disposition is 'candidate'. No trained classifier model artifact is present — the ranking score is unavailable [source: get_planet_params(KIC 11904151.01)].",
       "tool_calls": [
         {
           "tool": "get_vetting_results",
-          "args": { "tce_id": "KIC-11904151-00" },
+          "args": { "tce_id": "KIC 11904151.01" },
           "result": { "disposition": "candidate", "all_pass": true }
         },
         {
           "tool": "get_planet_params",
-          "args": { "tce_id": "KIC-11904151-00" },
+          "args": { "tce_id": "KIC 11904151.01" },
           "result": { "period_days": 0.8375, "depth_ppm": 154, "source": "search_output" }
         }
       ],
       "sources": [
-        "[source: get_vetting_results(KIC-11904151-00)]",
-        "[source: get_planet_params(KIC-11904151-00)]"
+        "[source: get_vetting_results(KIC 11904151.01)]",
+        "[source: get_planet_params(KIC 11904151.01)]"
       ],
       "guardian_verdict": {
         "safe": true,
