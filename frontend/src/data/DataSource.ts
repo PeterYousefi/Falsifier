@@ -154,12 +154,37 @@ export class ApiDataSource implements DataSource {
   }
 
   async submitJob(params: SubmitJobParams): Promise<string> {
-    const res = await fetch(`${this.base}/jobs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    })
-    if (!res.ok) throw new Error(`POST /jobs failed: ${res.status}`)
+    let res: Response
+    try {
+      res = await fetch(`${this.base}/jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      })
+    } catch (_) {
+      // fetch() itself rejected — backend is unreachable (cold start, network down).
+      throw new Error(
+        'The API server is not reachable. ' +
+        'It may be starting up — please wait 30 seconds and try again. ' +
+        'While the backend warms up, the committed fixture targets are available below.'
+      )
+    }
+    if (!res.ok) {
+      // Try to extract the structured detail from FastAPI's error body.
+      let detail: string | null = null
+      try {
+        const body = await res.json()
+        if (typeof body?.detail === 'string') detail = body.detail
+        else if (Array.isArray(body?.detail)) detail = body.detail.map((d: any) => d.msg ?? String(d)).join('; ')
+      } catch (_) {}
+      if (res.status === 422) {
+        throw new Error(detail ?? `Unrecognised target identifier. Accepted formats: KIC <N>, TIC <N>, EPIC <N>, Kepler-<N>, K2-<N>, TOI-<N>.`)
+      }
+      if (res.status === 429) {
+        throw new Error(detail ?? 'Server is busy or rate limit reached. Please retry in a minute.')
+      }
+      throw new Error(detail ?? `POST /jobs failed: ${res.status}`)
+    }
     const data = await res.json()
     return data.job_id
   }

@@ -419,11 +419,15 @@ async def _run_job(job_id: str) -> None:
                 TargetNotFoundError,
                 MastFetchError,
                 NoProductMatchError,
+                PartialDataError,
             )
             if isinstance(exc, TargetNotFoundError):
                 raise RuntimeError(
-                    f"Target {req.target_id!r} was not found in the "
-                    f"{req.mission} archive. Check the identifier and mission."
+                    f"The {req.mission} archive has no light curve for "
+                    f"{req.target_id!r}. "
+                    "Check that the identifier is correct and that the target "
+                    "was observed by this mission — try selecting a different "
+                    "mission from the dropdown."
                 ) from exc
             if isinstance(exc, NoProductMatchError):
                 raise RuntimeError(
@@ -431,9 +435,23 @@ async def _run_job(job_id: str) -> None:
                     f"({req.mission}, {req.cadence} cadence). "
                     "Try a different cadence or mission."
                 ) from exc
-            if isinstance(exc, MastFetchError):
+            if isinstance(exc, PartialDataError):
                 raise RuntimeError(
-                    f"MAST fetch failed for {req.target_id!r}: {exc}"
+                    f"Only a subset of the requested sectors are available for "
+                    f"{req.target_id!r} in the {req.mission} archive. "
+                    f"Remove the sector filter or choose from the sectors that "
+                    f"are available. Detail: {exc}"
+                ) from exc
+            if isinstance(exc, MastFetchError):
+                # Distinguish a network/5xx failure from a missing-target failure.
+                # TargetNotFoundError is a MastFetchError subclass and is
+                # already handled above; reaching here means a genuine fetch error.
+                raise RuntimeError(
+                    f"The MAST archive could not be reached while fetching "
+                    f"{req.target_id!r}. "
+                    "This is an archive availability issue, not a missing target. "
+                    "Please retry in a minute. "
+                    f"Detail: {exc}"
                 ) from exc
             raise exc  # type: ignore[misc]
         ingest_out = result

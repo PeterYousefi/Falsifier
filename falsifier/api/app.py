@@ -44,10 +44,12 @@ from .routes.verify import router as verify_router
 # CORS origins
 # ---------------------------------------------------------------------------
 # In development (env var unset), allow all origins so local testing works.
-# In production (container on Code Engine), set ALLOWED_ORIGINS to the
-# Vercel frontend URL, e.g.:
+# In production (container on Fly.io / Code Engine), set ALLOWED_ORIGINS to
+# the exact Vercel frontend URL — wildcards are NOT accepted here:
 #   ALLOWED_ORIGINS=https://falsifier.vercel.app
-# Multiple origins are comma-separated.
+# Multiple origins are comma-separated, e.g.:
+#   ALLOWED_ORIGINS=https://falsifier.vercel.app,https://falsifier-git-main.vercel.app
+# The wildcard fallback is intentionally retained for local dev only.
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
 _CORS_ORIGINS: list[str] = (
     ["*"] if _raw_origins.strip() == "*"

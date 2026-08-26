@@ -328,17 +328,27 @@ function LandingContent() {
             className="btn-primary"
             onClick={runExample}
             disabled={busy}
-            aria-label={`Load committed fixture for ${FIXTURE_DISPLAY_NAME}`}
+            aria-label={
+              isFixtureMode
+                ? `Load committed fixture for ${FIXTURE_DISPLAY_NAME}`
+                : `Run live pipeline for ${FIXTURE_DISPLAY_NAME}`
+            }
             style={{ fontSize: 16, padding: '13px 28px' }}
           >
             {busy
               ? <><span className="spinner" /> Running…</>
-              : `Load fixture: ${FIXTURE_DISPLAY_NAME} →`
+              : isFixtureMode
+                ? `Load fixture: ${FIXTURE_DISPLAY_NAME} →`
+                : `Run: ${FIXTURE_DISPLAY_NAME} →`
             }
           </button>
-          <span className="disclaimer-secondary" style={{ marginLeft: 14, marginTop: 0 }}>
-            Committed fixture — no pipeline run.
-          </span>
+          {/* In fixture mode: clarify that this loads a committed artifact, not a live run.
+              In live mode: no disclaimer needed — the button runs the real pipeline. */}
+          {isFixtureMode && (
+            <span className="disclaimer-secondary" style={{ marginLeft: 14, marginTop: 0 }}>
+              Committed fixture — no pipeline run.
+            </span>
+          )}
         </div>
 
         <div>
@@ -351,7 +361,18 @@ function LandingContent() {
         <div>
           <div className="section-label" style={{ marginBottom: 8 }}>Example targets</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {EXAMPLE_TARGETS.map((t, i) => (
+            {EXAMPLE_TARGETS.map((t, i) => {
+              // In fixture mode: chips without a committed fixture file cannot
+              // run — disable them so users aren't left with a spinner.
+              // In live mode: all chips run the real pipeline — never disabled
+              // because of missing fixture.
+              const chipDisabled = busy || (isFixtureMode && !t.hasFixture)
+              // Normalise the target ID to check for a fixture; if none exists
+              // in fixture mode, show a hint in the tooltip.
+              const noFixtureHint = isFixtureMode && !t.hasFixture
+                ? ' (live mode only — no committed fixture)'
+                : ''
+              return (
               <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   className="target-chip"
@@ -361,7 +382,7 @@ function LandingContent() {
                   onFocus={() => setTooltipIdx(i)}
                   onBlur={() => setTooltipIdx(null)}
                   aria-describedby={`chip-tip-${i}`}
-                  disabled={busy}
+                  disabled={chipDisabled}
                 >
                   {t.label}
                 </button>
@@ -378,11 +399,12 @@ function LandingContent() {
                       marginTop: 4, pointerEvents: 'none',
                     }}
                   >
-                    {t.gloss}
+                    {t.gloss}{noFixtureHint}
                   </div>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
           <div style={{ marginTop: 12 }}>
             <a href="#upload" onClick={(e) => { e.preventDefault(); useStore.getState().setActiveScreen('upload') }}

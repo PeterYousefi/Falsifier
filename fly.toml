@@ -1,0 +1,81 @@
+# fly.toml — Falsifier backend on Fly.io
+#
+# Choice rationale (Fly.io over Render/Railway):
+#   • Persistent ("always-on") machines: min_machines_running=1 keeps one
+#     instance warm, avoiding the multi-hundred-MB cold start that imports
+#     astropy + lightkurve.
+#   • No HTTP response timeout cap: Fly.io does not impose a maximum request
+#     duration on its HTTP handler — only the TCP idle timeout (which is per
+#     connection, not per request).  The SSE stream is kept alive by the
+#     stage events themselves.
+#   • Response streaming / no buffering: Fly.io's HTTP proxy does not buffer
+#     responses; SSE frames reach the client as soon as uvicorn flushes them.
+#     The app already sets X-Accel-Buffering: no (jobs.py:109), which is
+#     a belt-and-braces hint for any upstream proxy.
+#   • 2 GB+ RAM: shared-cpu-2x with 4 GB memory handles peak TLS memory use.
+#   • Outbound network: unrestricted to MAST, Exoplanet Archive, and Gaia.
+#
+# Prerequisites:
+#   fly auth login
+#   fly apps create falsifier-backend      (once)
+#   fly secrets set ALLOWED_ORIGINS=https://falsifier.vercel.app
+#   fly secrets set WATSONX_APIKEY=...     (optional; degrades to offline)
+#   fly secrets set WATSONX_URL=...
+#   fly secrets set WATSONX_PROJECT_ID=...
+#   fly deploy
+#
+# After first deploy, set the Fly app URL as VITE_API_BASE_URL in Vercel,
+# then redeploy the frontend (no code change required).
+#
+# Scaling note: max_machines_running=1 matches the in-process job store
+# constraint.  Two instances would each hold a disjoint _job_store, causing
+# GET /jobs/{id} to 404 on the instance that did not create the job.
+
+app = "falsifier-backend"
+primary_region = "iad"   # US-East; change to "lhr" for EU
+
+[build]
+  # Fly.io builds from the Dockerfile at the repo root.
+  dockerfile = "Dockerfile"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  # ALLOWED_ORIGINS is injected at deploy time via `fly secrets set`.
+  # Do not set it here; secrets must not live in version-controlled config.
+
+[http_service]
+  internal_port       = 8000
+  force_https         = true
+  auto_stop_machines  = "off"   # keep warm; avoid cold-start penalty
+  auto_start_machines = true
+  min_machines_running = 1      # always at least one warm instance
+
+  # SSE / long-running responses
+  # Fly.io does not impose a hard request timeout; the idle_timeout below
+  # is the TCP idle timeout (no data at all).  A MAST fetch + TLS run can
+  # take 4-5 minutes but the ingest stage_start SSE frame is emitted before
+  # the MAST call, so the connection is never truly idle during a run.
+  [http_service.concurrency]
+    type       = "connections"
+    hard_limit = 10
+    soft_limit = 5
+
+[[vm]]
+  # shared-cpu-2x with 4 GB: handles peak TLS memory on a 4-year Kepler LC.
+  # The task requirement is >= 2 GB; 4 GB gives headroom for concurrent jobs.
+  cpu_kind = "shared"
+  cpus     = 2
+  memory   = "4gb"
+
+[checks]
+  [checks.health]
+    # Liveness probe — Fly.io marks the machine healthy when this returns 200.
+    port     = 8000
+    type     = "http"
+    method   = "GET"
+    path     = "/health"
+    interval = "15s"
+    timeout  = "5s"
+    # grace_period gives uvicorn time to finish startup (astropy import)
+    # before the first probe fires.
+    grace_period = "30s"

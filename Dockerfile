@@ -35,9 +35,14 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir -e ".[dev]"
 
 # --- Verify critical imports at build time -----------------------------
-# If xgboost cannot load (missing libomp, broken wheel) the build fails
-# here rather than silently at runtime.
-RUN python -c "import xgboost; print('xgboost OK:', xgboost.__version__)"
+# If any of these cannot load (missing native deps, broken wheels) the
+# build fails here rather than at the first user request.
+RUN python -c "\
+import xgboost; print('xgboost OK:', xgboost.__version__); \
+import lightkurve; print('lightkurve OK:', lightkurve.__version__); \
+import transitleastsquares; print('transitleastsquares OK'); \
+import wotan; print('wotan OK'); \
+"
 
 # --- application source ------------------------------------------------
 COPY . .
@@ -55,4 +60,15 @@ EXPOSE 8000
 # Defaults to "*" if unset (see falsifier/api/app.py).
 ENV PYTHONUNBUFFERED=1
 
-CMD ["uvicorn", "falsifier.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Single worker only — the in-process job store (_job_store in
+# falsifier/api/queue.py) is held in memory.  Multiple workers would each
+# hold a disjoint copy of the store, causing GET /jobs/{id} to 404
+# intermittently on workers that did not create the job.
+#
+# Shell form (not exec form) so that ${PORT:-8000} expands at runtime.
+# Fly.io injects PORT into the container environment; falling back to 8000
+# keeps local docker run and Code Engine both working without the variable.
+CMD uvicorn falsifier.api.app:app \
+    --host 0.0.0.0 \
+    --port ${PORT:-8000} \
+    --workers 1
