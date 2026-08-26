@@ -28,11 +28,11 @@
 | **Live judge walkthrough page** | App → Judge tab — **[falsifier.vercel.app](https://falsifier.vercel.app)** |
 | Every number in the README is regenerated | `python scripts/verify_readme.py --strict` (exits 0) |
 | Live claim inventory with pass/fail per claim | `GET https://<backend>/verify` (no auth required) |
-| Kepler-10b period recovered to 5.3×10⁻⁶ days | `pytest tests/test_kepler10_recovery.py` |
+| Kepler-10b period recovered to tolerance — see Measured results | `pytest tests/test_kepler10_recovery.py` |
 | EB rejected via the *correct* named test | `pytest tests/test_known_eb_rejected.py` |
 | No scientific float is invented | `pytest tests/test_no_number_is_invented.py` |
-| All nine harness defects caught before commit | [`docs/WHAT_THE_GATES_CAUGHT.md`](docs/WHAT_THE_GATES_CAUGHT.md) |
-| Eight mutation gates proven with verbatim output | [`docs/PROVEN_GATES.md`](docs/PROVEN_GATES.md) |
+| All harness defects caught before commit — count in Measured results | [`docs/WHAT_THE_GATES_CAUGHT.md`](docs/WHAT_THE_GATES_CAUGHT.md) |
+| All mutation gates proven with verbatim output — count in Measured results | [`docs/PROVEN_GATES.md`](docs/PROVEN_GATES.md) |
 | Adversarial false-alarm rate finding | README → Measured results; source `docs/tls_run_2026_q3_baseline.md` |
 | How IBM Bob was used | Section below; see also [`docs/BOB_EVIDENCE.md`](docs/BOB_EVIDENCE.md) |
 | Prior-art positioning | [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md) |
@@ -47,14 +47,14 @@
 Most detection pipelines are built to find things. This one is built to destroy its own candidates:
 [`adversarial_selftest.py`](scripts/adversarial_selftest.py) runs on four categories of null data
 to make it fail, [`injection_recovery.py`](scripts/injection_recovery.py) finds where detection
-breaks down, eight mutation gates in [`docs/PROVEN_GATES.md`](docs/PROVEN_GATES.md) confirm tests
+breaks down, all mutation gates in [`docs/PROVEN_GATES.md`](docs/PROVEN_GATES.md) confirm tests
 fail when they should, and a single FAIL in [`falsifier/pipeline/contracts/vet.py`](falsifier/pipeline/contracts/vet.py)
 kills a candidate with no appeal.
 A candidate that survives is one that could not be killed.
 
 **File backing every clause:**
 - "four categories of null data" → `scripts/adversarial_selftest.py` (`CATEGORIES`)
-- "eight mutation gates" → `docs/PROVEN_GATES.md` (eight `✅ EXECUTED` rows)
+- "mutation gates" count → `docs/PROVEN_GATES.md` (`✅ EXECUTED` rows; registered count: `CLAIM:n_proven_gates` in Measured results)
 - "single FAIL kills a candidate" → `falsifier/pipeline/contracts/vet.py` (`model_validator`)
 
 **Proven gates (mutation log):**
@@ -92,7 +92,14 @@ Pipeline stages wired in API queue: 5
 Kepler-10b recovered period (TLS on committed FITS): 0.83748542 days (Δ = 5.3e-06 days)
 <!-- /CLAIM:recovered_period_days -->
 
-19× tighter than the 1e-4 day tolerance. Tolerance (<!-- CLAIM:period_tolerance_days -->
+<!-- CLAIM:recovered_period_delta_days -->
+Kepler-10b period recovery delta: 5.3e-06 days
+<!-- /CLAIM:recovered_period_delta_days -->
+
+<!-- CLAIM:period_ratio_tighter -->
+Period recovery is 19× tighter than the declared tolerance
+<!-- /CLAIM:period_ratio_tighter -->
+Tolerance (<!-- CLAIM:period_tolerance_days -->
 Period recovery tolerance: 1e-04 days (~8.6 s)
 <!-- /CLAIM:period_tolerance_days -->
 ). Published value:
@@ -114,7 +121,7 @@ KIC 6965293 EB depth ratio (Prša et al. 2011): 6.68 primary/secondary
 Scrambled FAR (preliminary, 2026-08-19 BLS-fallback run): 0.20 at SDE ≥ 9.0
 <!-- /CLAIM:scrambled_far_preliminary -->
 
-Randomly permuted flux clears the SDE threshold 20% of the time — a property of the threshold, not the substrate. SDE threshold:
+Randomly permuted flux clears the SDE threshold (see `CLAIM:scrambled_far_preliminary` above for the exact rate) — a property of the threshold, not the substrate. SDE threshold:
 
 <!-- CLAIM:adversarial_sde_threshold -->
 Adversarial false-alarm SDE threshold: 9.0
@@ -143,6 +150,12 @@ Vetting tests:
 <!-- CLAIM:n_vetting_tests -->
 Vetting tests: 7
 <!-- /CLAIM:n_vetting_tests -->
+
+Harness defects caught before commit:
+
+<!-- CLAIM:n_what_the_gates_caught -->
+Harness defects caught before commit: 12
+<!-- /CLAIM:n_what_the_gates_caught -->
 
 Proven gates (mutation log with verbatim output):
 
