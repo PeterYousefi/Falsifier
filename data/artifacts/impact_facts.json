@@ -1,0 +1,49 @@
+{
+  "koi_total_rows": {
+    "value": 2000,
+    "adql": "SELECT COUNT(*) AS total_rows FROM cumulative",
+    "source_doi": "10.26133/NEA12",
+    "source_url": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync",
+    "access_date": "2026-08-26",
+    "row_count": 1,
+    "description": "Total rows in the Kepler KOI cumulative table (NASA Exoplanet Archive)"
+  },
+  "koi_disposition_counts": {
+    "value": {
+      "CONFIRMED": 1329,
+      "CANDIDATE": 192,
+      "FALSE POSITIVE": 479
+    },
+    "adql": "SELECT koi_disposition, COUNT(*) AS n FROM cumulative GROUP BY koi_disposition",
+    "source_doi": "10.26133/NEA12",
+    "source_url": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync",
+    "access_date": "2026-08-26",
+    "row_count": 3,
+    "description": "Count of KOI entries by koi_disposition in cumulative table"
+  },
+  "koi_fp_fraction": {
+    "value": 23.9,
+    "adql": "SELECT koi_disposition, COUNT(*) AS n FROM cumulative GROUP BY koi_disposition",
+    "source_doi": "10.26133/NEA12",
+    "source_url": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync",
+    "access_date": "2026-08-26",
+    "row_count": 3,
+    "description": "False-positive fraction of KOI cumulative table (FALSE POSITIVE / total_rows × 100, rounded to 1 d.p.)"
+  },
+  "toi_disposition_counts": {
+    "value": {
+      "APC": 160,
+      "KP": 185,
+      "FP": 530,
+      "FA": 48,
+      "CP": 365,
+      "PC": 712
+    },
+    "adql": "SELECT tfopwg_disp, COUNT(*) AS n FROM toi GROUP BY tfopwg_disp",
+    "source_doi": "10.26133/NEA12",
+    "source_url": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync",
+    "access_date": "2026-08-26",
+    "row_count": 6,
+    "description": "Count of TESS TOI entries by tfopwg_disp in toi table"
+  }
+}

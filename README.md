@@ -455,6 +455,84 @@ stochastic element).
 
 ---
 
+## Real-World Impact
+
+> Every number in this section is produced by `scripts/impact_facts.py` and
+> verified by `scripts/verify_readme.py`.  The script queries the NASA
+> Exoplanet Archive TAP service (DOI `10.26133/NEA12`) and writes
+> `data/artifacts/impact_facts.json`.  Manually editing a number here is a
+> policy violation (AGENTS.md Rule 5).
+
+Before a single transit signal can be trusted, it must survive a gauntlet of
+astrophysical false positives.  The Kepler mission offers the most complete
+accounting of this challenge: among 2,000 KOI entries logged in the cumulative
+table of the NASA Exoplanet Archive, nearly one quarter are classified as false
+positives rather than real planets.  Every eclipsing binary, background star,
+or instrumental artefact that mimics a transit must be positively rejected
+before a candidate can advance — that is precisely the job this pipeline is
+built to do.  The TESS mission, still accumulating alerts in real time, faces
+the same burden: of roughly 2,000 TESS Objects of Interest currently on record,
+530 bear the FP (False Positive) flag assigned by the TFOPWG working group.
+
+Without automated triage the human cost of reviewing even a subset of these
+objects is prohibitive.  The falsifier pipeline applies seven deterministic
+vetting tests to each candidate (odd/even depth, secondary eclipse, centroid
+shift, transit shape, stellar density, Gaia RUWE, systematics coincidence) and
+returns a machine-readable `VetOutput` that names both the disposition and the
+triggering test — the combination that unlocks traceable, auditable rejection at
+scale.
+
+### Aggregate disposition summary
+
+*Source: `data/artifacts/impact_facts.json` — queried from the NASA Exoplanet
+Archive TAP service (`10.26133/NEA12`) on the date recorded in the artifact.*
+
+<!-- CLAIM:koi_total_rows -->
+KOI cumulative table total rows: 2,000
+<!-- /CLAIM:koi_total_rows -->
+
+<!-- CLAIM:koi_fp_fraction -->
+KOI false-positive fraction: 23.9%
+<!-- /CLAIM:koi_fp_fraction -->
+
+<!-- CLAIM:koi_confirmed_count -->
+KOI CONFIRMED count: 1,329
+<!-- /CLAIM:koi_confirmed_count -->
+
+<!-- CLAIM:koi_candidate_count -->
+KOI CANDIDATE count: 192
+<!-- /CLAIM:koi_candidate_count -->
+
+<!-- CLAIM:koi_fp_count -->
+KOI FALSE POSITIVE count: 479
+<!-- /CLAIM:koi_fp_count -->
+
+<!-- CLAIM:toi_cp_count -->
+TESS TOI CP count: 365
+<!-- /CLAIM:toi_cp_count -->
+
+<!-- CLAIM:toi_pc_count -->
+TESS TOI PC count: 712
+<!-- /CLAIM:toi_pc_count -->
+
+<!-- CLAIM:toi_fp_count -->
+TESS TOI FP count: 530
+<!-- /CLAIM:toi_fp_count -->
+
+| Survey | Disposition | Count |
+|---|---|---|
+| Kepler KOI | CONFIRMED | 1,329 |
+| Kepler KOI | CANDIDATE | 192 |
+| Kepler KOI | FALSE POSITIVE | 479 |
+| TESS TOI | CP (Confirmed Planet) | 365 |
+| TESS TOI | PC (Planet Candidate) | 712 |
+| TESS TOI | FP (False Positive) | 530 |
+
+*TESS TOI totals also include APC (Ambiguous Planet Candidate) and FA (False Alarm)
+dispositions not listed above.  All figures are read from `data/artifacts/impact_facts.json`.*
+
+---
+
 ## Completeness curve (injection recovery)
 
 **The injection-recovery harness is built, unit-tested, and sharded across a

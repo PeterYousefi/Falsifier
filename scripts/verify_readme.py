@@ -283,6 +283,90 @@ def _regen_n_tests_ci() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Real-World Impact claims
+# Source of truth: data/artifacts/impact_facts.json
+# ---------------------------------------------------------------------------
+
+_IMPACT_FACTS_PATH = REPO_ROOT / "data" / "artifacts" / "impact_facts.json"
+
+
+def _load_impact_facts() -> dict:
+    """Load data/artifacts/impact_facts.json; raise FileNotFoundError if absent."""
+    if not _IMPACT_FACTS_PATH.exists():
+        raise FileNotFoundError(
+            f"Missing: {_IMPACT_FACTS_PATH}\n"
+            "Generate with: python scripts/impact_facts.py"
+        )
+    with open(_IMPACT_FACTS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _regen_koi_total_rows() -> str:
+    """Total row count in the Kepler KOI cumulative table."""
+    facts = _load_impact_facts()
+    n = facts["koi_total_rows"]["value"]
+    return f"KOI cumulative table total rows: {n:,}"
+
+
+def _regen_koi_fp_fraction() -> str:
+    """False-positive percentage in the KOI cumulative table."""
+    facts = _load_impact_facts()
+    pct = facts["koi_fp_fraction"]["value"]
+    return f"KOI false-positive fraction: {pct:.1f}%"
+
+
+def _regen_koi_confirmed_count() -> str:
+    """Count of CONFIRMED entries in the KOI cumulative table."""
+    facts = _load_impact_facts()
+    n = facts["koi_disposition_counts"]["value"].get("CONFIRMED", 0)
+    return f"KOI CONFIRMED count: {n:,}"
+
+
+def _regen_koi_candidate_count() -> str:
+    """Count of CANDIDATE entries in the KOI cumulative table."""
+    facts = _load_impact_facts()
+    n = facts["koi_disposition_counts"]["value"].get("CANDIDATE", 0)
+    return f"KOI CANDIDATE count: {n:,}"
+
+
+def _regen_koi_fp_count() -> str:
+    """Count of FALSE POSITIVE entries in the KOI cumulative table."""
+    facts = _load_impact_facts()
+    n = facts["koi_disposition_counts"]["value"].get("FALSE POSITIVE", 0)
+    return f"KOI FALSE POSITIVE count: {n:,}"
+
+
+def _regen_toi_fp_count() -> str:
+    """Count of FP (False Positive) entries in the TESS TOI table, or UNVERIFIED."""
+    facts = _load_impact_facts()
+    val = facts["toi_disposition_counts"]["value"]
+    if val == "UNVERIFIED":
+        return "TESS TOI FP count: UNVERIFIED"
+    n = val.get("FP", 0)
+    return f"TESS TOI FP count: {n:,}"
+
+
+def _regen_toi_pc_count() -> str:
+    """Count of PC (Planet Candidate) entries in the TESS TOI table, or UNVERIFIED."""
+    facts = _load_impact_facts()
+    val = facts["toi_disposition_counts"]["value"]
+    if val == "UNVERIFIED":
+        return "TESS TOI PC count: UNVERIFIED"
+    n = val.get("PC", 0)
+    return f"TESS TOI PC count: {n:,}"
+
+
+def _regen_toi_cp_count() -> str:
+    """Count of CP (Confirmed Planet) entries in the TESS TOI table, or UNVERIFIED."""
+    facts = _load_impact_facts()
+    val = facts["toi_disposition_counts"]["value"]
+    if val == "UNVERIFIED":
+        return "TESS TOI CP count: UNVERIFIED"
+    n = val.get("CP", 0)
+    return f"TESS TOI CP count: {n:,}"
+
+
+# ---------------------------------------------------------------------------
 # Claim registry
 # Maps CLAIM id → regeneration function
 # ---------------------------------------------------------------------------
@@ -314,6 +398,15 @@ CLAIM_REGISTRY: dict[str, Callable[[], str]] = {
     # Proven gates and test count
     "n_proven_gates": _regen_n_proven_gates,
     "n_tests_ci": _regen_n_tests_ci,
+    # Real-world impact (source: data/artifacts/impact_facts.json)
+    "koi_total_rows": _regen_koi_total_rows,
+    "koi_fp_fraction": _regen_koi_fp_fraction,
+    "koi_confirmed_count": _regen_koi_confirmed_count,
+    "koi_candidate_count": _regen_koi_candidate_count,
+    "koi_fp_count": _regen_koi_fp_count,
+    "toi_fp_count": _regen_toi_fp_count,
+    "toi_pc_count": _regen_toi_pc_count,
+    "toi_cp_count": _regen_toi_cp_count,
 }
 
 
