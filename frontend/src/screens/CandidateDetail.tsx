@@ -9,7 +9,7 @@
  *
  * Also exports shared helpers used by other screens.
  */
-import React, { useMemo, useState, useRef } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useStore } from '../store'
 import type { VettingTestOutcome, Disposition, PhasedLC, VetResult, ClassifyResult, DetectionReport } from '../data/types'
 import { dispositionStandfirst } from '../data/outcomeConfig'
@@ -184,12 +184,38 @@ function MetricExpander({ metric_value, metric_unit, threshold }: {
 }
 
 // ── Vetting test row with numeral gutter ───────────────────────────────────
+// ── Skipped-reason expander (for INCONCLUSIVE rows) ───────────────────────
+// Collapses the full "why skipped" sentence behind a small click-to-expand
+// affordance, consistent with the "Show the numbers" pattern used for metrics.
+function SkippedReasonExpander({ reason }: { reason: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginTop: 2 }}>
+      <button
+        className="vet-why-btn"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? 'Hide skip reason' : 'Why skipped?'}
+      >
+        {open ? 'hide reason ▲' : 'why skipped? ▼'}
+      </button>
+      {open && (
+        <div className="vet-why-detail">{reason}</div>
+      )}
+    </div>
+  )
+}
+
 function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetResult; index: number }) {
   const r = vetResult.test_results?.find((t) => t.test_name === name)
   const outcome = r?.outcome ?? 'INCONCLUSIVE'
   const isTriggering = vetResult.triggering_test === name
   const label = TEST_LABELS[name]
   const numeral = ROMAN_LOWER[index] ?? String(index + 1)
+  // For INCONCLUSIVE (skipped) rows: show the headline + a compact expandable
+  // reason rather than always-visible full sentence prose.
+  const isSkipped = outcome === 'INCONCLUSIVE'
+  const reason = r?.reason ?? label?.why ?? '—'
 
   return (
     <div
@@ -203,7 +229,10 @@ function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetRe
           {label?.headline ?? label?.short ?? name}
           {isTriggering && <span className="vet-trigger-label">◀ deciding test</span>}
         </div>
-        <div className="vet-why">{r?.reason ?? label?.why ?? '—'}</div>
+        {isSkipped
+          ? <SkippedReasonExpander reason={reason} />
+          : <div className="vet-why">{reason}</div>
+        }
         <MetricExpander
           metric_value={r?.metric_value}
           metric_unit={r?.metric_unit}
@@ -273,60 +302,50 @@ function TceSelector({ tce_id, disposition }: { tce_id: string; disposition: Dis
   )
 }
 
-// ── Fixture provenance badge ───────────────────────────────────────────────
+// ── Fixture provenance badge — PRIMARY alarmed banner ─────────────────────
+// This is the single "alarmed"-weight notice per page. All other fixture-mode
+// disclaimers on this page are secondary (muted, italic, no background fill)
+// and reference this notice rather than re-explaining fixture vs pipeline.
 export function FixtureProvenanceBadge({ report }: { report: DetectionReport }) {
   if (!report.fixture_provenance) return null
   return (
     <div
       role="note"
       data-testid="fixture-provenance-badge"
-      style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 10,
-        padding: '8px 14px',
-        background: 'var(--np-surface)',
-        border: '1px solid var(--np-rule)',
-        borderLeft: '3px solid var(--warn)',
-        marginBottom: 16,
-        fontFamily: 'var(--font-serif)',
-        fontSize: 13,
-        color: 'var(--np-muted)',
-        lineHeight: 1.55,
-      }}
+      className="disclaimer-primary"
     >
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--warn)', letterSpacing: '0.06em', whiteSpace: 'nowrap', paddingTop: 2 }}>
-        FIXTURE
-      </span>
+      <span className="disclaimer-primary-label">Fixture</span>
       <span>
-        <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-text)' }}>
-          This report was not computed by the pipeline.
-        </strong>
-        {' '}It is a committed hand-authored fixture ({report.fixture_provenance.fixture_id}).
-        Values shown are illustrative and are <strong>not</strong> outputs of a live run.
-        {' '}No trained classifier model exists; the ranking score cannot be computed.
-        {' '}See the Provenance page for pipeline status.
+        <strong>You are viewing a committed fixture, not a live pipeline run.</strong>
+        {' '}({report.fixture_provenance.fixture_id}) — values are illustrative and are{' '}
+        <strong>not</strong> outputs of a live run.
+        {' '}No trained classifier model artifact exists; the ranking score and orbital diagram
+        cannot be computed. See the Provenance page for pipeline status.
       </span>
     </div>
   )
 }
 
 // ── Classifier unavailable panel ───────────────────────────────────────────
-function ClassifierUnavailablePanel({ reason }: { reason: string }) {
+// Secondary disclaimer — fixture-mode consequence; primary notice is above.
+function ClassifierUnavailablePanel({ isFixture }: { isFixture: boolean }) {
   return (
     <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
       <div className="section-label">II. Ranking score — not a verdict</div>
       <div style={{
         background: 'var(--np-surface)', border: '1px solid var(--np-rule)',
-        borderLeft: '3px solid var(--np-rule)', padding: '12px 14px',
+        padding: '10px 14px',
       }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--np-muted)', marginBottom: 4 }}>
           — unavailable
         </div>
-        <p style={{ fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.55, marginBottom: 4 }}>
-          {reason}
+        <p className="disclaimer-secondary" style={{ marginTop: 0 }}>
+          {isFixture
+            ? 'No model artifact — see fixture notice above.'
+            : 'No classifier result available. Run the pipeline with run_classify=true and a trained model artifact present.'
+          }
         </p>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-faint)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-faint)', marginTop: 4 }}>
           Source: classify.probability · blocker: no model artifact
         </div>
       </div>
@@ -365,16 +384,8 @@ export default function CandidateDetail() {
   const headline = vetResult ? reportHeadline(vetResult, report.target_id) : report.target_id
   const standfirst = vetResult ? reportStandfirst(vetResult, classifyResult) : ''
 
-  // Determine classifier unavailable reason for item 3
-  const classifierUnavailableReason = useMemo(() => {
-    if (classifyResult) return null
-    if (report.fixture_provenance) {
-      return 'No trained classifier model artifact exists (artifacts/classify/xgb_classifier.ubj is absent). ' +
-        'The training pipeline is blocked by train/serve feature skew — see README for details. ' +
-        'This fixture value was a stub; it has been removed.'
-    }
-    return 'No classifier result is available for this TCE. Run the pipeline with run_classify=true and a trained model artifact present.'
-  }, [classifyResult, report.fixture_provenance])
+  // Determine whether the classifier absence is fixture-mode (vs live pipeline)
+  const classifierIsFixture = !classifyResult && !!report.fixture_provenance
 
   return (
     <div className="screen" style={{ overflowY: 'auto' }}>
@@ -465,7 +476,7 @@ export default function CandidateDetail() {
                 </div>
               </div>
             ) : (
-              <ClassifierUnavailablePanel reason={classifierUnavailableReason ?? 'No classifier result available.'} />
+              <ClassifierUnavailablePanel isFixture={classifierIsFixture} />
             )}
 
             {/* III. VETTING TESTS */}

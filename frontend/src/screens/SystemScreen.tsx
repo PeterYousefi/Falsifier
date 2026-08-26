@@ -111,25 +111,16 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
         </button>
       </form>
 
-      {/* D4: degraded-backend notice — shown when no live backend is configured */}
+      {/* D4: degraded-backend notice — secondary (consequence of fixture-mode, stated once on landing) */}
       {backendAbsent && (
-        <div
+        <p
           role="status"
           aria-live="polite"
-          style={{
-            marginTop: 6,
-            padding: '6px 12px',
-            background: 'var(--np-surface)',
-            border: '1px solid var(--np-rule)',
-            borderLeft: '3px solid var(--np-faint)',
-            fontFamily: 'var(--font-serif)',
-            fontSize: 13,
-            color: 'var(--np-muted)',
-            lineHeight: 1.55,
-          }}
+          className="disclaimer-secondary"
+          style={{ marginTop: 6 }}
         >
-          Backend not deployed — live runs unavailable. Fixture targets only.
-        </div>
+          Backend not deployed — fixture targets only.
+        </p>
       )}
 
       {/* Live progress indicator */}
@@ -345,8 +336,8 @@ function LandingContent() {
               : `Load fixture: ${FIXTURE_DISPLAY_NAME} →`
             }
           </button>
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', marginLeft: 14 }}>
-            Loads a committed fixture — no pipeline run. Backend is not deployed.
+          <span className="disclaimer-secondary" style={{ marginLeft: 14, marginTop: 0 }}>
+            Committed fixture — no pipeline run.
           </span>
         </div>
 

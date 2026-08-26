@@ -822,6 +822,73 @@ h3, .h3 {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Disclaimer hierarchy ────────────────────────────────────────────────── */
+/* Primary: one alarmed banner per page — fixture-mode notice */
+.disclaimer-primary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-rule);
+  border-left: 4px solid var(--warn);
+  margin-bottom: 18px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--np-muted);
+  line-height: 1.55;
+}
+.disclaimer-primary-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--warn);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+.disclaimer-primary strong {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--np-text);
+}
+
+/* Secondary: quiet footnote — consequence of the primary notice above */
+.disclaimer-secondary {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--np-faint);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+/* ── Skipped-test reason expander ────────────────────────────────────────── */
+.vet-why-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--np-faint);
+  letter-spacing: 0.04em;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--np-faint);
+}
+.vet-why-btn:hover { color: var(--np-muted); }
+.vet-why-detail {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--np-faint);
+  line-height: 1.5;
+  margin-top: 3px;
+}
+
 /* ── Page footer — locked non-claim ─────────────────────────────────────── */
 .page-footer {
   flex-shrink: 0;

@@ -752,15 +752,10 @@ export default function OrbitalViewer({
             background: 'var(--np-surface)',
             border: '1px solid var(--np-border)',
           }}>
-            <span style={{
-              fontFamily: 'var(--font-serif)',
-              fontStyle: 'italic',
-              fontSize: 13,
-              color: 'var(--np-muted)',
-            }}>
+            <span className="disclaimer-secondary" style={{ textAlign: 'center', maxWidth: 320, marginTop: 0 }}>
               {!vet
                 ? 'Run a target above to see the orbital diagram.'
-                : 'Orbital diagram unavailable — no pipeline artifact. The transiting body cannot be placed without computed geometry.'}
+                : 'Orbital diagram unavailable — see fixture notice above.'}
             </span>
           </div>
           <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '8px 0 4px' }} />
