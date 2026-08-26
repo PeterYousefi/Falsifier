@@ -101,14 +101,13 @@ No README section says "to verify in 2 minutes, run this command."
 ```bash
 uvicorn falsifier.api.app:app --host 0.0.0.0 --port 8000
 ```
-Requires `OPENAI_API_KEY` to be set, or the chat layer raises at import
-or at first chat request. The main pipeline (`/jobs`) does not require a key,
-but the import of `falsifier.api.chat.session` may raise if the key is absent
-depending on where the import guard sits.
+Requires `WATSONX_APIKEY`, `WATSONX_URL`, and `WATSONX_PROJECT_ID` to be set,
+or the chat layer degrades to offline mode (templated responses).
+The main pipeline (`/jobs`) does not require any credentials.
+The chat endpoint degrades gracefully if credentials are absent.
 
-**[BLOCKER — API key]** A judge without an OpenAI key cannot start the
-backend without first auditing which imports fail and patching them, unless
-there is an explicit keyless mode. No such mode exists today.
+**[BLOCKER — API key]** A judge without watsonx.ai credentials will see
+offline mode in the chat panel, but the pipeline itself runs without credentials.
 
 ### Step 6 — Start the frontend
 ```bash
@@ -138,7 +137,7 @@ five blocking or partially blocking steps.
 | `pip install -e ".[dev]"` (~5–10 min) | Time | High |
 | macOS libomp missing for xgboost | Environment | High on macOS |
 | Fast-test command not in README | Discoverability | Medium |
-| `OPENAI_API_KEY` required to start backend | API key | High |
+| `WATSONX_APIKEY` absent → chat offline mode | API key | Low — pipeline still runs; chat degrades gracefully |
 | Dead demo video link | UX credibility | Low-Medium |
 
 The root cause is that there is no documented zero-dependency path. The fast

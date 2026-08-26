@@ -113,7 +113,8 @@ All three external data services are publicly accessible without authentication:
 | **NASA Exoplanet Archive TAP** | Planet and stellar parameters | `https://exoplanetarchive.ipac.caltech.edu/TAP/sync` |
 | **Gaia DR3 TAP+** (ESA) | Stellar RUWE, Teff, radius | `https://gea.esac.esa.int/tap-server/tap` |
 
-The only optional credential is `OPENAI_API_KEY` for the chat layer.
+The only optional credentials are `WATSONX_APIKEY`, `WATSONX_URL`, and
+`WATSONX_PROJECT_ID` for the chat layer (IBM watsonx.ai ModelInference).
 If absent, the endpoint degrades gracefully to templated stage explanations.
 
 ### DOIs per source
@@ -150,6 +151,7 @@ pip install -e ".[dev]"
 | Web framework | FastAPI |
 | Astronomy | astropy · lightkurve · wotan · transitleastsquares · astroquery |
 | ML | xgboost |
+| Chat inference | IBM watsonx.ai (`ibm-watsonx-ai`; `WATSONX_APIKEY`) |
 | Testing | pytest |
 | Frontend | Vite + React + Three.js |
 | Retrieval *(exploratory)* | petitRADTRANS · dynesty |

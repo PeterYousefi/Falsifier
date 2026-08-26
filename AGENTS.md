@@ -63,7 +63,7 @@ with a note explaining why it is not wired in. Silently unused code is a policy 
 | Web framework | FastAPI |
 | Astronomy | astropy, lightkurve, wotan, transitleastsquares, astroquery |
 | ML | xgboost |
-| Chat inference | OpenAI chat completions (`OPENAI_API_KEY`; degrades offline if absent) |
+| Chat inference | IBM watsonx.ai (ModelInference chat, tool calling) (`WATSONX_APIKEY`; degrades offline if absent) |
 | Output screening | Granite Guardian (`ibm-granite/granite-guardian-3.1-2b`, local HuggingFace cache, `local_files_only=True`, no network call) |
 | Testing | pytest |
 | Frontend | Vite + React + Three.js |

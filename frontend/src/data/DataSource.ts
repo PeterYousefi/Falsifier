@@ -467,9 +467,9 @@ const _OFFLINE_ANSWERS: Array<{ match: string[]; entry: _OfflineEntry }> = [
 
 const _OFFLINE_FALLBACK: _OfflineEntry = {
   content:
-    '**Offline mode** — no OpenAI API key is configured. ' +
+    '**Offline mode** — no watsonx.ai backend is configured. ' +
     'Answers for the suggested prompts are assembled from the committed KIC 11904151 fixture artifact. ' +
-    'For other questions, connect the pipeline backend (set OPENAI_API_KEY).',
+    'For other questions, connect the pipeline backend (set WATSONX_APIKEY).',
   sources: [],
 }
 

@@ -382,7 +382,7 @@ class ProvenanceReport(BaseModel):
 
     chat_backend: str | None = None
     """
-    "openai:<model_id>" if OPENAI_API_KEY is set and a call has succeeded;
+    "watsonx:<model_id>" if WATSONX_APIKEY is set and a call has succeeded;
     "templated_offline" otherwise.
     """
 

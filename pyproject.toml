@@ -35,6 +35,7 @@ dev = [
     "xgboost>=2.0",
     "transitleastsquares>=1.27",
     "wotan>=1.9",
+    "ibm-watsonx-ai>=1.1",
     # batman-package is a transitleastsquares dependency that imports
     # distutils.ccompiler at module scope.  distutils was removed in Python 3.12.
     # falsifier._distutils_compat injects a stub before any batman import occurs,

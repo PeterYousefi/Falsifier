@@ -3,18 +3,20 @@ falsifier.api.chat.session
 ===========================
 Conversation state management and tool-call loop.
 
-OpenAI backend
---------------
-This module uses OpenAI chat completions as the inference backend.
+watsonx.ai backend
+------------------
+This module uses IBM watsonx.ai ModelInference as the inference backend.
 
 Configuration (all from environment — nothing hardcoded):
-  OPENAI_API_KEY   — OpenAI API key (required for live inference)
-  OPENAI_MODEL_ID  — model to use
-                     (default: gpt-4o-mini)
+  WATSONX_APIKEY      — IBM watsonx.ai API key (required for live inference)
+  WATSONX_URL         — watsonx.ai service URL
+  WATSONX_PROJECT_ID  — watsonx.ai project ID
+  WATSONX_MODEL_ID    — model to use
+                        (default: ibm/granite-3-3-8b-instruct)
 
 Degradation
 -----------
-If OPENAI_API_KEY is not set the session runs in "offline" mode: it calls
+If WATSONX_APIKEY is not set the session runs in "offline" mode: it calls
 the requested tools directly and assembles a templated answer from
 stage_explanations.json without contacting any model.
 The endpoint never raises on a missing key.
@@ -22,7 +24,7 @@ The endpoint never raises on a missing key.
 Guardian
 --------
 Guardian (guardian.py) runs locally with local_files_only=True.
-It is never routed through OpenAI and makes no network call.
+It is never routed through watsonx.ai and makes no network call.
 It is called on every response including offline mode.
 
 AGENTS.md enforcement
@@ -34,8 +36,6 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -54,9 +54,8 @@ _EXPLANATIONS_PATH = (
 # Maximum tool-call iterations per turn to prevent infinite loops
 _MAX_TOOL_ITERATIONS = 8
 
-# Default model
-_DEFAULT_MODEL_ID = "gpt-4o-mini"
-_OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+# Default model when WATSONX_MODEL_ID is not set
+_DEFAULT_MODEL_ID = "ibm/granite-3-3-8b-instruct"
 
 
 # ---------------------------------------------------------------------------
@@ -86,76 +85,94 @@ class ChatResponse:
     """GuardianVerdict serialised to dict for the API response body."""
 
     offline_mode: bool = False
-    """True when no OpenAI API key was available."""
+    """True when no watsonx.ai API key was available."""
 
 
 # ---------------------------------------------------------------------------
 # Credential detection
 # ---------------------------------------------------------------------------
 
-def _detect_openai_config() -> dict | None:
+def _detect_watsonx_config() -> dict | None:
     """
-    Return OpenAI config dict if OPENAI_API_KEY is set, else None.
+    Return watsonx.ai config dict if WATSONX_APIKEY is set, else None.
 
-    Required: OPENAI_API_KEY
-    Optional: OPENAI_MODEL_ID (default: gpt-4o-mini)
+    Required: WATSONX_APIKEY, WATSONX_URL, WATSONX_PROJECT_ID
+    Optional: WATSONX_MODEL_ID (default: ibm/granite-3-3-8b-instruct)
     """
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    api_key = os.environ.get("WATSONX_APIKEY", "").strip()
     if not api_key:
+        return None
+    url = os.environ.get("WATSONX_URL", "").strip()
+    project_id = os.environ.get("WATSONX_PROJECT_ID", "").strip()
+    if not url or not project_id:
         return None
     return {
         "api_key": api_key,
-        "model_id": os.environ.get("OPENAI_MODEL_ID", _DEFAULT_MODEL_ID),
+        "url": url,
+        "project_id": project_id,
+        "model_id": os.environ.get("WATSONX_MODEL_ID", _DEFAULT_MODEL_ID),
     }
 
 
 # ---------------------------------------------------------------------------
-# OpenAI chat call
+# watsonx.ai ModelInference chat call
 # ---------------------------------------------------------------------------
 
-def _call_openai(
+def _build_watsonx_client(config: dict):
+    """
+    Construct an ibm_watsonx_ai.foundation_models.ModelInference client.
+
+    Credentials are read exclusively from ``config`` (which was populated
+    from environment variables — nothing is hardcoded).
+    """
+    from ibm_watsonx_ai import Credentials
+    from ibm_watsonx_ai.foundation_models import ModelInference
+
+    credentials = Credentials(
+        url=config["url"],
+        api_key=config["api_key"],
+    )
+    return ModelInference(
+        model_id=config["model_id"],
+        credentials=credentials,
+        project_id=config["project_id"],
+    )
+
+
+def _call_watsonx(
     config: dict,
     messages: list[dict],
     tools: list[dict],
 ) -> dict:
     """
-    Call the OpenAI /v1/chat/completions endpoint.
+    Call the watsonx.ai ModelInference.chat endpoint.
 
-    Auth: Bearer API key from config["api_key"].
+    ``tools`` is the list of tool schemas in function-calling format
+    (same as TOOL_SCHEMAS); watsonx.ai accepts this format unchanged.
 
     Returns the raw response dict.
-    Raises urllib.error.URLError / HTTPError on failure.
+    Raises on HTTP / credential failure.
     """
-    payload = json.dumps({
-        "model": config["model_id"],
-        "messages": messages,
-        "tools": [{"type": "function", "function": t} for t in tools],
-        "tool_choice": "auto",
-        "max_tokens": 1024,
-    }).encode()
-
-    req = urllib.request.Request(
-        _OPENAI_CHAT_URL,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config['api_key']}",
-        },
-        method="POST",
+    client = _build_watsonx_client(config)
+    watsonx_tools = [{"type": "function", "function": t} for t in tools]
+    response = client.chat(
+        messages=messages,
+        tools=watsonx_tools,
+        tool_choice_option="auto",
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read())
+    return response
 
 
-def _extract_openai_turn(response: dict) -> tuple[str, list[dict]]:
+def _extract_watsonx_turn(response: dict) -> tuple[str, list[dict]]:
     """
-    Parse an OpenAI chat completions response into (text, tool_calls).
+    Parse a watsonx.ai chat response into (text, tool_calls).
 
-    OpenAI response shape:
+    watsonx.ai chat response shape:
       response["choices"][0]["message"] with:
         - "content": str | None  (text response)
         - "tool_calls": list of {"id", "type", "function": {"name", "arguments"}}
-      response["choices"][0]["finish_reason"]: "stop" | "tool_calls" | "length"
+      response["choices"][0]["finish_reason"]:
+        "stop" | "tool_calls" | "length" | "eos_token"
 
     Returns (text, []) for text responses and ("", tool_calls) for tool turns.
     """
@@ -191,14 +208,14 @@ def _offline_response(
     """
     Assemble a templated response from committed artifact text.
 
-    Used when no OpenAI API key is available.  Numbers come only from
+    Used when no watsonx.ai API key is available.  Numbers come only from
     tool_calls_made results; template text comes from stage_explanations.json.
     """
     expl = _load_explanations()
     non_claims = expl.get("non_claims", [])
 
     lines = [
-        "**Offline mode** — no OpenAI API key configured.  "
+        "**Offline mode** — no watsonx.ai API key configured.  "
         "Showing pipeline artifact summary only.",
         "",
     ]
@@ -262,7 +279,7 @@ async def run_turn(
     enqueue_fn=None,
 ) -> ChatResponse:
     """
-    Execute one user turn: send message to OpenAI, dispatch tool calls, screen.
+    Execute one user turn: send message to watsonx.ai, dispatch tool calls, screen.
 
     Parameters
     ----------
@@ -280,18 +297,18 @@ async def run_turn(
     -------
     ChatResponse
     """
-    config = _detect_openai_config()
+    config = _detect_watsonx_config()
     system_text = build_system_prompt(job_id)
     tool_calls_made: list[dict] = []
 
-    # Build message list (OpenAI-compatible format)
+    # Build message list
     messages: list[dict] = [{"role": "system", "content": system_text}]
     for h in history:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
     # -----------------------------------------------------------------------
-    # Offline degradation — no OpenAI API key
+    # Offline degradation — no watsonx.ai API key
     # -----------------------------------------------------------------------
     if config is None:
         if job_id:
@@ -323,14 +340,14 @@ async def run_turn(
         )
 
     # -----------------------------------------------------------------------
-    # Live OpenAI path — tool-call loop
+    # Live watsonx.ai path — tool-call loop
     # -----------------------------------------------------------------------
     final_text = ""
 
     for _iteration in range(_MAX_TOOL_ITERATIONS):
         try:
-            response = _call_openai(config, messages, TOOL_SCHEMAS)
-            text, raw_tool_calls = _extract_openai_turn(response)
+            response = _call_watsonx(config, messages, TOOL_SCHEMAS)
+            text, raw_tool_calls = _extract_watsonx_turn(response)
 
             if raw_tool_calls:
                 # Append the assistant message with tool_calls
@@ -378,7 +395,7 @@ async def run_turn(
 
         except Exception as exc:  # noqa: BLE001
             final_text = (
-                f"[OpenAI call failed: {type(exc).__name__}: {exc}]\n\n"
+                f"[watsonx.ai call failed: {type(exc).__name__}: {exc}]\n\n"
                 + _offline_response(job_id, message, tool_calls_made)
             )
             break
@@ -389,7 +406,7 @@ async def run_turn(
         )
 
     # -----------------------------------------------------------------------
-    # Guardian screening — always local, never routed through OpenAI
+    # Guardian screening — always local, never routed through watsonx.ai
     # -----------------------------------------------------------------------
     verdict = screen(final_text)
     return ChatResponse(

@@ -10,7 +10,9 @@
 # Usage (local):
 #   docker build -t falsifier-backend .
 #   docker run -p 8000:8000 \
-#     -e OPENAI_API_KEY=sk-... \
+#     -e WATSONX_APIKEY=... \
+#     -e WATSONX_URL=... \
+#     -e WATSONX_PROJECT_ID=... \
 #     falsifier-backend
 #
 # IBM Code Engine deploy:

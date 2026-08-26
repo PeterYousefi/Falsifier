@@ -15,7 +15,7 @@ They verify:
   T7. Session offline_mode responds with templated text when no API key is set
   T8. system_prompt contains the locked claim and all tool names
 
-  T9.  Response contract — normal (live OpenAI-backed) path has all required fields
+  T9.  Response contract — normal (live watsonx.ai-backed) path has all required fields
   T10. Response contract — offline path has all required fields and offline_mode=True
   T11. Response contract — Guardian-blocked path has all required fields and safe=False
   T12. Response contract — reply field is always a str (never None/missing)
@@ -342,7 +342,7 @@ async def test_session_offline_mode_no_api_key(fake_job_store):
 
     job_id, tce, _ = fake_job_store
     # Ensure no API keys are set
-    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+    with patch.dict(os.environ, {"WATSONX_APIKEY": ""}):
         response = await run_turn(
             job_id=job_id,
             message="What is the disposition of the first TCE?",
@@ -383,8 +383,8 @@ def test_system_prompt_contains_locked_claim_and_tools():
 #
 # These tests assert that ChatResponse (and therefore the JSON the API
 # serialises) has a stable shape across all three production paths:
-#   (a) normal OpenAI-backed response (mocked)
-#   (b) offline degradation (OPENAI_API_KEY unset)
+#   (a) normal watsonx.ai-backed response (mocked)
+#   (b) offline degradation (WATSONX_APIKEY unset)
 #   (c) Guardian-blocked response
 #
 # The contract that the frontend relies on:
@@ -422,7 +422,7 @@ async def test_response_contract_offline_path(fake_job_store):
     from falsifier.api.chat.session import run_turn
 
     job_id, _, _ = fake_job_store
-    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+    with patch.dict(os.environ, {"WATSONX_APIKEY": ""}):
         response = await run_turn(
             job_id=job_id,
             message="What are the vetting results?",
@@ -441,7 +441,7 @@ async def test_response_contract_offline_no_job():
     """
     from falsifier.api.chat.session import run_turn
 
-    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+    with patch.dict(os.environ, {"WATSONX_APIKEY": ""}):
         response = await run_turn(
             job_id=None,
             message="Explain what the pipeline does.",
@@ -452,18 +452,24 @@ async def test_response_contract_offline_no_job():
     assert response.offline_mode is True
 
 
+_FAKE_WATSONX_ENV = {
+    "WATSONX_APIKEY": "fake-apikey-for-test",
+    "WATSONX_URL": "https://fake.ml.cloud.ibm.com",
+    "WATSONX_PROJECT_ID": "fake-project-id",
+}
+
+
 @pytest.mark.asyncio
-async def test_response_contract_openai_mocked(fake_job_store):
+async def test_response_contract_watsonx_mocked(fake_job_store):
     """
-    T9 — Normal (OpenAI-backed) path with mocked HTTP returns a ChatResponse
-    satisfying the full frontend-facing contract.
+    T9 — Normal (watsonx.ai-backed) path with mocked ModelInference.chat
+    returns a ChatResponse satisfying the full frontend-facing contract.
     """
     from falsifier.api.chat.session import run_turn
-    import json as _json
 
     job_id, tce, _ = fake_job_store
 
-    _FAKE_OPENAI_RESPONSE = {
+    _FAKE_WATSONX_RESPONSE = {
         "choices": [{
             "finish_reason": "stop",
             "message": {
@@ -477,14 +483,11 @@ async def test_response_contract_openai_mocked(fake_job_store):
         }]
     }
 
-    class _FakeHTTPResponse:
-        def read(self):
-            return _json.dumps(_FAKE_OPENAI_RESPONSE).encode()
-        def __enter__(self): return self
-        def __exit__(self, *_): pass
-
-    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-fake-key-for-test"}):
-        with patch("urllib.request.urlopen", return_value=_FakeHTTPResponse()):
+    with patch.dict(os.environ, _FAKE_WATSONX_ENV):
+        with patch(
+            "falsifier.api.chat.session._call_watsonx",
+            return_value=_FAKE_WATSONX_RESPONSE,
+        ):
             response = await run_turn(
                 job_id=job_id,
                 message="What is the disposition?",
@@ -504,13 +507,12 @@ async def test_response_contract_guardian_blocked(fake_job_store):
     the full contract: reply is a str, safe=False, risk_label is set.
     """
     from falsifier.api.chat.session import run_turn
-    import json as _json
 
     job_id, _, _ = fake_job_store
 
-    # Craft a fake OpenAI reply that the heuristic Guardian will block
+    # Craft a fake watsonx.ai reply that the heuristic Guardian will block
     # (biosignature claim — unconditionally blocked per locked claim).
-    _BAD_OPENAI_RESPONSE = {
+    _BAD_WATSONX_RESPONSE = {
         "choices": [{
             "finish_reason": "stop",
             "message": {
@@ -521,14 +523,11 @@ async def test_response_contract_guardian_blocked(fake_job_store):
         }]
     }
 
-    class _FakeHTTPResponse:
-        def read(self):
-            return _json.dumps(_BAD_OPENAI_RESPONSE).encode()
-        def __enter__(self): return self
-        def __exit__(self, *_): pass
-
-    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-fake-key-for-test"}):
-        with patch("urllib.request.urlopen", return_value=_FakeHTTPResponse()):
+    with patch.dict(os.environ, _FAKE_WATSONX_ENV):
+        with patch(
+            "falsifier.api.chat.session._call_watsonx",
+            return_value=_BAD_WATSONX_RESPONSE,
+        ):
             response = await run_turn(
                 job_id=job_id,
                 message="Tell me about biosignatures.",

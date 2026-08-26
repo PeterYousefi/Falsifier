@@ -76,7 +76,7 @@ class ChatResponseBody(BaseModel):
     """{safe, risk_label, model_used, confidence} from the heuristic screener."""
 
     offline_mode: bool = False
-    """True when no OpenAI API key was configured; response is templated."""
+    """True when no watsonx.ai API key was configured; response is templated."""
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ async def chat(req: ChatRequest) -> ChatResponseBody:
     Execute one chat turn.
 
     The server calls the pipeline tools, assembles a response, and screens
-    it through the Guardian before returning.  If no OpenAI API key is
+    it through the Guardian before returning.  If no watsonx.ai API key is
     configured, the response is assembled from committed artifact text only
     (offline degradation).
     """

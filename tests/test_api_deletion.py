@@ -5,7 +5,7 @@ API-deletion test: pipeline runs end-to-end with every hosted API key unset.
 
 Policy requirement
 ------------------
-With every hosted API key absent from the environment (OpenAI, etc.), the
+With every hosted API key absent from the environment (watsonx.ai, etc.), the
 five core pipeline stages must still run and produce a complete
 ``DetectionReport``.  Only the chat / LLM layer degrades — and even then it
 degrades to templated explanations read from committed artifacts, not to
@@ -113,8 +113,8 @@ def _make_minimal_stellar_params():
 # ---------------------------------------------------------------------------
 
 _HOSTED_API_KEYS = [
-    # OpenAI — the supported inference backend
-    "OPENAI_API_KEY",
+    # watsonx.ai — the supported inference backend
+    "WATSONX_APIKEY",
     # Legacy keys retained to ensure they are also absent from the environment
     # during the deletion test.  These providers are not supported but we
     # confirm they produce no effect.

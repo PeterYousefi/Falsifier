@@ -169,14 +169,16 @@ def _detect_chat_backend() -> str:
     """
     Return the chat backend label based on env var presence.
 
-    "openai:<model_id>" if OPENAI_API_KEY is set (key present means a call
+    "watsonx:<model_id>" if WATSONX_APIKEY is set (key present means a call
     could succeed; we cannot verify a prior success without a live call).
-    "templated_offline" if OPENAI_API_KEY is absent.
+    "templated_offline" if WATSONX_APIKEY is absent.
     """
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    api_key = os.environ.get("WATSONX_APIKEY", "").strip()
     if api_key:
-        model_id = os.environ.get("OPENAI_MODEL_ID", "gpt-4o-mini").strip()
-        return f"openai:{model_id}"
+        model_id = os.environ.get(
+            "WATSONX_MODEL_ID", "ibm/granite-3-3-8b-instruct"
+        ).strip()
+        return f"watsonx:{model_id}"
     return "templated_offline"
 
 
