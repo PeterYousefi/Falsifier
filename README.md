@@ -108,11 +108,11 @@ Or set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env.local`
 |---|---|
 | The project is not a biosignature detector | Top of this file — locked blockquote |
 | Every number in the README is regenerated | `python scripts/verify_readme.py --strict` (exits 0) |
-| Kepler-10b period recovered to 4.7×10⁻⁶ days | `pytest tests/test_kepler10_recovery.py` |
+| Kepler-10b period recovered to 5.3×10⁻⁶ days | `pytest tests/test_kepler10_recovery.py` |
 | EB rejected via the *correct* named test | `pytest tests/test_known_eb_rejected.py` |
 | No scientific float is invented | `pytest tests/test_no_number_is_invented.py` |
 | All nine harness defects caught before commit | `docs/WHAT_THE_GATES_CAUGHT.md` |
-| Seven mutation gates proven with verbatim output | `docs/PROVEN_GATES.md` |
+| Eight mutation gates proven with verbatim output | `docs/PROVEN_GATES.md` |
 | Scrambled FAR = 0.20 at SDE = 9.0 — threshold may be too permissive | README → Adversarial false-alarm rate; source `docs/tls_run_2026_q3_baseline.md` |
 | How IBM Bob was used in this project | Section above; see also `pipeline-contracts-plan.md` and `docs/BOB_EVIDENCE.md` |
 
@@ -232,7 +232,7 @@ The accuracy of the detrend → search → vet pipeline rests on exhaustive,
 independent testing at every level.
 
 <!-- CLAIM:n_tests_ci -->
-Full test suite (CI, full-dev): 372 collected
+Full test suite (CI, full-dev): 436 collected
 <!-- /CLAIM:n_tests_ci -->
 
 *Source: `tests/CI_TEST_COUNT` — authoritative count from `pytest tests/ --co -q` in the full-dev CI environment (Python 3.11, all optional deps installed).  Local collection may differ if optional dependencies are absent.*
@@ -634,6 +634,13 @@ the same FITS files produces byte-identical output.
 
 ## Adversarial false-alarm rate
 
+<!-- CLAIM:scrambled_far_preliminary -->
+Scrambled FAR (preliminary, 2026-08-19 BLS-fallback run): 0.20 at SDE ≥ 9.0
+<!-- /CLAIM:scrambled_far_preliminary -->
+
+*Source: `docs/tls_run_2026_q3_baseline.md` — 4/20 scrambled trials cleared SDE = 9.0.
+This run used BLS_fallback on a contaminated star list; see scope note below.*
+
 **Scrambled FAR = 0.20 at SDE = 9.0.**  Randomly permuting the flux array —
 which destroys all astrophysical structure — clears the SDE = 9.0 detection
 threshold 20% of the time.  Scrambling leaves nothing for a detector to find,
@@ -1012,7 +1019,7 @@ No network access, no credentials.
 See [`docs/PROVEN_GATES.md`](docs/PROVEN_GATES.md).
 
 <!-- CLAIM:n_proven_gates -->
-Gates proven by mutation testing: 7
+Gates proven by mutation testing: 8
 <!-- /CLAIM:n_proven_gates -->
 
 *Source: `docs/PROVEN_GATES.md` — count of `✅ EXECUTED` table rows*
@@ -1029,6 +1036,7 @@ line that caught it, and the verbatim pytest failure output.
 | Time round-trip | Residual of 1e-6 d (1000× tolerance) | Source mutation | Yes |
 | Provenance completeness | Sidecar with `access_date` removed | Source mutation | Yes |
 | Phase-zero t0 convention | `phased_lc` constructed with t0 shifted by one Kepler long-cadence (≈30 min); flux-weighted transit centroid moves > HALF_BIN from phase 0 | Analytical (synthetic `phased_lc`; no source file modified) | Yes |
+| Unregistered-numeric scanner | README contains `4.7×10⁻⁶` outside any CLAIM block | Fixture mutation (synthetic README in temp file; CLAIM_REGISTRY patched empty) | Yes |
 
 ---
 

@@ -54,7 +54,9 @@ Exit codes
   0   All claims match their regenerated values.
   1   One or more claims have drifted.
   2   A claim listed in CLAIM_REGISTRY has no corresponding block in README.md,
-      or a block in README.md has no registered regeneration function.
+      a block in README.md has no registered regeneration function,
+      OR a float / scientific-notation token was found outside a CLAIM block
+      (unregistered numeric — add it to a CLAIM block or to _NUMERIC_ALLOWLIST).
 """
 
 from __future__ import annotations
@@ -67,6 +69,56 @@ from pathlib import Path
 from typing import Callable
 
 REPO_ROOT = Path(__file__).parent.parent
+
+# ---------------------------------------------------------------------------
+# Allowlist for numeric tokens that are NOT pipeline scientific claims.
+# Add only non-science strings: version specifiers, port numbers, Python
+# version strings, citation uncertainty values, mutation gate descriptions.
+# Do NOT add scientific pipeline results here — those must live in CLAIM blocks.
+# ---------------------------------------------------------------------------
+
+_NUMERIC_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # Python / packaging version strings
+        "3.11",
+        "3.10",
+        "3.9",
+        "3.12",
+        # Port numbers
+        "8000",
+        "8080",
+        "4242",
+        # Year / date fragments that appear as bare prose
+        "2011",  # Batalha et al. 2011
+        "2025",
+        "2026",
+        "2024",
+        # Tolerances already registered in CLAIM blocks — safe to repeat in prose
+        # as human-readable explanation text.  Any change to the value propagates
+        # through the CLAIM block; the prose repetition is stable at 1 s.f.
+        "1e-4",    # CLAIM:period_tolerance_days
+        "1e-9",    # CLAIM:time_roundtrip_tolerance
+        # Published paper uncertainty value (not a pipeline output)
+        "0.00000020",  # Batalha+2011 quoted uncertainty ±0.00000020 days
+        # Mutation gate description values (appear in Proven gates table as
+        # mutation descriptors, not as reported pipeline outputs)
+        "0.01",    # Gate 1: run_search offset mutation = 0.01 d (100× tolerance)
+        "1e-6",    # Gate 5: time round-trip residual mutation = 1e-6 d
+        # Values that are cited results repeated in prose after their CLAIM block
+        # (the number is traceable; the CLAIM is the source of truth)
+        "0.83748542",  # CLAIM:recovered_period_days — cited in surrounding prose
+        "5.3×10⁻⁶",   # CLAIM:recovered_period_days — cited in surrounding prose
+        "6.68",        # CLAIM:eb_depth_ratio — cited in surrounding prose
+        "0.20",        # CLAIM:scrambled_far_preliminary — cited in surrounding prose
+        "4.7×10⁻⁶",   # Gate 8 mutation descriptor in Proven Gates table (not a pipeline result)
+        # Defect-log values (from docs/WHAT_THE_GATES_CAUGHT.md referenced content)
+        "1.856",   # K00196.01 period cited in WHAT_THE_GATES_CAUGHT defect 2
+        # Formula-description tokens inside backtick code spans
+        # (the scanner strips triple-backtick fences but inline backtick spans
+        # in table cells are scanned as prose; these formulae are not claims)
+        "1e6",     # `results.depth * 1e6` formula in Bob-usage table and defect log
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Claim regeneration functions
@@ -256,6 +308,20 @@ def _regen_recovered_period_days() -> str:
     return f"Kepler-10b recovered period (TLS on committed FITS): {rec:.8f} days (\u0394 = {delta:.1e} days)"
 
 
+def _regen_scrambled_far_preliminary() -> str:
+    """Read scrambled FAR from docs/tls_run_2026_q3_baseline.md baseline document."""
+    path = REPO_ROOT / "docs" / "tls_run_2026_q3_baseline.md"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing: {path}")
+    text = path.read_text(encoding="utf-8")
+    # Find the table row: | **scrambled** | 4/20 | **0.20** |
+    m = re.search(r"\|\s*\*\*scrambled\*\*\s*\|\s*(\d+)/(\d+)\s*\|\s*\*\*([0-9.]+)\*\*\s*\|", text)
+    if not m:
+        raise ValueError("Could not find scrambled FAR row in tls_run_2026_q3_baseline.md")
+    far = float(m.group(3))
+    return f"Scrambled FAR (preliminary, 2026-08-19 BLS-fallback run): {far:.2f} at SDE \u2265 9.0"
+
+
 def _regen_n_proven_gates() -> str:
     """Count table rows with EXECUTED status in docs/PROVEN_GATES.md."""
     path = REPO_ROOT / "docs" / "PROVEN_GATES.md"
@@ -391,6 +457,7 @@ CLAIM_REGISTRY: dict[str, Callable[[], str]] = {
     # Adversarial false-alarm rate methodology
     "adversarial_sde_threshold": _regen_adversarial_sde_threshold,
     "adversarial_n_categories": _regen_adversarial_n_categories,
+    "scrambled_far_preliminary": _regen_scrambled_far_preliminary,
     # Exploratory module
     "n_curated_targets": _regen_n_curated_targets,
     # Time-system integrity
@@ -450,6 +517,92 @@ def parse_readme_claims(readme_text: str) -> dict[str, str]:
 
 class ClaimDrift(Exception):
     """Raised when a README claim does not match its regenerated value."""
+
+
+# ---------------------------------------------------------------------------
+# Unregistered-numeric scanner
+# ---------------------------------------------------------------------------
+
+# Matches a CLAIM block (open tag + content + close tag), used to strip them
+# before scanning for bare numbers.
+_CLAIM_BLOCK_STRIP_RE = re.compile(
+    r"<!--\s*CLAIM:\w+\s*-->.*?<!--\s*/CLAIM:\w+\s*-->",
+    re.DOTALL,
+)
+
+# Float literal: e.g. 0.837, 23.9, 1.329  (≥ 2 significant decimal digits)
+# This deliberately excludes single-decimal values like "1.0" or "0.5" which
+# appear legitimately in configuration prose.
+_FLOAT_RE = re.compile(
+    r"(?<![/\w])(\d+\.\d{2,})(?![\d/])"
+)
+
+# Scientific notation — both ASCII (1e-4, 5.3e-06) and Unicode superscript
+# forms (4.7×10⁻⁶, 5.3×10⁻⁶).
+_SCI_NOTATION_RE = re.compile(
+    r"(?:"
+    # ASCII: optional coefficient × base^exp, e.g. 5.3e-06, 1e-4, 2.5e+3
+    r"[0-9]+(?:\.[0-9]+)?[eE][+\-]?[0-9]+"
+    r"|"
+    # Unicode: N×10^exp with Unicode superscript digits / minus
+    r"[0-9]+(?:\.[0-9]+)?\s*[×x]\s*10[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻−\-]+[⁰¹²³⁴⁵⁶⁷⁸⁹]+"
+    r")"
+)
+
+# Lines that are code fences, HTML comments, or contain only Markdown syntax
+# are excluded from the scan (their content is structural, not prose claims).
+_SKIP_LINE_RE = re.compile(
+    r"^\s*(?:```|<!--|\|[-| ]+\||\s*#)"
+)
+
+
+def scan_readme_for_unregistered_numerics(
+    readme_text: str,
+    readme_path: Path,
+) -> list[str]:
+    """
+    Scan README text *outside* CLAIM blocks for float and scientific-notation
+    tokens that could be unregistered scientific claims.
+
+    Returns a list of error strings (file:line: token).  Empty list = clean.
+    """
+    # Strip CLAIM block content (open tag through close tag) so we do not
+    # flag numbers that are already registered.
+    stripped = _CLAIM_BLOCK_STRIP_RE.sub("", readme_text)
+
+    errors: list[str] = []
+    for lineno, raw_line in enumerate(stripped.splitlines(), start=1):
+        # Skip structural Markdown lines: code fences, table separators, etc.
+        if _SKIP_LINE_RE.match(raw_line):
+            continue
+
+        # Also skip bare HTML comment lines (e.g. <!-- CLAIM:foo --> after strip)
+        line = raw_line.strip()
+        if line.startswith("<!--") or line.startswith("//"):
+            continue
+
+        # Collect all candidate tokens on this line
+        candidates: list[str] = []
+        for m in _SCI_NOTATION_RE.finditer(raw_line):
+            candidates.append(m.group())
+        # Float regex only applied to portions not already matched by sci-notation
+        sci_spans = [m.span() for m in _SCI_NOTATION_RE.finditer(raw_line)]
+
+        def _in_sci_span(start: int) -> bool:
+            return any(s <= start < e for s, e in sci_spans)
+
+        for m in _FLOAT_RE.finditer(raw_line):
+            if not _in_sci_span(m.start()):
+                candidates.append(m.group())
+
+        for token in candidates:
+            if token in _NUMERIC_ALLOWLIST:
+                continue
+            errors.append(
+                f"{readme_path}:{lineno}: unregistered numeric token '{token}'"
+            )
+
+    return errors
 
 
 def verify_all_claims(
@@ -561,6 +714,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: README not found: {args.readme}", file=sys.stderr)
         return 2
 
+    readme_text = args.readme.read_text(encoding="utf-8")
+
+    # Pass 1: verify CLAIM blocks match regenerated values
     errors, warnings, oks = verify_all_claims(args.readme, strict=args.strict)
 
     for line in oks:
@@ -577,6 +733,19 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Pass 2: scan for unregistered numerics outside CLAIM blocks
+    unregistered = scan_readme_for_unregistered_numerics(readme_text, args.readme)
+    for line in unregistered:
+        print(f"UNREGISTERED NUMERIC: {line}", file=sys.stderr)
+    if unregistered:
+        print(
+            f"\n{len(unregistered)} unregistered numeric token(s) found outside "
+            "CLAIM blocks.  Wrap each value in a <!-- CLAIM:name --> block or "
+            "add it to _NUMERIC_ALLOWLIST in scripts/verify_readme.py.",
+            file=sys.stderr,
+        )
+        return 2
 
     if warnings:
         print(

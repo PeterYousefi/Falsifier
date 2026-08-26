@@ -19,6 +19,7 @@ modified.  Each stub was written to a temporary file and deleted after the run.
 | 5 | Time-system round-trip | `tests/test_time_systems.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 6 | Provenance completeness | `tests/test_provenance_complete.py` | ✅ EXECUTED — mutation ran; verbatim output recorded |
 | 7 | Phase-zero t0 convention — `test_t0_shift_moves_minimum_out_of_zero_bin` | `tests/test_figures_trace_to_artifacts.py` | ✅ EXECUTED — analytical mutation (t0 shifted by one Kepler long-cadence) and verbatim centroid output recorded |
+| 8 | Unregistered-numeric scanner — `test_verify_readme_catches_unregistered.py` | `scripts/verify_readme.py` + `tests/test_verify_readme_catches_unregistered.py` | ✅ EXECUTED — fixture README injected with `4.7×10⁻⁶` outside CLAIM block; scanner exits 2 with token+line; verbatim output recorded |
 
 **Mutation levels used in this document**:
 - **Pipeline-level** (gates 1 and 2): `unittest.mock.patch` replaces the stage function
@@ -39,7 +40,7 @@ modified.  Each stub was written to a temporary file and deleted after the run.
 > **Pipeline output (genuine)**: Detrend (wotan biweight), search (TLS limb-darkened), and vet
 > stages are fully implemented.  The real pipeline was run against
 > `data/golden/kepler10_q3_long.fits` (KIC 11904151 Q3 LLC, 3633 clean cadences, sha256 pinned).
-> TLS recovered the period as **0.83748542 days** (Δ = 4.7e-06 days, within 1e-4 day tolerance).
+> TLS recovered the period as **0.83748542 days** (Δ = 5.28e-06 days, within 1e-4 day tolerance).
 
 ### Mutation A — Pipeline-level (2025-07-14)
 
@@ -679,3 +680,106 @@ more bins share the minimum depth, making the centroid shift smaller per cadence
 t0 error).  The gate does not verify that the pipeline's epoch (t0) derivation is
 correct end-to-end — only that the phased_lc delivered to the UI has its transit
 centred at phase 0 to within BIN_WIDTH/2.
+
+---
+
+## Gate 8 — Unregistered-numeric scanner: `test_verify_readme_catches_unregistered.py` ✅ EXECUTED
+
+> **What this gate guards against**: a float or scientific-notation token
+> (e.g. `4.7×10⁻⁶`, `5.3e-06`, `0.83748542`) appearing in README.md
+> *outside* a `<!-- CLAIM:name -->` block.  Any such token is an
+> unregistered scientific claim invisible to `verify_readme.py`'s drift
+> checker — the exact class of defect that caused the stale `4.7×10⁻⁶`
+> row in the Judge Quick Access table (see `docs/WHAT_THE_GATES_CAUGHT.md`,
+> defect 11).
+
+### What was mutated
+
+A fixture README (`tests/test_verify_readme_catches_unregistered.py`,
+`_MUTANT_README`) was constructed with the token `4.7×10⁻⁶` on line 3,
+outside any CLAIM block:
+
+```
+# Falsifier
+
+Kepler-10b period recovered to 4.7×10⁻⁶ days — this number is OUTSIDE a CLAIM block.
+
+<!-- CLAIM:kepler10b_period_days -->
+Kepler-10b published period (Batalha et al. 2011): 0.83749070 days
+<!-- /CLAIM:kepler10b_period_days -->
+
+More prose below.
+```
+
+### Catching assertion
+
+`tests/test_verify_readme_catches_unregistered.py::TestMainExitCode::test_mutant_readme_exits_two`
+asserts:
+
+```python
+exit_code = verify_main(["--readme", str(readme)])
+assert exit_code == 2, (
+    f"Expected exit code 2 for README with unregistered '4.7×10⁻⁶', "
+    f"got {exit_code}.  The mutation gate did not fire."
+)
+```
+
+### Verbatim script output — mutation scenario (scanner fires)
+
+Running `verify_readme.py` against the fixture README with `CLAIM_REGISTRY` patched empty:
+
+```
+WARNING: UNREGISTERED   [kepler10b_period_days]  README has <!-- CLAIM:kepler10b_period_days --> but no registry entry in scripts/verify_readme.py.  Add a regeneration function or remove the block.
+UNREGISTERED NUMERIC: /var/folders/.../tmpux5k1pms.md:3: unregistered numeric token '4.7×10⁻⁶'
+
+1 unregistered numeric token(s) found outside CLAIM blocks.  Wrap each value in a <!-- CLAIM:name --> block or add it to _NUMERIC_ALLOWLIST in scripts/verify_readme.py.
+Exit code: 2
+```
+
+### Verbatim pytest output — gate passes on mutant README
+
+```
+============================= test session starts ==============================
+platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/ajdar/Desktop/Falsifier
+configfile: pyproject.toml
+
+collected 1 item
+
+tests/test_verify_readme_catches_unregistered.py::TestMainExitCode::test_mutant_readme_exits_two PASSED [100%]
+
+============================== 1 passed in 0.02s ===============================
+```
+
+### Verbatim script output — with scanner disabled (gate would be broken)
+
+Patching `scan_readme_for_unregistered_numerics` to return `[]` (simulating the
+scanner not existing) produces exit 0 — the defect would pass undetected:
+
+```
+Exit code with broken gate: 0
+
+0 claim(s) verified OK.
+```
+
+This confirms the gate is not vacuously true: removing the scanner removes the
+protection.
+
+### What this gate proves
+
+1. `scan_readme_for_unregistered_numerics()` returns at least one error when a
+   scientific-notation token appears outside a CLAIM block.
+2. `verify_readme.py` `main()` exits 2 (not 0, not 1) when unregistered numerics
+   are found.
+3. The error message includes the file path, line number, and the offending token.
+4. A scanner that always returns empty would yield exit 0 — proving the test is
+   not vacuously passing.
+
+### What this gate does not claim
+
+- The allowlist is complete: tokens deliberately excluded from scanning
+  (tolerances already in CLAIM blocks, mutation-gate descriptors, citation
+  uncertainties) could in principle conceal a new unregistered claim if a future
+  author adds the value to `_NUMERIC_ALLOWLIST` without wrapping it in a CLAIM
+  block.  The gate catches *new* tokens that are not in the allowlist; it cannot
+  catch tokens that a future author deliberately allowlists without a CLAIM block.

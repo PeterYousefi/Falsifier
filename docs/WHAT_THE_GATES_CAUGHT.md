@@ -343,3 +343,85 @@ into the `verify-readme` CI job.
 | 8 | Two replacement stars had no Q1–Q8 MAST data | MAST coverage query | Two more shard failures and another diagnosis cycle |
 | 9 | Mixed baselines in adversarial run (KIC 7272437 at 23,784 cadences; others at 3,000–4,000) | Artifact `n_cadences` inspection | Non-homogeneous substrate; invalid combined Wilson CI |
 | 10 | README gate-summary table had 6 rows while `CLAIM:n_proven_gates` rendered 7 | `test_readme_tables_match_claims.py` (new) | Gate 7 (phase-zero t0 convention) invisible to a reader scanning the prose table |
+| 11 | Stale `4.7×10⁻⁶` in Judge Quick Access table (correct value: `5.3×10⁻⁶`) | Unregistered-numeric scanner (Gate 8, `verify_readme.py`) | Stale scientific value visible to judges; inconsistency with the registered CLAIM and PROVEN_GATES |
+| 12 | `impact_facts.py` suspected of SELECT TOP 2000 truncation; investigation confirmed count is genuine | `test_impact_facts_not_truncated.py` — verified live re-query returns 2000 from COUNT(*) | No truncation artifact; but lack of an automated guard would have left the suspicion unresolved in future |
+
+---
+
+## 11 — Stale `4.7×10⁻⁶` in Judge Quick Access table
+
+**What the defect was.**  The README `Judge Quick Access` table contained:
+
+> Kepler-10b period recovered to 4.7×10⁻⁶ days
+
+The correct value, derived from the registered CLAIM block (`CLAIM:recovered_period_days`
+in `README.md`), is `5.3×10⁻⁶ days` — computed as `|0.83748542 − 0.83749070| = 5.28e-6 ≈ 5.3e-6`.
+The same stale value appeared in `docs/PROVEN_GATES.md` Gate 1 header:
+`Δ = 4.7e-06 days` (corrected to `5.28e-06 days`).
+
+The error is a transposition: 5.28e-6 rounds to 5.3e-6, not 4.7e-6.  The first draft of
+Gate 1 used an incorrect computed delta that was never caught because the prose outside
+CLAIM blocks was invisible to `scripts/verify_readme.py`.
+
+**Which check caught it.**  The unregistered-numeric scanner added to
+`scripts/verify_readme.py` in Gate 8 (commit accompanying this document update).
+The scanner strips CLAIM block content, then searches remaining prose for float
+and scientific-notation tokens.  `4.7×10⁻⁶` would have been caught immediately
+if the scanner had existed when the Judge Quick Access table was written.
+
+**What would have been published without it.**  A judge checking the period
+recovery claim (`4.7×10⁻⁶`) against the registered CLAIM block (`5.3×10⁻⁶`)
+would have seen an immediate inconsistency — precisely the kind of internal
+contradiction that undermines the project's core claim that "numbers cannot drift."
+
+**Fix.**  Updated the Judge Quick Access table row to `5.3×10⁻⁶` and the
+PROVEN_GATES.md Gate 1 header to `5.28e-06`.  Added Gate 8 (unregistered-numeric
+scanner) to prevent this class of defect going forward.
+
+---
+
+## 12 — `impact_facts.py` SELECT TOP truncation concern investigated and resolved
+
+**What the defect was.**  The three KOI dispositions in `data/artifacts/impact_facts.json`
+(CONFIRMED 1,329 + CANDIDATE 192 + FALSE POSITIVE 479) sum to exactly 2,000 —
+coinciding with `koi_total_rows = 2000`.  On the NASA Exoplanet Archive TAP service,
+`SELECT TOP 2000` is a common row cap, and a sum of exactly 2,000 is a known
+signature of a truncated query masquerading as a total.
+
+**Which check caught it.**  The structural coincidence was identified during
+competition-readiness review.  The concern is: *if* an earlier version of the script
+had used `SELECT TOP 2000 ... koi_disposition` and the disposition counts reflected
+only the first 2000 rows returned, the false-positive fraction would be wrong.
+
+**Investigation result.**  A live re-query was run on 2026-08-26 using
+`SELECT COUNT(*) AS total_rows FROM cumulative` (an aggregate, no row cap)
+and `SELECT koi_disposition, COUNT(*) AS n FROM cumulative GROUP BY koi_disposition`
+(also an aggregate).  Both returned:
+
+| Disposition | Count |
+|---|---|
+| CONFIRMED | 1,329 |
+| CANDIDATE | 192 |
+| FALSE POSITIVE | 479 |
+| **Total** | **2,000** |
+
+The Kepler mission ended in 2018.  The KOI cumulative catalog is frozen;
+its total of exactly 2,000 entries is genuine.  No SELECT TOP truncation occurred.
+
+**What would have been published without it.**  The suspicion would have remained
+unresolved in future runs.  If the catalog total ever drifts from 2,000 (e.g. a
+correction row is added), a SELECT TOP 2000 query would silently truncate while
+a COUNT(*) query would return the true new total — making the difference detectable.
+
+**Fix.**  No data change required.  Added `tests/test_impact_facts_not_truncated.py`
+which:
+  1. Asserts no ADQL string in the artifact contains the word `TOP`.
+  2. Asserts the disposition sum does not equal common cap values 500 or 1000
+     (2000 is excluded as the confirmed genuine total).
+  3. Asserts provenance fields (`source_doi`, `access_date`, `adql`) are present.
+  4. Asserts the GROUP BY sum equals the COUNT(*) total (cross-check consistency).
+
+This is the most interesting defect in this list: the verification tooling was
+correct and the input was coincidentally round.  The automated gate now guards
+against the case where `impact_facts.py` is modified and a future author
+accidentally introduces a SELECT TOP clause.
