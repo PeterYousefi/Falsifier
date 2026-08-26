@@ -24,14 +24,16 @@ planetary candidates, but manual review of each light curve is expert-intensive 
 error-prone.  False positives (eclipsing binaries, background contaminants, systematic
 artefacts) inflate candidate lists and dilute follow-up resources.
 
-**What this project does:** Falsifier runs four wired pipeline stages —
+**What this project does:** Falsifier runs four deterministic pipeline stages —
 light-curve ingest, detrend, period search, and seven-test vetting — on any
 Kepler/TESS target and outputs a triage disposition (`candidate` /
 `false_positive` / `ambiguous`) with a traceable reason.  A fifth stage
-(classify) is wired to the API queue but has no committed model; training is
-blocked by a train/serve feature skew (see `docs/SKIPPED_TESTS.md`).  Every
-number shown to a user originates from a committed pipeline artifact; no value
-is hardcoded in UI or API code.
+(classify) is opt-in and deliberately not trained: the classifier's feature
+extractor reads vet-stage `metric_value` fields that no DR25 catalogue column
+maps to, so training on proxies would produce a probability meaningless at
+inference time.  The guard is an intentional design decision, not a placeholder
+(see `docs/SKIPPED_TESTS.md`).  Every number shown to a user originates from a
+committed pipeline artifact; no value is hardcoded in UI or API code.
 
 **How IBM Bob was used:**
 
@@ -632,7 +634,7 @@ random roll length; it is reproducible for a fixed seed but not across seeds.
 | Detrend (`wotan` biweight) | **Yes** | Pure function of committed FITS + configuration constants |
 | Search (`transitleastsquares`) | **Yes** | Deterministic TLS search — limb-darkened profile, not BLS |
 | Vet (7-test disposition) | **Yes** | Truth table is a pure function; no randomness |
-| Classify (XGBoost inference) | **Yes** | Deterministic given committed model artifact |
+| Classify (XGBoost inference) | **No** — no committed model | Training blocked by a confirmed train/serve feature skew defect; see `docs/SKIPPED_TESTS.md` |
 | Injection recovery | **Yes** — for fixed seed | Bit-identical across runs with `--seed 42` |
 | Adversarial false-alarm | **Mostly yes** | `off_target` roll is seed-dependent; others are deterministic |
 | Retrieve (dynesty nested sampling) | **No** | dynesty is stochastic; ln Z moves ≲ `logzerr` between runs |
@@ -737,7 +739,7 @@ unreachable from `scripts/reproduce.sh` is a policy violation (AGENTS.md Rule 6)
 
 | Module | Status | Not in live path because |
 |---|---|---|
-| `falsifier/pipeline/stages/classify.py` | Wired via API queue; **no valid model committed** | Classifier training is blocked by a train/serve feature skew defect (see `docs/SKIPPED_TESTS.md`); no `artifacts/classify/xgb_classifier.ubj` exists |
+| `falsifier/pipeline/stages/classify.py` | Wired via API queue (opt-in); **deliberately not trained** | Classifier training is a deliberate refusal: `extract_features` reads vet-stage `metric_value` quantities that no DR25 column maps to; training on proxies would produce a probability meaningless at inference time. The `NotImplementedError` guard is the correct behaviour (see `docs/SKIPPED_TESTS.md`). |
 | `falsifier/pipeline/stages/retrieve.py` | **Exploratory** — wired only via `scripts/run_batch.py` | Requires petitRADTRANS + dynesty; not part of the real-time pipeline |
 | `falsifier/pipeline/stages/disequilibrium.py` | **Exploratory** — wired only via `scripts/run_batch.py` | Requires FastChem + VULCAN; not part of the real-time pipeline |
 | `falsifier/pipeline/batch/runner.py` | **Exploratory** — CLI only via `scripts/run_batch.py` | Offline batch process; no API route calls it |
@@ -930,6 +932,7 @@ line that caught it, and the verbatim pytest failure output.
 | Leakage | Same host star in both train and test `host_star_ids` | Source mutation | Yes |
 | Time round-trip | Residual of 1e-6 d (1000× tolerance) | Source mutation | Yes |
 | Provenance completeness | Sidecar with `access_date` removed | Source mutation | Yes |
+| Phase-zero t0 convention | `phased_lc` constructed with t0 shifted by one Kepler long-cadence (≈30 min); flux-weighted transit centroid moves > HALF_BIN from phase 0 | Analytical (synthetic `phased_lc`; no source file modified) | Yes |
 
 ---
 
@@ -1009,8 +1012,8 @@ tests/
   pipeline/test_io.py            artifact_write / artifact_read / input_hash tests
 
 docs/
-  PROVEN_GATES.md    Mutation testing log: 6 gates, verbatim failure output (pipeline-level for gates 1–2)
-  SKIPPED_TESTS.md   Inventory of previously skipped tests (all resolved)
+  PROVEN_GATES.md    Mutation testing log: 7 gates, verbatim failure output (pipeline-level for gates 1–2)
+  SKIPPED_TESTS.md   Inventory of skipped tests — 12 tests pending train/serve skew resolution
 ```
 
 ---

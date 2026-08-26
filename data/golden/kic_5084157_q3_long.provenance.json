@@ -1,0 +1,22 @@
+{
+  "target": "KIC 5084157",
+  "common_name": "KIC 5084157",
+  "mission": "Kepler",
+  "cadence": "long",
+  "pipeline_version": "SOC 9.3",
+  "time_system": "BKJD",
+  "time_scale": "TDB",
+  "time_reference": "BJD - 2454833.0",
+  "flux_column": "SAP_FLUX",
+  "flux_unit": "e-/s",
+  "access_date": "2026-08-25",
+  "sha256": "ed9688b5ba3839239cd9404807e59e1db4e1b6c8de79dcaaa0b1dcafcd49536c",
+  "row_count": 4140,
+  "source_doi": "10.17909/T9-NMC8-F686",
+  "reference_doi": "10.17909/T9-NMC8-F686",
+  "reference_citation": "Kepler Mission Archive, MAST",
+  "notes": "Quiet-star injection-recovery target. Replaces KIC 5347580 (2026-08-19: KIC 5347580 has no Q1-Q8 MAST products \u2014 only Q9/Q13/Q17; pinned Q3 product kplr005347580-2009350155506_llc does not exist in MAST). KIC 5084157: no KOI entry (any disposition), Teff=5677K logg=4.12 Kepmag=11.65. Verified planet-free 2026-08-19. Q1-Q8 MAST coverage confirmed 2026-08-19.",
+  "quarter": 3,
+  "mast_product_id": "kplr005084157-2009350155506_llc",
+  "mast_uri": "mast:Kepler/url/public/lightcurves/0050/005084157/kplr005084157-2009350155506_llc.fits"
+}

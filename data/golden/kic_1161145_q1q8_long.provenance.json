@@ -1,0 +1,50 @@
+{
+  "target": "KIC 1161145",
+  "common_name": "KIC 1161145",
+  "mission": "Kepler",
+  "cadence": "long",
+  "pipeline_version": "SOC 9.3",
+  "time_system": "BKJD",
+  "time_scale": "TDB",
+  "time_reference": "BJD - 2454833.0",
+  "flux_column": "SAP_FLUX",
+  "flux_unit": "e-/s",
+  "access_date": "2026-08-25",
+  "sha256": "dcd62edda0f59826f011ce7890614e3edd561e81fd948436cc6c318e3cf2a88f",
+  "row_count": 25613,
+  "source_doi": "10.17909/T9-NMC8-F686",
+  "reference_doi": "10.17909/T9-NMC8-F686",
+  "reference_citation": "Kepler Mission Archive, MAST",
+  "notes": "Quiet-star injection-recovery target. KIC 1161145 Q1-Q8 stitched baseline. No KOI entry (any disposition). All 8 product IDs pinned from MAST 2026-08-19.",
+  "quarters": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "mast_product_ids": [
+    "kplr001161145-2009166043257_llc",
+    "kplr001161145-2009259160929_llc",
+    "kplr001161145-2009350155506_llc",
+    "kplr001161145-2010078095331_llc",
+    "kplr001161145-2010174085026_llc",
+    "kplr001161145-2010265121752_llc",
+    "kplr001161145-2010355172524_llc",
+    "kplr001161145-2011073133259_llc"
+  ],
+  "quarters_fetched": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "baseline_days": 670.8
+}

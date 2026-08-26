@@ -925,6 +925,16 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    # Hard write-gate: refuse to write if TLS was not the detector.
+    # Defect 7 (pilot shard used BLS_fallback) recurred; this guard prevents a
+    # third occurrence.  See docs/WHAT_THE_GATES_CAUGHT.md entry 10.
+    if _DETECTION_ALGORITHM_USED != "TLS":
+        raise SystemExit(
+            f"ABORT: detection_algorithm is '{_DETECTION_ALGORITHM_USED}', not 'TLS'.\n"
+            "Refusing to write artifact — a BLS_fallback FAR cannot be attributed to TLS.\n"
+            "Install transitleastsquares and re-run."
+        )
+
     out_path = args.output_dir / OUTPUT_ARTIFACT_NAME
     payload = asdict(artifact)
     out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

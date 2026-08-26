@@ -1,8 +1,7 @@
 # docs/SKIPPED_TESTS.md
 
-Inventory of all currently skipped tests, their skip condition, and whether the
-skip is **permanent** (will never run in this repo's lifetime) or **pending**
-(will run once a prerequisite is satisfied).
+Inventory of all currently skipped tests, their skip condition, and the
+reasoning behind each skip.
 
 Run `pytest tests/ -rs` to see the live skip reasons.
 
@@ -10,9 +9,9 @@ Run `pytest tests/ -rs` to see the live skip reasons.
 
 ## Summary table
 
-| # | Test | Skip condition | Class |
-|---|------|---------------|-------|
-| 1–12 | `test_no_leakage.py` (12 tests) | `data/splits/classify_split_indices.json` not present — classifier training is blocked pending resolution of a train/serve feature skew defect | Pending: see detail below |
+| # | Test | Skip condition | Classification |
+|---|------|---------------|----------------|
+| 1–12 | `test_no_leakage.py` (12 tests) | `data/splits/classify_split_indices.json` not present — no split file exists because training is a deliberate refusal (see detail below) | **Deliberate refusal** — the guard is intentional, not a missing feature |
 
 All other previously pending skips have been resolved.  See the
 "Previously skipped — now fixed" section below.
@@ -25,7 +24,7 @@ All other previously pending skips have been resolved.  See the
 
 **File**: [`tests/test_no_leakage.py`](tests/test_no_leakage.py)
 
-**Skip reason** (verbatim):
+**Skip reason** (verbatim from pytest output):
 ```
 data/splits/classify_split_indices.json not found.
 Run training first to generate the split file:
@@ -33,17 +32,31 @@ Run training first to generate the split file:
 Then commit the resulting data/splits/classify_split_indices.json.
 ```
 
-**Root cause — train/serve feature skew (blocks training)**:
+---
+
+## Deliberate training refusal — train/serve feature skew
+
+The 12 leakage tests skip because no split file has been committed.
+No split file has been committed because training has been deliberately refused.
+**This is a design decision, not an open TODO.**
+
+### Why training is refused
 
 The XGBoost classifier is trained on features extracted from `VetOutput` by
 [`falsifier.pipeline.classify.features.extract_features`](falsifier/pipeline/classify/features.py).
 That function reads `VettingTestResult.metric_value` — quantities produced by the
-seven vet-stage modules at inference time (odd/even asymmetry ratio, secondary eclipse
-depth ratio, centroid offset in arcsec, transit depth in ppm, stellar density statistic,
-Gaia RUWE, systematics flag).
+seven vet-stage modules at inference time:
 
-The Kepler DR25 catalog does not contain any of these quantities.  The closest DR25
-diagnostic columns are different physical quantities on different numeric scales:
+- `odd_even_depth_metric`: odd/even eclipse depth asymmetry ratio
+- `secondary_eclipse_metric`: secondary eclipse depth / primary depth
+- `centroid_shift_metric`: centroid offset in arcseconds
+- `transit_shape_metric`: transit depth in ppm
+- `stellar_density_metric`: stellar density consistency statistic (ρ_circ/ρ_star)
+- `gaia_ruwe_metric`: Gaia RUWE value
+- `systematics_coincidence_metric`: systematics coincidence flag (0 or 1)
+
+The Kepler DR25 catalogue does not contain any of these quantities.  The closest
+DR25 diagnostic columns are **different physical quantities on different numeric scales**:
 
 | Inference feature | Closest DR25 column | Why it is wrong |
 |---|---|---|
@@ -55,31 +68,66 @@ diagnostic columns are different physical quantities on different numeric scales
 | `gaia_ruwe_metric` | (none) | Gaia not in DR25 |
 | `systematics_coincidence_metric` | `koi_robstat` | Rolling-band contamination ≠ systematics coincidence flag |
 
-Training on DR25 proxies and running inference on vet-stage outputs is a
-**train/serve skew defect**: the XGBoost decision boundaries and the isotonic
-calibrator would both be fitted to one numeric domain and applied to another.
-The `ClassifyOutput.probability` produced by such a model would be meaningless.
+### Why proxy training is strictly worse than no model
 
-**`scripts/train_classifier_dr25.py` raises `NotImplementedError`** when called
-with `--train` until this is resolved.  `tests/test_train_classifier_dr25.py`
-asserts the guard is present and fires.
+Training on DR25 proxies is not a "close enough" approximation — it is
+**a category error that makes the classifier worse than nothing**:
 
-**Resolution options** (both require code changes before the guard can be lifted):
+1. The XGBoost decision boundaries would be fitted to one numeric domain
+   (DR25 proxy values, e.g. limb-darkening coefficients near 0–1) and applied
+   to a completely different domain (vet-stage metrics, e.g. eclipse depth ratios
+   of 1–100× or centroid offsets of 0–10 arcsec).
+
+2. The isotonic calibrator fitted on top of XGBoost would produce a
+   `ClassifyOutput.probability` that is numerically calibrated to proxy-domain
+   inputs but applied at inference to vet-domain inputs.  The output probability
+   would be meaningless — not merely imprecise, but semantically disconnected from
+   the quantity it claims to estimate.
+
+3. A model that emits a meaningless probability passes the 12 leakage tests
+   (which only verify that train/test host-star sets are disjoint — they do not
+   verify that the model is trained on the correct features).  Publishing such a
+   model would silently corrupt `ClassifyOutput.probability` while all CI gates
+   show green.  **This is the exact failure mode the guard exists to prevent.**
+
+### The guard
+
+`scripts/train_classifier_dr25.py` raises `NotImplementedError` when called with
+`--train`:
+
+```
+NotImplementedError: train/serve feature skew — cannot train on DR25 proxies.
+The classifier reads vet-stage metric_value at inference; no DR25 column maps
+to those quantities or scales. Training on proxies produces a meaningless
+probability. Resolve the skew first (see docs/SKIPPED_TESTS.md).
+```
+
+`tests/test_train_classifier_dr25.py` asserts the guard is present and fires.
+The guard must not be removed without resolving the skew.
+
+### How the skew can be resolved (requires code changes)
+
+Two paths exist.  Neither is a quick fix.  Both require changing
+`falsifier.pipeline.classify.features.extract_features` and re-running the full
+feature contract suite before the guard can be lifted.
 
 - **Option A — pipeline features (preferred)**: run the full
   ingest → detrend → search → vet pipeline over all DR25 KOIs using MAST light
-  curves and collect the resulting `VetOutput` records.  This is expensive
-  (~thousands of TLS runs) but produces features on exactly the same scale as
-  inference.
+  curves and collect the resulting `VetOutput` records.  This produces features on
+  exactly the same scale as inference but requires ~thousands of TLS runs.
+
 - **Option B — DV metric model**: use DR25 Data Validation diagnostic metrics
   (`koi_model_chisq`, `koi_prad`, `koi_dicco_msky`, etc.) as features throughout,
   updating `extract_features`, the feature contract, and the model schema so that
   inference extracts the same DV-equivalent diagnostics from TLS output.  Domain
-  shift between Kepler DV and this pipeline's TLS output must be characterised.
+  shift between Kepler DV and this pipeline's TLS output must be characterised
+  before Option B is viable.
 
-**Classification**: **Pending** — blocked on resolving the skew defect above.
-No test code changes are needed; the 12 tests will activate automatically once a
-valid split file is committed.
+### What happens when the skew is resolved
+
+No test code changes are needed.  The 12 leakage tests activate automatically
+once a valid `data/splits/classify_split_indices.json` is committed — they are
+already written and currently skipped only because no split file exists.
 
 ---
 

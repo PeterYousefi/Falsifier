@@ -150,13 +150,20 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -e . --no-deps
-          pip install pydantic numpy
+          pip install pydantic numpy pytest
 
       - name: Verify README claims
         run: python scripts/verify_readme.py --strict
         # Exits 1 on any drift between README and committed sources.
         # Exits 2 on a CLAIM block with no registry entry, or vice versa.
         # Enforces AGENTS.md Rule 5: no claim in README unless regenerable.
+
+      - name: Assert gate-table rows match CLAIM:n_proven_gates
+        run: pytest tests/test_readme_tables_match_claims.py -v
+        # Bidirectional gate: fails if a gate row is deleted from the README table
+        # AND fails if CLAIM:n_proven_gates is hand-edited to a wrong number.
+        # Closes the structural hole where verify_readme.py only checks CLAIM blocks,
+        # not prose tables (defect 10 in docs/WHAT_THE_GATES_CAUGHT.md).
 
   # ---------------------------------------------------------------------------
   # Full suite with astropy and the complete dev dependency set.

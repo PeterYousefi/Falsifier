@@ -1,0 +1,22 @@
+{
+  "target": "KIC 8935630",
+  "common_name": "KIC 8935630",
+  "mission": "Kepler",
+  "cadence": "long",
+  "pipeline_version": "SOC 9.3",
+  "time_system": "BKJD",
+  "time_scale": "TDB",
+  "time_reference": "BJD - 2454833.0",
+  "flux_column": "SAP_FLUX",
+  "flux_unit": "e-/s",
+  "access_date": "2026-08-25",
+  "sha256": "622b38e108ed7c29fd73086c0687d42eb225cc9519e40c4f7c2a4bd52ac6c066",
+  "row_count": 4140,
+  "source_doi": "10.17909/T9-NMC8-F686",
+  "reference_doi": "10.17909/T9-NMC8-F686",
+  "reference_citation": "Kepler Mission Archive, MAST",
+  "notes": "Quiet-star injection-recovery target. Replaces KIC 8867895 (2026-08-19: KIC 8867895 has only Q0/Q1 in MAST \u2014 entered safe mode after Q1; cannot produce multi-quarter baseline). KIC 8935630: no KOI entry (any disposition), Teff=5664K logg=4.56 Kepmag=12.10. Verified planet-free 2026-08-19. Q1-Q8 MAST coverage confirmed 2026-08-19.",
+  "quarter": 3,
+  "mast_product_id": "kplr008935630-2009350155506_llc",
+  "mast_uri": "mast:Kepler/url/public/lightcurves/0089/008935630/kplr008935630-2009350155506_llc.fits"
+}
