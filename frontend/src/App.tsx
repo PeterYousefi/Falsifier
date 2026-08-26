@@ -12,6 +12,7 @@ import UploadFlow from './screens/UploadFlow'
 import TrainingSandbox from './screens/TrainingSandbox'
 import ProvenancePage from './screens/ProvenancePage'
 import LiveConsole from './screens/LiveConsole'
+import JudgePage from './screens/JudgePage'
 
 const SCREENS = [
   { id: 'system',     label: 'Investigate',  title: 'Landing / investigate a target' },
@@ -21,6 +22,7 @@ const SCREENS = [
   { id: 'training',   label: 'Training',      title: 'Training sandbox' },
   { id: 'provenance', label: 'Provenance',    title: 'Data provenance' },
   { id: 'console',    label: 'Console',       title: 'Live console' },
+  { id: 'judge',      label: 'Judge',         title: 'Judge verification walkthrough' },
 ]
 
 const LOCKED_NON_CLAIM =
@@ -43,6 +45,7 @@ export default function App() {
       case 'training':   return <TrainingSandbox />
       case 'provenance': return <ProvenancePage />
       case 'console':    return <LiveConsole />
+      case 'judge':      return <JudgePage />
       default:           return <SystemScreen />
     }
   }

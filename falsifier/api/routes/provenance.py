@@ -27,9 +27,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import os
+
 import falsifier
 from fastapi import APIRouter
 from ..models import DataVersionEntry, ModuleStatus, ProvenanceReport
+from ..chat.guardian import get_guardian_backend
 
 router = APIRouter(prefix="/provenance", tags=["provenance"])
 
@@ -99,7 +102,8 @@ _NON_CLAIMS: list[str] = [
 @router.get("", response_model=ProvenanceReport)
 async def get_provenance() -> ProvenanceReport:
     """
-    Report live data versions, module wiring status, and explicit non-claims.
+    Report live data versions, module wiring status, explicit non-claims,
+    and runtime backend self-report.
 
     All ``data_versions`` entries are read from committed provenance sidecars
     at request time.  No scientific values are hardcoded here.
@@ -113,6 +117,17 @@ async def get_provenance() -> ProvenanceReport:
         modules=_MODULE_STATUS,
         non_claims=_NON_CLAIMS,
         golden_manifest_entry_count=golden_count,
+        # Runtime self-report
+        guardian_backend=get_guardian_backend(),
+        chat_backend=_detect_chat_backend(),
+        artifacts_present=_check_artifacts(),
+        classifier_trained=False,
+        classifier_blocked_reason=(
+            "train/serve feature skew: the classifier reads vet-stage metric_value "
+            "fields at inference but no DR25 catalogue column maps to those quantities. "
+            "Training is a deliberate refusal. "
+            "See docs/SKIPPED_TESTS.md and scripts/train_classifier_dr25.py."
+        ),
     )
 
 
@@ -148,6 +163,35 @@ def _collect_data_versions() -> list[DataVersionEntry]:
         ))
 
     return entries
+
+
+def _detect_chat_backend() -> str:
+    """
+    Return the chat backend label based on env var presence.
+
+    "openai:<model_id>" if OPENAI_API_KEY is set (key present means a call
+    could succeed; we cannot verify a prior success without a live call).
+    "templated_offline" if OPENAI_API_KEY is absent.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if api_key:
+        model_id = os.environ.get("OPENAI_MODEL_ID", "gpt-4o-mini").strip()
+        return f"openai:{model_id}"
+    return "templated_offline"
+
+
+def _check_artifacts() -> dict[str, bool]:
+    """
+    Check whether the two primary output artifacts exist on the filesystem.
+
+    Both are currently absent; returns False for each rather than omitting
+    the key.
+    """
+    artifacts_dir = REPO_ROOT / "data" / "artifacts"
+    return {
+        "injection_recovery": (artifacts_dir / "injection_recovery.json").exists(),
+        "adversarial_selftest": (artifacts_dir / "adversarial_selftest.json").exists(),
+    }
 
 
 def _count_golden_manifest_entries() -> int:

@@ -101,3 +101,57 @@ def test_gate_table_row_count_equals_n_proven_gates_claim() -> None:
         f"or CLAIM:n_proven_gates was hand-edited (revert it — "
         f"the value must come from _regen_n_proven_gates() via verify_readme.py)."
     )
+
+def test_period_recovery_multiplier_matches_constants() -> None:
+    """
+    The multiplier claimed in README.md prose (e.g. "19× tighter than the 1e-4 day tolerance")
+    must equal round(PERIOD_TOLERANCE_DAYS / |RECOVERED_PERIOD_DAYS - KEPLER10B_PERIOD_DAYS|).
+
+    Source of truth: tests/test_kepler10_recovery.py constants.
+    Prose text searched in README.md.
+
+    This test fires if the README prose is manually edited to a stale or invented number.
+    """
+    import re
+    from pathlib import Path
+
+    repo_root = Path(__file__).parent.parent
+    test_file = repo_root / "tests" / "test_kepler10_recovery.py"
+    readme_file = repo_root / "README.md"
+
+    test_text = test_file.read_text(encoding="utf-8")
+    readme_text = readme_file.read_text(encoding="utf-8")
+
+    # Extract constants from the test file
+    m_rec = re.search(r'RECOVERED_PERIOD_DAYS\s*=\s*([0-9.]+)', test_text)
+    m_pub = re.search(r'KEPLER10B_PERIOD_DAYS\s*=\s*([0-9.]+)', test_text)
+    m_tol = re.search(r'PERIOD_TOLERANCE_DAYS\s*=\s*([0-9eE+\-\.]+)', test_text)
+    assert m_rec, "RECOVERED_PERIOD_DAYS not found in test_kepler10_recovery.py"
+    assert m_pub, "KEPLER10B_PERIOD_DAYS not found in test_kepler10_recovery.py"
+    assert m_tol, "PERIOD_TOLERANCE_DAYS not found in test_kepler10_recovery.py"
+
+    rec = float(m_rec.group(1))
+    pub = float(m_pub.group(1))
+    tol = float(m_tol.group(1))
+    expected_mult = round(tol / abs(rec - pub))
+
+    # Find the prose multiplier in README.md — look for "N× tighter than the 1e-4 day tolerance"
+    m_prose = re.search(r'(\d+)×\s+tighter\s+than\s+the\s+1e-4\s+day\s+tolerance', readme_text)
+    assert m_prose, (
+        "README.md does not contain the expected 'N× tighter than the 1e-4 day tolerance' prose. "
+        "Add or restore the prose in the 'Why this distribution produces accurate results' section."
+    )
+    actual_mult = int(m_prose.group(1))
+
+    assert actual_mult == expected_mult, (
+        f"README.md multiplier ({actual_mult}×) does not match the value computed from "
+        f"test_kepler10_recovery.py constants ({expected_mult}×).\n"
+        f"  PERIOD_TOLERANCE_DAYS      = {tol}\n"
+        f"  RECOVERED_PERIOD_DAYS      = {rec}\n"
+        f"  KEPLER10B_PERIOD_DAYS      = {pub}\n"
+        f"  |Δ|                        = {abs(rec - pub):.2e} days\n"
+        f"  round(tol / |Δ|)           = {expected_mult}\n"
+        "Update the README prose to match this computed value. "
+        "Do not hand-edit the constant files."
+    )
+

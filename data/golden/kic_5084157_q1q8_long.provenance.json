@@ -46,5 +46,6 @@
     7,
     8
   ],
-  "baseline_days": 670.8
+  "baseline_days": 670.8,
+  "mast_uri": "mast:Kepler/url/public/lightcurves/0050/005084157/"
 }

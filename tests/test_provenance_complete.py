@@ -262,3 +262,96 @@ def test_no_retired_tap_table_sql_in_codebase():
         + "\n".join(f"  {v}" for v in violations)
         + "\nUse 'ps' or 'pscomppars' instead."
     )
+
+
+# ---------------------------------------------------------------------------
+# Contract tests for the runtime self-report fields added to GET /provenance
+# (Task 3)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.no_network
+def test_provenance_route_self_report_fields_present():
+    """
+    The ProvenanceReport Pydantic model must declare all four runtime
+    self-report fields added by Task 3.
+
+    Contract assertion: every key is present as a model field, so the
+    serialised JSON response will always include it.
+    """
+    try:
+        from falsifier.api.models import ProvenanceReport
+    except ImportError:
+        pytest.skip("falsifier package not installed")
+
+    fields = ProvenanceReport.model_fields
+    required_keys = [
+        "guardian_backend",
+        "chat_backend",
+        "artifacts_present",
+        "classifier_trained",
+        "classifier_blocked_reason",
+    ]
+    missing = [k for k in required_keys if k not in fields]
+    assert not missing, (
+        f"ProvenanceReport is missing Task-3 self-report fields: {missing}\n"
+        "Add them to falsifier/api/models.py."
+    )
+
+
+@pytest.mark.no_network
+def test_provenance_classifier_trained_is_false_while_guard_present():
+    """
+    classifier_trained must be False while train_classifier_dr25.py raises
+    NotImplementedError.
+
+    Tests the pairing between the route's hard-coded False and the
+    test_train_classifier_dr25.py guard assertion.
+    """
+    train_script = REPO_ROOT / "scripts" / "train_classifier_dr25.py"
+    if not train_script.exists():
+        pytest.skip("train_classifier_dr25.py not found")
+
+    import ast
+    src = train_script.read_text(encoding="utf-8")
+    # The guard must contain NotImplementedError
+    assert "NotImplementedError" in src, (
+        "scripts/train_classifier_dr25.py does not raise NotImplementedError. "
+        "The classifier_trained=False claim in GET /provenance is valid only while "
+        "the training guard is present. Restore the guard or update the endpoint."
+    )
+
+    # The route must set classifier_trained=False
+    provenance_py = REPO_ROOT / "falsifier" / "api" / "routes" / "provenance.py"
+    if provenance_py.exists():
+        route_src = provenance_py.read_text(encoding="utf-8")
+        assert "classifier_trained=False" in route_src, (
+            "falsifier/api/routes/provenance.py does not set classifier_trained=False. "
+            "Add the field to the ProvenanceReport constructor call."
+        )
+
+
+@pytest.mark.no_network
+def test_provenance_artifacts_present_reports_both_keys():
+    """
+    _check_artifacts() must return a dict with both required keys regardless
+    of whether the files exist.
+    """
+    try:
+        from falsifier.api.routes.provenance import _check_artifacts
+    except ImportError:
+        pytest.skip("falsifier package not installed")
+
+    result = _check_artifacts()
+    assert isinstance(result, dict), "_check_artifacts() must return a dict"
+    assert "injection_recovery" in result, (
+        "_check_artifacts() must include 'injection_recovery' key"
+    )
+    assert "adversarial_selftest" in result, (
+        "_check_artifacts() must include 'adversarial_selftest' key"
+    )
+    # Both must be booleans
+    for key, val in result.items():
+        assert isinstance(val, bool), (
+            f"_check_artifacts()[{key!r}] must be bool, got {type(val).__name__}"
+        )
+

@@ -273,6 +273,23 @@ def _granite_screen(text: str) -> GuardianVerdict:
 # Public API
 # ---------------------------------------------------------------------------
 
+def get_guardian_backend() -> str:
+    """
+    Return the backend label that reflects the *actual loaded state*.
+
+    Returns "granite-guardian-3.1-2b" if the Granite Guardian model loaded
+    successfully from the local HuggingFace cache; returns
+    "rule_based_heuristic" if it fell back to the heuristic screener.
+
+    Note: this triggers a lazy-load attempt if none has occurred yet.
+    The result reflects what is *actually running*, not an env-var inference.
+    """
+    _try_load_guardian()
+    if _guardian_pipeline is not None:
+        return "granite-guardian-3.1-2b"
+    return "rule_based_heuristic"
+
+
 def screen(text: str, use_model: bool = True) -> GuardianVerdict:
     """
     Screen an LLM output before it reaches the client.

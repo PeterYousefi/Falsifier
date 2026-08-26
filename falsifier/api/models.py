@@ -250,6 +250,7 @@ class ProvenanceReport(BaseModel):
     - live data versions from committed provenance sidecars (no hardcoded numbers)
     - which pipeline modules are wired vs aspirational
     - the explicit non-claims from AGENTS.md
+    - live runtime backend status (guardian, chat, artifacts, classifier)
     """
 
     falsifier_version: str
@@ -270,3 +271,42 @@ class ProvenanceReport(BaseModel):
 
     golden_manifest_entry_count: int
     """Number of entries in data/golden/MANIFEST.json at request time."""
+
+    # -----------------------------------------------------------------------
+    # Runtime self-report fields (added per Task 3)
+    # -----------------------------------------------------------------------
+
+    guardian_backend: str | None = None
+    """
+    "granite-guardian-3.1-2b" if the model loaded from local HF cache;
+    "rule_based_heuristic" if it fell back.
+    Read from the actual loaded state in falsifier.api.chat.guardian at
+    request time — not inferred from an env var.
+    """
+
+    chat_backend: str | None = None
+    """
+    "openai:<model_id>" if OPENAI_API_KEY is set and a call has succeeded;
+    "templated_offline" otherwise.
+    """
+
+    artifacts_present: dict[str, bool] | None = None
+    """
+    Per-artifact boolean: True if the file exists on the filesystem at
+    request time, False if it does not.
+    Keys: "injection_recovery", "adversarial_selftest".
+    Both are currently absent; this field reports False rather than
+    omitting the key.
+    """
+
+    classifier_trained: bool | None = None
+    """
+    False while train_classifier_dr25.py raises NotImplementedError.
+    See blocked_reason for the explanation.
+    """
+
+    classifier_blocked_reason: str | None = None
+    """
+    Human-readable explanation of why classifier_trained is False,
+    pointing at docs/SKIPPED_TESTS.md.
+    """

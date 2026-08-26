@@ -176,7 +176,7 @@ That is the entire claim: **numbers cannot be invented**.
 | **TLS search** — limb-darkened profile, not BLS | Period recovered on real Kepler FITS; `detection_algorithm` field enforced in CI |
 | **Seven vetting tests** — odd\_even\_depth, secondary\_eclipse, centroid\_shift, transit\_shape, stellar\_density, gaia\_ruwe, systematics\_coincidence | `pytest tests/pipeline/contracts/` |
 | **Deterministic disposition** — truth table, no threshold, no classifier | `pytest tests/test_known_eb_rejected.py` asserts named mechanism |
-| **Kepler-10b period recovered to 4.7×10⁻⁶ days** — 21× tighter than tolerance on committed FITS | `pytest tests/test_kepler10_recovery.py` |
+| **Kepler-10b period recovered to 5.3×10⁻⁶ days** — 19× tighter than tolerance on committed FITS | `pytest tests/test_kepler10_recovery.py` |
 | **KIC 6965293 EB rejected via `odd_even_depth`** specifically | `pytest tests/test_known_eb_rejected.py` |
 | **Seven gates proven against wrong implementations** — mutation log with verbatim output | `docs/PROVEN_GATES.md` |
 
@@ -272,8 +272,8 @@ fail the second — so both gates must be green simultaneously.
 
 **Period recovery is constrained end-to-end on real Kepler data.**
 TLS runs on 3633 cadences of KIC 11904151 (Kepler-10, Q3 LLC) committed as a
-SHA-256-pinned FITS file.  The recovered period (0.83748542 days) is within 4.7×10⁻⁶ days
-of the Batalha et al. 2011 published value — 21× tighter than the 1e-4 day tolerance.
+SHA-256-pinned FITS file.  The recovered period (0.83748542 days) is within 5.3×10⁻⁶ days
+of the Batalha et al. 2011 published value — 19× tighter than the 1e-4 day tolerance.
 This is not a unit test of TLS in isolation; it is an end-to-end regression that
 exercises detrending (wotan biweight), period search (TLS limb-darkened profile),
 and TCE construction together.
@@ -398,7 +398,7 @@ Kepler-10b recovered period (TLS on committed FITS): 0.83748542 days (Δ = 5.3e-
 <!-- /CLAIM:recovered_period_days -->
 
 *Source: `tests/test_kepler10_recovery.py` → `RECOVERED_PERIOD_DAYS`*
-*The Δ is 21× tighter than the 1e-4 day tolerance.*
+*The Δ is 19× tighter than the 1e-4 day tolerance.*
 
 **Method**: the committed FITS file (`data/golden/kepler10_q3_long.fits`)
 is detrended with a `wotan` biweight filter, searched with
@@ -908,6 +908,24 @@ Five jobs run on every push and pull request (`.github/workflows/ci.yml`):
 | `frontend-build` | Vite build succeeds; bundle contains no invented numbers | Node 20 + npm ci |
 | `verify-readme` | Every `<!-- CLAIM:... -->` block matches its regenerated value | `pip install -e . --no-deps && pip install pydantic numpy` |
 | `test-full` | Full suite including chat layer; XGBoost import verified before tests run | `apt-get install libomp-dev && pip install -e ".[dev]" && pip install pytest-asyncio` |
+
+**Local MCP verification gates** (Bob session only, no CI job):
+`scripts/mcp_server.py` exposes three tools over stdio MCP so judges and maintainers can
+invoke the verification gates from inside a Bob session:
+
+| MCP tool | What it runs |
+|---|---|
+| `verify_readme` | `python scripts/verify_readme.py --strict` — exits 0 when all CLAIM blocks match |
+| `run_golden_tests` | Both golden regressions plus `EXPECTED_TRIGGERING_TEST` assertion |
+| `check_invented_numbers` | `pytest tests/test_no_number_is_invented.py` — lists any failing float tokens |
+
+Wired in `.bob/mcp.json` (workspace scope). Invoke from a Bob session:
+```
+verify_readme()            → exit_code + drift report
+run_golden_tests()         → pass/fail + EXPECTED_TRIGGERING_TEST name
+check_invented_numbers()   → failed float tokens (empty list = all OK)
+```
+No network access, no credentials.
 
 ---
 
