@@ -207,6 +207,11 @@ export interface ProvenanceReport {
   modules: ModuleStatus[]
   non_claims: string[]
   golden_manifest_entry_count: number
+  guardian_backend?: string | null
+  chat_backend?: string | null
+  artifacts_present?: Record<string, boolean> | null
+  classifier_trained?: boolean | null
+  classifier_blocked_reason?: string | null
 }
 
 export interface ChatToolCall {

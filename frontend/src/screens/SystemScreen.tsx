@@ -5,6 +5,10 @@
  * prominent example button, search input, worked verdict preview.
  * Orbital 3D view as a bordered figure-inset with caption.
  * All visual properties driven from data layer — no scientific literals.
+ *
+ * Demo video:
+ * __DEMO_VIDEO_URL__ — reference only; the single definition is in README.md line 19.
+ * See docs/RELEASE_CHECKLIST.md for swap instructions.
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { useStore } from '../store'
@@ -181,6 +185,10 @@ function VerdictPreview() {
   )
 }
 
+// Demo video reference — single definition is in README.md, referenced here.
+// Replace __DEMO_VIDEO_URL__ in README.md to update all references at once.
+const DEMO_VIDEO_URL = '__DEMO_VIDEO_URL__'
+
 // ── Landing page content ──────────────────────────────────────────────────
 function LandingContent() {
   const { setTargetId, submitJob, setActiveScreen, jobStatus, isSubmitting } = useStore()
@@ -197,6 +205,26 @@ function LandingContent() {
 
   return (
     <div className="page-body">
+      {/* Demo video link — sourced from README.md single definition */}
+      <div style={{
+        textAlign: 'center',
+        marginTop: 8,
+        marginBottom: 4,
+        fontFamily: 'var(--font-serif)',
+        fontSize: 13,
+        color: 'var(--np-muted)',
+      }}>
+        <a
+          href={DEMO_VIDEO_URL}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: 'var(--np-accent, #3b82d4)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+        >
+          ▶ Watch 3-min demo ↗
+        </a>
+        {' '}— enter a target ID, watch all four stages stream live, see the disposition
+      </div>
+
       {/* Article dateline + headline */}
       <hr className="rule-double" />
       <div className="article-dateline" style={{ marginTop: 16 }}>

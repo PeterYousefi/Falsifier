@@ -220,3 +220,58 @@ jobs:
         # test_api_deletion.py and test_chat_layer.py require httpx and
         # pytest-asyncio extras not installed here; all other tests including
         # the golden regression tests (requires_astropy marker) run in this job.
+
+  # ---------------------------------------------------------------------------
+  # Production smoke check — curls the live frontend and backend health.
+  #
+  # Fails on any non-200 response so a broken judge link surfaces in CI
+  # instead of during judging.
+  #
+  # FRONTEND_URL:  https://falsifier.vercel.app
+  # BACKEND_URL:   set in repository secret BACKEND_HEALTH_URL, or falls back
+  #                to the placeholder below which will fail (intentional — the
+  #                job is skipped when the secret is absent to avoid false
+  #                negatives on forks).
+  #
+  # Vercel Deployment Protection note:
+  #   If Vercel Authentication is enabled, the frontend check will return 403.
+  #   See docs/RELEASE_CHECKLIST.md for instructions to disable it before
+  #   submission.
+  # ---------------------------------------------------------------------------
+  smoke-check:
+    name: Production smoke check
+    runs-on: ubuntu-latest
+    # Only run on the main branch or when explicitly triggered, not on every PR
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Check production frontend (falsifier.vercel.app)
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 30 \
+            --user-agent "Falsifier-CI-smoke-check/1.0" \
+            "https://falsifier.vercel.app")
+          echo "Frontend HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: Production frontend returned HTTP $STATUS (expected 200)."
+            echo "If Vercel Deployment Protection is enabled, disable it before submission."
+            echo "See docs/RELEASE_CHECKLIST.md for instructions."
+            exit 1
+          fi
+
+      - name: Check backend health endpoint
+        # Requires BACKEND_HEALTH_URL secret.  Skipped gracefully when absent.
+        run: |
+          BACKEND_URL="${{ secrets.BACKEND_HEALTH_URL }}"
+          if [ -z "$BACKEND_URL" ]; then
+            echo "BACKEND_HEALTH_URL secret not set — skipping backend check."
+            echo "Set the secret to the backend health URL (e.g. https://<app>.us-south.codeengine.appdomain.cloud/health)"
+            exit 0
+          fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 30 \
+            "$BACKEND_URL")
+          echo "Backend health HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: Backend health check returned HTTP $STATUS (expected 200)."
+            exit 1
+          fi

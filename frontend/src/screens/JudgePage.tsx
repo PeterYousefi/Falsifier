@@ -9,8 +9,19 @@
  * from the provenance artifact (golden_manifest_entry_count + non_claims).
  *
  * AGENTS.md Rule 1: no hardcoded scientific values.
+ *
+ * Demo video:
+ * __DEMO_VIDEO_URL__ — reference only; the single definition is in README.md line 19.
+ * See docs/RELEASE_CHECKLIST.md for swap instructions.
  */
 import React, { useState } from 'react'
+
+// ---------------------------------------------------------------------------
+// Demo video reference — defined once in README.md, referenced here.
+// Replace __DEMO_VIDEO_URL__ in README.md to update all references at once.
+// ---------------------------------------------------------------------------
+const DEMO_VIDEO_URL = '__DEMO_VIDEO_URL__'
+const DEMO_VIDEO_LABEL = '▶ Watch the 3-min walkthrough (enter a target ID, watch pipeline stream, see disposition)'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +46,13 @@ interface Step {
 // ---------------------------------------------------------------------------
 
 const STEPS: Step[] = [
+  {
+    title: 'Demo walkthrough',
+    verifies: 'End-to-end pipeline run: enter ID → stream → disposition',
+    command: '',
+    exitCondition: DEMO_VIDEO_LABEL,
+    appLink: { href: DEMO_VIDEO_URL, label: '▶ Open demo video' },
+  },
   {
     title: 'Non-claim locked',
     verifies: 'The project is not a biosignature detector',

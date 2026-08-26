@@ -2,6 +2,10 @@
  * src/App.tsx
  * Root application shell: newspaper masthead, dateline, nav, screens, locked footer.
  * All scientific values flow from the data layer — no literals here.
+ *
+ * Screen order (judge path first, then secondary):
+ *   Primary: Investigate → Report → Gates → Try to break it → Judge
+ *   Secondary: Ask · Upload · Training · Provenance · Console
  */
 import React, { useEffect } from 'react'
 import { useStore } from './store'
@@ -13,17 +17,28 @@ import TrainingSandbox from './screens/TrainingSandbox'
 import ProvenancePage from './screens/ProvenancePage'
 import LiveConsole from './screens/LiveConsole'
 import JudgePage from './screens/JudgePage'
+import GatesScreen from './screens/GatesScreen'
+import AdversarialPanel from './screens/AdversarialPanel'
 
-const SCREENS = [
-  { id: 'system',     label: 'Investigate',  title: 'Landing / investigate a target' },
-  { id: 'detail',     label: 'Report',        title: 'Full candidate report' },
-  { id: 'chat',       label: 'Ask',           title: 'Pipeline chat' },
-  { id: 'upload',     label: 'Upload',        title: 'Light curve upload' },
-  { id: 'training',   label: 'Training',      title: 'Training sandbox' },
-  { id: 'provenance', label: 'Provenance',    title: 'Data provenance' },
-  { id: 'console',    label: 'Console',       title: 'Live console' },
-  { id: 'judge',      label: 'Judge',         title: 'Judge verification walkthrough' },
+// Primary screens (judge path): shown prominently in nav
+const PRIMARY_SCREENS = [
+  { id: 'system',      label: 'Investigate',   title: 'Enter a target ID and run the pipeline' },
+  { id: 'detail',      label: 'Report',         title: 'Full candidate report' },
+  { id: 'adversarial', label: 'Try to break it',title: 'Adversarial self-test — null data false-alarm demo' },
+  { id: 'gates',       label: 'Gates',          title: 'Defect log + mutation testing gates' },
+  { id: 'judge',       label: 'Judge ✓',        title: 'Judge verification walkthrough' },
 ]
+
+// Secondary screens: all other tools
+const SECONDARY_SCREENS = [
+  { id: 'chat',        label: 'Ask',            title: 'Pipeline chat' },
+  { id: 'upload',      label: 'Upload',         title: 'Light curve upload' },
+  { id: 'training',    label: 'Training',       title: 'Training sandbox' },
+  { id: 'provenance',  label: 'Provenance',     title: 'Data provenance' },
+  { id: 'console',     label: 'Console',        title: 'Live console' },
+]
+
+const SCREENS = [...PRIMARY_SCREENS, ...SECONDARY_SCREENS]
 
 const LOCKED_NON_CLAIM =
   'Not a biosignature detector · No exoplanet biosignature has ever been confirmed · ' +
@@ -38,15 +53,17 @@ export default function App() {
 
   const renderScreen = () => {
     switch (activeScreen) {
-      case 'system':     return <SystemScreen />
-      case 'detail':     return <CandidateDetail />
-      case 'chat':       return <ChatPanel />
-      case 'upload':     return <UploadFlow />
-      case 'training':   return <TrainingSandbox />
-      case 'provenance': return <ProvenancePage />
-      case 'console':    return <LiveConsole />
-      case 'judge':      return <JudgePage />
-      default:           return <SystemScreen />
+      case 'system':      return <SystemScreen />
+      case 'detail':      return <CandidateDetail />
+      case 'chat':        return <ChatPanel />
+      case 'upload':      return <UploadFlow />
+      case 'training':    return <TrainingSandbox />
+      case 'provenance':  return <ProvenancePage />
+      case 'console':     return <LiveConsole />
+      case 'judge':       return <JudgePage />
+      case 'gates':       return <GatesScreen />
+      case 'adversarial': return <AdversarialPanel />
+      default:            return <SystemScreen />
     }
   }
 
@@ -75,15 +92,28 @@ export default function App() {
           {/* 3px double rule closing the masthead block */}
           <hr className="masthead-rule-double" />
 
-          {/* Navigation — centered under the masthead */}
+          {/* Navigation — primary path first, then secondary */}
           <nav className="top-nav" role="navigation" aria-label="Main navigation">
-            {SCREENS.map((s) => (
+            {PRIMARY_SCREENS.map((s) => (
               <button
                 key={s.id}
                 className={`nav-btn${activeScreen === s.id ? ' active' : ''}`}
                 onClick={() => setActiveScreen(s.id)}
                 aria-current={activeScreen === s.id ? 'page' : undefined}
                 title={s.title}
+              >
+                {s.label}
+              </button>
+            ))}
+            <span style={{ width: 1, background: 'var(--np-border)', alignSelf: 'stretch', margin: '0 4px' }} aria-hidden="true" />
+            {SECONDARY_SCREENS.map((s) => (
+              <button
+                key={s.id}
+                className={`nav-btn${activeScreen === s.id ? ' active' : ''}` + ' secondary'}
+                onClick={() => setActiveScreen(s.id)}
+                aria-current={activeScreen === s.id ? 'page' : undefined}
+                title={s.title}
+                style={{ opacity: 0.75 }}
               >
                 {s.label}
               </button>
