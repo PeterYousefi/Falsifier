@@ -329,6 +329,93 @@ into the `verify-readme` CI job.
 
 ---
 
+## 13 — Four fixture and pipeline defects caught by cross-file audit
+
+**What the defects were.**  A cross-file audit of the committed fixture JSONs,
+pipeline stage code, and UI screens revealed four distinct defects:
+
+**13a — `OrbitalViewer` has no path to real orbit geometry.**
+`VetOutput`, `VetResult`, and the fixture `job.json` had no `a_over_rs` field.
+The orbital diagram can only render real geometry when the semi-major axis ratio
+is available; without it the component correctly shows an empty state — but no
+code path ever computed or forwarded that value.  `vet.py`'s `run_vet` had a
+TODO comment (`phased_lc=None`) but no equivalent orbit geometry output.
+
+**13b — Transit depth disagrees across fixture files for KIC 11904151.01.**
+`frontend/src/fixtures/job.json` reported `depth_ppm: 176` for `KIC 11904151.01`.
+`frontend/src/fixtures/chat.json` reported `depth_ppm: 154` for the same TCE
+in the canned `get_planet_params` tool response.  A TLS run on the committed
+golden FITS (`data/golden/kepler10_q3_long.fits`) recovers depth ≈ 175.8 ppm
+(rounds to 176).  The value 154 in `chat.json` was wrong; `job.json` was correct.
+
+**13c — Stellar density skip reason falsely claims data is missing.**
+`vet.py`'s `_test_stellar_density` hardcoded the reason string
+`"Stellar parameters not available; stellar density consistency test skipped."`
+even when `stellar_density_rho_sun=1.09` was present in the vet entry.  The
+fixture's own `note` field admitted the real reason: "the pipeline stub does
+not run those checks."  The hardcoded string was simply false.
+
+**13d — Mutation gate count reported as three different numbers.**
+`JudgePage.tsx` hardcoded `"7 EXECUTED rows"`.
+`docs/MEASURED_RESULTS.md` hardcoded `"Gates proven by mutation testing: 8"`.
+`docs/PROVEN_GATES.md` (the authoritative source) had 9 `✅ EXECUTED` rows.
+`GatesScreen.tsx` used `GATES.length` dynamically but had only 8 entries in its
+`GATES` array (Gate 9 was missing).  `verify_readme.py --strict` only covered
+`README.md`, leaving `JudgePage.tsx` and `MEASURED_RESULTS.md` unchecked.
+
+**Which checks caught them.**
+
+- **13a**: Plan-mode cross-file audit against committed source files.
+  Checked: `OrbitalViewer.tsx` → `VetResult` model → `queue.py` → `vet.py` chain.
+  No `a_over_rs` field existed anywhere in the chain.
+
+- **13b**: Running TLS on `data/golden/kepler10_q3_long.fits` to determine
+  the true depth.  Result: depth≈175.8 ppm → 176 ppm (job.json correct;
+  chat.json wrong).  New test `test_cross_fixture_tce_consistency.py` now
+  catches this class of divergence at CI time.
+
+- **13c**: Reading `vet.py` against the fixture's `stellar_density_rho_sun`
+  field.  New test `test_stellar_density_reason_accuracy.py` asserts the
+  reason string is consistent with the presence/absence of the input field.
+
+- **13d**: Counting `✅ EXECUTED` rows in `PROVEN_GATES.md` (9) and comparing
+  to the three hardcoded locations.  `verify_readme.py` extended with a Pass 3
+  that checks `JudgePage.tsx` and `MEASURED_RESULTS.md` against the count;
+  `GatesScreen.tsx` extended with Gate 9 entry and `GATE_COUNT` export.
+
+**What would have been published without them.**
+
+- **13a**: The orbital viewer would permanently show an empty state even for
+  targets with fully committed physical parameters — a silent, invisible gap.
+
+- **13b**: A judge tracing `depth_ppm` from `chat.json` tool calls would see
+  154 ppm while `job.json` says 176 ppm — an immediate internal contradiction
+  undermining the project's "numbers cannot drift" claim.
+
+- **13c**: A judge reading the UI's "seven challenges" list would see
+  "Stellar parameters not available" for KIC 11904151, while the same fixture
+  also shows `stellar_density_rho_sun=1.09`.  A false statement in a checking
+  system is worse than a silent gap.
+
+- **13d**: A judge comparing JudgePage (7 gates), MEASURED_RESULTS.md (8 gates),
+  and PROVEN_GATES.md (9 gates) would see three different answers to the same
+  question in the same commit.
+
+**Fix.**
+  - Added `a_over_rs` to `VetOutput`, `VetResult`, and `job.json`; computed in
+    `run_vet` from Kepler's third law using `stellar_density_rho_sun` and
+    `period_days`; wired through `queue.py`'s `_vet_result`.  Value for fixture:
+    3.849 (derived from rho=1.09 ρ☉, P=0.83748542 d; Batalha+2011).
+  - Corrected `chat.json` `depth_ppm` from 154 → 176 (matching TLS output on
+    the committed FITS).  New test `test_cross_fixture_tce_consistency.py`.
+  - Made `_test_stellar_density` conditional on whether `stellar_density_rho_sun`
+    is actually None.  Added test `test_stellar_density_reason_accuracy.py`.
+  - Added Gate 9 to `GatesScreen.tsx`; exported `GATE_COUNT`; updated
+    `JudgePage.tsx` to use `GATE_COUNT` template literal; updated
+    `MEASURED_RESULTS.md` to 9; extended `verify_readme.py` Pass 3.
+
+---
+
 ## Summary
 
 | # | Defect | Caught by | Would have published |
@@ -345,6 +432,7 @@ into the `verify-readme` CI job.
 | 10 | README gate-summary table had 6 rows while `CLAIM:n_proven_gates` rendered 7 | `test_readme_tables_match_claims.py` (new) | Gate 7 (phase-zero t0 convention) invisible to a reader scanning the prose table |
 | 11 | Stale `4.7×10⁻⁶` in Judge Quick Access table (correct value: `5.3×10⁻⁶`) | Unregistered-numeric scanner (Gate 8, `verify_readme.py`) | Stale scientific value visible to judges; inconsistency with the registered CLAIM and PROVEN_GATES |
 | 12 | `impact_facts.py` suspected of SELECT TOP 2000 truncation; investigation confirmed count is genuine | `test_impact_facts_not_truncated.py` — verified live re-query returns 2000 from COUNT(*) | No truncation artifact; but lack of an automated guard would have left the suspicion unresolved in future |
+| 13 | Four fixture/pipeline defects: no orbit geometry path, depth_ppm=154 vs 176 disagreement, false stellar-density reason, gate count in 3 different values | Cross-file audit + TLS run on committed FITS + `test_cross_fixture_tce_consistency.py` + `test_stellar_density_reason_accuracy.py` + `verify_readme.py` Pass 3 | Silent empty orbital viewer; depth contradiction visible to judges; false claim about missing stellar data; three different answers to "how many gates proven?" |
 
 ---
 

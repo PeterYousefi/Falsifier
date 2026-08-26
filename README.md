@@ -155,7 +155,7 @@ Vetting tests: 7
 Harness defects caught before commit:
 
 <!-- CLAIM:n_what_the_gates_caught -->
-Harness defects caught before commit: 12
+Harness defects caught before commit: 13
 <!-- /CLAIM:n_what_the_gates_caught -->
 
 Proven gates (mutation log with verbatim output):
@@ -167,7 +167,7 @@ Gates proven by mutation testing: 9
 Tests collected (CI, full-dev):
 
 <!-- CLAIM:n_tests_ci -->
-Full test suite (CI, full-dev): 436 collected
+Full test suite (CI, full-dev): 467 collected
 <!-- /CLAIM:n_tests_ci -->
 
 Time round-trip tolerance:

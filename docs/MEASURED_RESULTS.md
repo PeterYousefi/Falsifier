@@ -123,7 +123,7 @@ Nine defects were caught before any artifact was committed (see `docs/WHAT_THE_G
 
 ## Proven gates
 
-**Gates proven by mutation testing:** 8
+**Gates proven by mutation testing:** 9
 *(Source: `docs/PROVEN_GATES.md` — count of `✅ EXECUTED` table rows)*
 
 See [`docs/PROVEN_GATES.md`](PROVEN_GATES.md) for verbatim mutation output.
@@ -132,7 +132,7 @@ See [`docs/PROVEN_GATES.md`](PROVEN_GATES.md) for verbatim mutation output.
 
 ## Test count
 
-**Full test suite (CI, full-dev):** 436 collected
+**Full test suite (CI, full-dev):** 467 collected
 *(Source: `tests/CI_TEST_COUNT`)*
 
 ---

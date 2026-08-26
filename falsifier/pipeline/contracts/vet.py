@@ -211,6 +211,17 @@ class VetOutput(BaseModel):
     rp_rs: float | None = None
     """Planet-to-star radius ratio Rp/Rs (dimensionless).  Range (0, 1) when provided."""
 
+    a_over_rs: float | None = None
+    """
+    Normalised semi-major axis a/R* (dimensionless), derived from Kepler's third
+    law using stellar_density_rho_sun and period_days.  This is the primary
+    orbit-geometry output for the frontend's OrbitalViewer component.
+
+    Formula: (a/R*)³ = G * rho * P² / (3π)
+    Source: Seager & Mallén-Ornelas 2003, ApJ 585, 1038;
+            Batalha et al. 2011, DOI:10.1088/0004-637X/729/1/27.
+    """
+
     manifest: StageManifest
     artifact: ArtifactRef
 

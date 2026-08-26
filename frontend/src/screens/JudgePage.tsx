@@ -15,6 +15,7 @@
  * See docs/RELEASE_CHECKLIST.md for swap instructions.
  */
 import React, { useState } from 'react'
+import { GATE_COUNT, DEFECT_COUNT } from './GatesScreen'
 
 // ---------------------------------------------------------------------------
 // Demo video reference — defined once in README.md, referenced here.
@@ -87,17 +88,17 @@ const STEPS: Step[] = [
     exitCondition: 'exits 0',
   },
   {
-    title: 'Defect log (9 caught before commit)',
-    verifies: 'All nine harness defects are documented',
+    title: `Defect log (${DEFECT_COUNT} caught before commit)`,
+    verifies: `All ${DEFECT_COUNT} harness defects are documented`,
     command: '',
-    exitCondition: 'docs/WHAT_THE_GATES_CAUGHT.md — 9 entries',
+    exitCondition: `docs/WHAT_THE_GATES_CAUGHT.md — ${DEFECT_COUNT} entries`,
     appLink: { href: 'docs/WHAT_THE_GATES_CAUGHT.md', label: 'Open defect log' },
   },
   {
     title: 'Mutation gates proven',
-    verifies: 'Seven mutation gates pass with verbatim output',
+    verifies: `${GATE_COUNT} mutation gates pass with verbatim output`,
     command: '',
-    exitCondition: 'docs/PROVEN_GATES.md — 7 EXECUTED rows',
+    exitCondition: `docs/PROVEN_GATES.md — ${GATE_COUNT} EXECUTED rows`,
     appLink: { href: 'docs/PROVEN_GATES.md', label: 'Open gates log' },
   },
   {

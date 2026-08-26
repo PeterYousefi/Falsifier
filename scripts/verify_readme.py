@@ -393,6 +393,107 @@ def _regen_period_ratio_tighter() -> str:
     return f"Period recovery is {ratio}× tighter than the declared tolerance"
 
 
+def _regen_judge_page_gate_count() -> str:
+    """Check JudgePage.tsx does not hardcode a gate count or 'N EXECUTED rows'.
+
+    JudgePage must derive the count from GatesScreen.GATE_COUNT, not from a
+    literal string.  This check scans for any hard-wired numeric count pattern
+    that would drift from docs/PROVEN_GATES.md.
+
+    Returns the current correct count as a descriptive string so callers can
+    include it in error messages.
+    """
+    path = REPO_ROOT / "frontend" / "src" / "screens" / "JudgePage.tsx"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing: {path}")
+    text = path.read_text(encoding="utf-8")
+
+    # Gate count from the authoritative source
+    proven_gates_path = REPO_ROOT / "docs" / "PROVEN_GATES.md"
+    proven_text = proven_gates_path.read_text(encoding="utf-8")
+    n_gates = sum(
+        1 for line in proven_text.splitlines()
+        if line.strip().startswith("|") and "\u2705 EXECUTED" in line
+    )
+
+    # Scan for hardcoded integer literals adjacent to "EXECUTED" or "mutation gates"
+    # that would indicate the count was hand-written rather than derived from GATES.length.
+    hardcoded_count_re = re.compile(
+        r"'[^']*?\b(\d+)\s+EXECUTED\s+rows[^']*?'"
+        r"|"
+        r"'[^']*?\bSeven\b[^']*?mutation gates[^']*?'"
+        r"|"
+        r"'[^']*?\b(\d+)\s+mutation gates[^']*?'"
+    )
+    # Filter: any numeric literal that is NOT n_gates is a drift
+    drifted = []
+    for m in hardcoded_count_re.finditer(text):
+        full_match = m.group()
+        for grp in m.groups():
+            if grp and grp.isdigit() and int(grp) != n_gates:
+                drifted.append(f"  hardcoded {grp!r} (expected {n_gates}): {full_match!r}")
+    if drifted:
+        raise ValueError(
+            f"JudgePage.tsx contains hardcoded gate count(s) that differ from "
+            f"docs/PROVEN_GATES.md ({n_gates} EXECUTED rows):\n"
+            + "\n".join(drifted)
+        )
+
+    # Also check it does not contain the old literal strings that are no longer acceptable
+    forbidden_literals = [
+        "Seven mutation gates",
+        "7 EXECUTED rows",
+        "8 EXECUTED rows",
+    ]
+    for lit in forbidden_literals:
+        if lit in text:
+            raise ValueError(
+                f"JudgePage.tsx contains forbidden hardcoded string {lit!r}. "
+                f"Use GATE_COUNT from GatesScreen instead "
+                f"(current gate count from docs/PROVEN_GATES.md: {n_gates})."
+            )
+
+    return f"JudgePage gate count: derived from GATE_COUNT ({n_gates} gates)"
+
+
+def _regen_measured_results_gate_count() -> str:
+    """Verify docs/MEASURED_RESULTS.md 'Gates proven' line matches PROVEN_GATES.md.
+
+    Returns the expected string so it can be included in error messages.
+    """
+    path = REPO_ROOT / "docs" / "MEASURED_RESULTS.md"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing: {path}")
+    text = path.read_text(encoding="utf-8")
+
+    # Get authoritative count
+    proven_gates_path = REPO_ROOT / "docs" / "PROVEN_GATES.md"
+    proven_text = proven_gates_path.read_text(encoding="utf-8")
+    n_gates = sum(
+        1 for line in proven_text.splitlines()
+        if line.strip().startswith("|") and "\u2705 EXECUTED" in line
+    )
+
+    # Find the "Gates proven by mutation testing: N" line in MEASURED_RESULTS.md.
+    # Handles both plain and markdown bold (**...**) formatting.
+    m = re.search(r'Gates proven by mutation testing:\**\s*(\d+)', text)
+    if not m:
+        raise ValueError(
+            "docs/MEASURED_RESULTS.md does not contain "
+            "'Gates proven by mutation testing: N'. "
+            "Add the line or update it."
+        )
+    reported = int(m.group(1))
+    if reported != n_gates:
+        raise ValueError(
+            f"docs/MEASURED_RESULTS.md reports {reported} mutation gates "
+            f"but docs/PROVEN_GATES.md has {n_gates} ✅ EXECUTED rows. "
+            f"Update MEASURED_RESULTS.md to say {n_gates}."
+        )
+
+    return f"Gates proven by mutation testing: {n_gates}"
+
+
 def _regen_n_what_the_gates_caught() -> str:
     """Count numbered defect sections in docs/WHAT_THE_GATES_CAUGHT.md.
 
@@ -813,6 +914,37 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+
+    # Pass 3: cross-file gate count consistency checks.
+    # These catch JudgePage.tsx and MEASURED_RESULTS.md drifting from
+    # docs/PROVEN_GATES.md — the gap the existing tooling left open.
+    # Only runs when the README is the project README (not a synthetic test
+    # fixture passed via --readme); avoids interfering with unit tests that
+    # validate the scanner against minimal README strings.
+    gate_check_errors: list[str] = []
+    default_readme = REPO_ROOT / "README.md"
+    if args.readme.resolve() == default_readme.resolve():
+        for label, fn in [
+            ("JudgePage.tsx gate count", _regen_judge_page_gate_count),
+            ("MEASURED_RESULTS.md gate count", _regen_measured_results_gate_count),
+        ]:
+            try:
+                result = fn()
+                print(f"OK             [{label}]  {result!r}")
+            except Exception as exc:
+                gate_check_errors.append(f"DRIFT          [{label}]\n  {exc}")
+
+        for line in gate_check_errors:
+            print(f"ERROR: {line}", file=sys.stderr)
+
+        if gate_check_errors:
+            print(
+                f"\n{len(gate_check_errors)} cross-file gate count check(s) failed.  "
+                "Update JudgePage.tsx and/or docs/MEASURED_RESULTS.md to match "
+                "docs/PROVEN_GATES.md.",
+                file=sys.stderr,
+            )
+            return 1
 
     if warnings:
         print(

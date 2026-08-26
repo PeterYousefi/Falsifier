@@ -195,6 +195,21 @@ class VetResult(BaseModel):
     epoch_bkjd: float | None = None
     inclination_deg: float | None = None
 
+    # Stellar and planet geometry — populated from vet stage when available
+    stellar_density_rho_sun: float | None = None
+    """Mean stellar density in ρ☉.  Source: spectroscopic/photometric stellar model."""
+
+    rp_rs: float | None = None
+    """Planet-to-star radius ratio (dimensionless).  Derived from transit depth."""
+
+    a_over_rs: float | None = None
+    """
+    Normalised semi-major axis a/R* derived from Kepler's third law.
+    Primary orbit-geometry output for the OrbitalViewer component.
+    Formula: (a/R*)³ = G * rho * P² / (3π).
+    Source: Seager & Mallén-Ornelas 2003; Batalha+2011 for KIC 11904151.
+    """
+
     # Full test-result list for the 3-D scene branching
     test_results: list[VettingTestResultSummary] | None = None
 

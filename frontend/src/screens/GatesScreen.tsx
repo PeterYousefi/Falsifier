@@ -157,7 +157,20 @@ const GATES: GateEntry[] = [
     status: '✅ EXECUTED',
     mutationLevel: 'Fixture mutation (synthetic README with unregistered numeric token)',
   },
+  {
+    id: 9,
+    name: 'Fixture disposition consistency',
+    enforcement: 'tests/test_fixtures_satisfy_contracts.py',
+    status: '✅ EXECUTED',
+    mutationLevel: 'Fixture mutation (centroid_shift=FLAG with disposition=ambiguous)',
+  },
 ]
+
+/** Total gate count — single source of truth for all UI and tooling references. */
+export const GATE_COUNT = GATES.length
+
+/** Total defect count — single source of truth for all UI and tooling references. */
+export const DEFECT_COUNT = DEFECTS.length
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -279,7 +292,7 @@ export default function GatesScreen() {
 
         {/* Defect log */}
         <div style={{ marginTop: 20 }}>
-          <SectionHeader label="Defect Log — 9 defects caught before commit" count={DEFECTS.length} />
+          <SectionHeader label={`Defect Log — ${DEFECTS.length} defects caught before commit`} count={DEFECTS.length} />
           <p style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.6, marginBottom: 12 }}>
             The purpose is not to catalogue mistakes. It is to show that the checking
             infrastructure is load-bearing: every gate here fired on a real defect in a real run.
@@ -291,7 +304,7 @@ export default function GatesScreen() {
 
         {/* Mutation gates */}
         <div>
-          <SectionHeader label="Mutation Gates — 8 gates proven with verbatim output" count={GATES.length} />
+          <SectionHeader label={`Mutation Gates — ${GATES.length} gates proven with verbatim output`} count={GATES.length} />
           <p style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.6, marginBottom: 12 }}>
             For each gate: the exact mutation applied, the file/line that caught it, and verbatim pytest
             failure output. See{' '}

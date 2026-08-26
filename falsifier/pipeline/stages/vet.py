@@ -60,6 +60,15 @@ __all__ = ["run_vet"]
 
 
 # ---------------------------------------------------------------------------
+# Physical constants — pipeline-internal, not user-facing (AGENTS.md Rule 1).
+# ---------------------------------------------------------------------------
+
+# Solar mean density in g/cm³ — matches the value in falsifier/pipeline/contracts/vet.py.
+_RHO_SUN_G_PER_CM3: float = 1.411
+# Gravitational constant in m³ kg⁻¹ s⁻²
+_G: float = 6.674e-11
+
+# ---------------------------------------------------------------------------
 # Thresholds — pipeline-internal configuration constants.
 # None of these are displayed to a user; they are not covered by AGENTS.md Rule 1.
 # ---------------------------------------------------------------------------
@@ -237,21 +246,40 @@ def _test_transit_shape(tce: TCE) -> VettingTestResult:
     )
 
 
-def _test_stellar_density(tce: TCE, search_output: SearchOutput) -> VettingTestResult:
+def _test_stellar_density(
+    tce: TCE,
+    search_output: SearchOutput,
+    stellar_density_rho_sun: Optional[float] = None,
+) -> VettingTestResult:
     """
     Stellar density consistency test.
 
     Compares the stellar density implied by the transit duration and impact
     parameter (Seager & Mallén-Ornelas 2003) with the spectroscopic/photometric
-    density from the stellar model.  Without stellar parameters (absent in the
-    golden fixture), returns INCONCLUSIVE.
+    density from the stellar model.
+
+    Returns INCONCLUSIVE with a reason string that is accurate about WHY:
+    - If stellar_density_rho_sun is None: the data is genuinely absent.
+    - If stellar_density_rho_sun is present but the check is not implemented:
+      the reason says so explicitly rather than falsely claiming missing data.
     """
+    if stellar_density_rho_sun is None:
+        reason = (
+            "Stellar density not available for this target; "
+            "stellar density consistency test skipped."
+        )
+    else:
+        reason = (
+            f"Stellar density test not yet implemented in the pipeline stub; "
+            f"stellar_density_rho_sun={stellar_density_rho_sun:.4g} ρ☉ is available but unused."
+        )
+
     return VettingTestResult(
         test_name="stellar_density",
         outcome="INCONCLUSIVE",
         metric_value=None,
         metric_unit=None,
-        reason="Stellar parameters not available; stellar density consistency test skipped.",
+        reason=reason,
     )
 
 
@@ -272,6 +300,47 @@ def _test_gaia_ruwe(search_output: SearchOutput) -> VettingTestResult:
         metric_unit=None,
         reason="Gaia RUWE not available for this target; RUWE test skipped.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Orbit geometry computation
+# ---------------------------------------------------------------------------
+
+def _compute_a_over_rs(
+    stellar_density_rho_sun: float,
+    period_days: float,
+) -> Optional[float]:
+    """
+    Compute the normalised semi-major axis a/R* for a circular orbit.
+
+    Uses Kepler's third law:
+        (a/R*)³ = G * rho * P² / (3π)
+
+    where rho is in kg/m³ and P is in seconds.
+
+    Parameters
+    ----------
+    stellar_density_rho_sun : float
+        Mean stellar density in solar density units (ρ☉ = 1.411 g/cm³).
+    period_days : float
+        Orbital period in days.
+
+    Returns
+    -------
+    float or None
+        a/R* (dimensionless), or None if the inputs are non-positive.
+
+    References
+    ----------
+    Seager & Mallén-Ornelas 2003, ApJ 585, 1038.
+    Batalha et al. 2011, DOI:10.1088/0004-637X/729/1/27 — Kepler-10b parameters.
+    """
+    if stellar_density_rho_sun <= 0 or period_days <= 0:
+        return None
+    rho_kg_m3 = stellar_density_rho_sun * _RHO_SUN_G_PER_CM3 * 1e3
+    P_s = period_days * 86400.0
+    a_over_rs = (_G * rho_kg_m3 * P_s ** 2 / (3.0 * math.pi)) ** (1.0 / 3.0)
+    return a_over_rs
 
 
 def _test_systematics_coincidence(tce: TCE) -> VettingTestResult:
@@ -300,6 +369,9 @@ def run_vet(
     *,
     search_output: Optional[SearchOutput] = None,
     tce: Optional[TCE] = None,
+    stellar_density_rho_sun: Optional[float] = None,
+    inclination_deg: Optional[float] = None,
+    rp_rs: Optional[float] = None,
 ) -> VetOutput:
     """
     Run all seven vetting tests for one TCE and return a VetOutput.
@@ -313,11 +385,22 @@ def run_vet(
     tce : TCE, optional
         The specific TCE to vet.  If None, looked up from search_output.tces
         by tce_id.
+    stellar_density_rho_sun : float, optional
+        Mean stellar density in solar density units (ρ☉).  When provided
+        together with period_days from the TCE, used to compute a/R*.
+        Source: spectroscopic or photometric stellar model.
+    inclination_deg : float, optional
+        Orbital inclination in degrees [0, 90].  If known, populated in the
+        returned VetOutput for the geometry-consistency validator.
+    rp_rs : float, optional
+        Planet-to-star radius ratio (dimensionless, range (0, 1)).
 
     Returns
     -------
     VetOutput
-        Fully validated result including disposition and triggering_test.
+        Fully validated result including disposition, triggering_test, and
+        orbit geometry fields (a_over_rs, stellar_density_rho_sun) when inputs
+        are available.
     """
     if search_output is None:
         raise NotImplementedError(
@@ -334,6 +417,16 @@ def run_vet(
             )
         tce = matching[0]
 
+    # Compute normalised semi-major axis from Kepler's third law when stellar
+    # density is available.  This is the primary orbit-geometry output consumed
+    # by the frontend's OrbitalViewer component.
+    # Source: Seager & Mallén-Ornelas 2003; Batalha+2011 (same source as
+    # stellar_density_rho_sun for KIC 11904151).
+    period_days_val: Optional[float] = tce.period.values[0] if tce else None
+    a_over_rs: Optional[float] = None
+    if stellar_density_rho_sun is not None and period_days_val is not None:
+        a_over_rs = _compute_a_over_rs(stellar_density_rho_sun, period_days_val)
+
     t0 = time.monotonic()
 
     # Run tests in VETTING_TEST_ORDER.
@@ -342,7 +435,7 @@ def run_vet(
         _test_secondary_eclipse(tce),
         _test_centroid_shift(tce, search_output),
         _test_transit_shape(tce),
-        _test_stellar_density(tce, search_output),
+        _test_stellar_density(tce, search_output, stellar_density_rho_sun),
         _test_gaia_ruwe(search_output),
         _test_systematics_coincidence(tce),
     ]
@@ -387,6 +480,12 @@ def run_vet(
         disposition=disposition,
         triggering_test=triggering_test,
         triggering_reason=triggering_reason,
+        period_days=period_days_val,
+        duration_hours=tce.duration.values[0] if tce else None,
+        stellar_density_rho_sun=stellar_density_rho_sun,
+        inclination_deg=inclination_deg,
+        rp_rs=rp_rs,
+        a_over_rs=a_over_rs,
         manifest=StageManifest(
             stage="vet",
             code_version=getattr(falsifier, "__version__", "0.0.0-dev"),

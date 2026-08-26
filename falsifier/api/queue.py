@@ -595,9 +595,15 @@ def _build_report(
             depth_ppm=tce.depth.values[0] if tce else None,
             duration_hours=tce.duration.values[0] if tce else None,
             epoch_bkjd=tce.epoch.values[0] if tce else None,
-            # inclination is not computed in the search stage; left None so
-            # the 3-D viewer defaults to near-edge-on geometry visually.
-            inclination_deg=None,
+            # inclination is not computed in the search stage; populated from
+            # VetOutput when the real vet stage provides it.
+            inclination_deg=vo.inclination_deg,
+            # Orbit geometry fields — populated when VetOutput has them.
+            # a_over_rs is derived from Kepler's third law in run_vet when
+            # stellar_density_rho_sun is available (see vet.py).
+            stellar_density_rho_sun=vo.stellar_density_rho_sun,
+            rp_rs=vo.rp_rs,
+            a_over_rs=vo.a_over_rs,
             test_results=[
                 VettingTestResultSummary(
                     test_name=tr.test_name,

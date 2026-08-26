@@ -18,7 +18,7 @@
         {
           "tool": "get_planet_params",
           "args": { "tce_id": "KIC 11904151.01" },
-          "result": { "period_days": 0.8375, "depth_ppm": 154, "source": "search_output" }
+          "result": { "period_days": 0.8375, "depth_ppm": 176, "source": "search_output" }
         }
       ],
       "sources": [
