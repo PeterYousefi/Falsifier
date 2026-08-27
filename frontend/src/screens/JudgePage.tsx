@@ -9,19 +9,15 @@
  * from the provenance artifact (golden_manifest_entry_count + non_claims).
  *
  * AGENTS.md Rule 1: no hardcoded scientific values.
- *
- * Demo video:
- * __DEMO_VIDEO_URL__ — reference only; the single definition is in README.md line 19.
- * See docs/RELEASE_CHECKLIST.md for swap instructions.
  */
 import React, { useState } from 'react'
 import { GATE_COUNT, DEFECT_COUNT } from './GatesScreen'
 
 // ---------------------------------------------------------------------------
-// Demo video reference — defined once in README.md, referenced here.
-// Replace __DEMO_VIDEO_URL__ in README.md to update all references at once.
+// Demo video — points to the hosted Vercel deployment walkthrough page.
+// Update this constant when the real video URL is published.
 // ---------------------------------------------------------------------------
-const DEMO_VIDEO_URL = '__DEMO_VIDEO_URL__'
+const DEMO_VIDEO_URL = 'https://falsifier.vercel.app'
 const DEMO_VIDEO_LABEL = '▶ Watch the 3-min walkthrough (enter a target ID, watch pipeline stream, see disposition)'
 
 // ---------------------------------------------------------------------------
@@ -61,7 +57,7 @@ const STEPS: Step[] = [
     exitCondition:
       'Blockquote at top of README.md states the non-claim; ' +
       'every API response carries X-Non-Claim header.',
-    appLink: { href: '#biosignature', label: 'View in README' },
+    appLink: { href: 'https://github.com/PeterYousefi/Falsifier#readme', label: 'View in README ↗' },
   },
   {
     title: 'README claims regenerable',

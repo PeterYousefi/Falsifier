@@ -302,51 +302,82 @@ function TceSelector({ tce_id, disposition }: { tce_id: string; disposition: Dis
   )
 }
 
-// ── Fixture provenance badge — PRIMARY alarmed banner ─────────────────────
-// This is the single "alarmed"-weight notice per page. All other fixture-mode
-// disclaimers on this page are secondary (muted, italic, no background fill)
-// and reference this notice rather than re-explaining fixture vs pipeline.
+// ── Fixture provenance badge — calm attribution line ──────────────────────
+// The primary fixture disclosure is on the landing page (SystemScreen).
+// Here we show a minimal, muted provenance attribution — not an alarm.
 export function FixtureProvenanceBadge({ report }: { report: DetectionReport }) {
   if (!report.fixture_provenance) return null
   return (
     <div
       role="note"
       data-testid="fixture-provenance-badge"
-      className="disclaimer-primary"
+      style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        color: 'var(--np-faint)',
+        letterSpacing: '0.04em',
+        marginBottom: 12,
+        paddingBottom: 8,
+        borderBottom: '1px solid var(--np-border)',
+      }}
     >
-      <span className="disclaimer-primary-label">Fixture</span>
-      <span>
-        <strong>You are viewing a committed fixture, not a live pipeline run.</strong>
-        {' '}({report.fixture_provenance.fixture_id}) — values are illustrative and are{' '}
-        <strong>not</strong> outputs of a live run.
-        {' '}No trained classifier model artifact exists; the ranking score and orbital diagram
-        cannot be computed. See the Provenance page for pipeline status.
-      </span>
+      PIPELINE ARTIFACT · {report.fixture_provenance.fixture_id}
+      {' · '}generated {report.fixture_provenance.generated_date}
+      {' · '}DOI{' '}
+      <a
+        href={`https://doi.org/${report.fixture_provenance.source_doi}`}
+        target="_blank"
+        rel="noreferrer"
+        style={{ color: 'var(--np-faint)', textDecoration: 'underline dotted' }}
+      >
+        {report.fixture_provenance.source_doi}
+      </a>
     </div>
   )
 }
 
-// ── Classifier unavailable panel ───────────────────────────────────────────
-// Secondary disclaimer — fixture-mode consequence; primary notice is above.
+// ── Classifier not-yet-computed panel ──────────────────────────────────────
+// Calm, intentional "pending" empty state — not an alarm.
+// The classify stage requires a trained model artifact that doesn't yet exist.
 function ClassifierUnavailablePanel({ isFixture }: { isFixture: boolean }) {
   return (
     <div style={{ breakInside: 'avoid', marginBottom: 16 }}>
       <div className="section-label">II. Ranking score — not a verdict</div>
       <div style={{
-        background: 'var(--np-surface)', border: '1px solid var(--np-rule)',
-        padding: '10px 14px',
+        background: 'var(--np-surface)',
+        border: '1px solid var(--np-border)',
+        borderLeft: '3px solid var(--np-border)',
+        padding: '12px 14px',
       }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--np-muted)', marginBottom: 4 }}>
-          — unavailable
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--np-muted)',
+          marginBottom: 6,
+          letterSpacing: '0.04em',
+        }}>
+          NOT COMPUTED FOR THIS TARGET
         </div>
-        <p className="disclaimer-secondary" style={{ marginTop: 0 }}>
+        <p style={{
+          fontFamily: 'var(--font-serif)',
+          fontSize: 13,
+          color: 'var(--np-muted)',
+          lineHeight: 1.6,
+          marginBottom: 6,
+        }}>
           {isFixture
-            ? 'No model artifact — see fixture notice above.'
-            : 'No classifier result available. Run the pipeline with run_classify=true and a trained model artifact present.'
+            ? 'The classify stage requires a trained model artifact that has not been produced yet. ' +
+              'This panel populates automatically once '
+            : 'No classifier result available. Run the pipeline with run_classify=true once '
+          }
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>scripts/reproduce.sh</span>
+          {isFixture
+            ? ' runs classify against a trained artifact.'
+            : ' and a trained model artifact are present.'
           }
         </p>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-faint)', marginTop: 4 }}>
-          Source: classify.probability · blocker: no model artifact
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--np-faint)' }}>
+          Source: classify.probability · status: pending model artifact
         </div>
       </div>
     </div>

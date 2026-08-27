@@ -2,13 +2,9 @@
  * src/screens/SystemScreen.tsx
  * Landing page + investigation view.
  * Newspaper layout: headline question, plain prose, three-step strip,
- * prominent example button, search input, worked verdict preview.
+ * prominent flagship card, search input, worked verdict preview.
  * Orbital 3D view as a bordered figure-inset with caption.
  * All visual properties driven from data layer — no scientific literals.
- *
- * Demo video:
- * __DEMO_VIDEO_URL__ — reference only; the single definition is in README.md line 19.
- * See docs/RELEASE_CHECKLIST.md for swap instructions.
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { useStore } from '../store'
@@ -275,10 +271,6 @@ function VerdictPreview() {
   )
 }
 
-// Demo video reference — single definition is in README.md, referenced here.
-// Replace __DEMO_VIDEO_URL__ in README.md to update all references at once.
-const DEMO_VIDEO_URL = '__DEMO_VIDEO_URL__'
-
 // ── Landing page content ──────────────────────────────────────────────────
 function LandingContent() {
   const { setTargetId, setMission, setCadence, submitJob, setActiveScreen, jobStatus, isSubmitting } = useStore()
@@ -297,26 +289,6 @@ function LandingContent() {
 
   return (
     <div className="page-body">
-      {/* Demo video link — sourced from README.md single definition */}
-      <div style={{
-        textAlign: 'center',
-        marginTop: 8,
-        marginBottom: 4,
-        fontFamily: 'var(--font-serif)',
-        fontSize: 13,
-        color: 'var(--np-muted)',
-      }}>
-        <a
-          href={DEMO_VIDEO_URL}
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: 'var(--np-accent, #3b82d4)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
-        >
-          ▶ Watch 3-min demo ↗
-        </a>
-        {' '}— enter a target ID, watch all four stages stream live, see the disposition
-      </div>
-
       {/* Article dateline + headline */}
       <hr className="rule-double" />
       <div className="article-dateline" style={{ marginTop: 16 }}>
@@ -393,59 +365,121 @@ function LandingContent() {
         </div>
       </div>
 
-      {/* III. BEGIN */}
+      {/* II. FLAGSHIP EXAMPLE — KIC 11904151 */}
       <hr className="rule-double" style={{ marginTop: 28 }} />
-      <div className="section-label" style={{ marginBottom: 14 }}>III. Begin</div>
+      <div className="section-label" style={{ marginBottom: 10 }}>II. Worked example</div>
+
+      {/* Single fixture-mode disclosure — lives here and only here */}
+      {isFixtureMode && (
+        <div style={{
+          background: 'var(--np-surface)',
+          border: '1px solid var(--np-border)',
+          padding: '10px 14px',
+          marginBottom: 14,
+          fontFamily: 'var(--font-serif)',
+          fontSize: 13,
+          color: 'var(--np-muted)',
+          lineHeight: 1.6,
+        }} role="note">
+          This example shows real, committed pipeline output for{' '}
+          <span style={{ fontFamily: 'var(--font-mono)' }}>KIC 11904151</span> (Kepler-10).
+          Enter your own target ID and it will run against the live pipeline if you clone
+          and run this locally —{' '}
+          <a
+            href="https://github.com/PeterYousefi/Falsifier#readme"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--rust)', textDecoration: 'underline' }}
+          >
+            see README
+          </a>
+          {' '}and{' '}
+          <a
+            href="https://falsifier.vercel.app"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--rust)', textDecoration: 'underline' }}
+          >
+            live demo
+          </a>.
+          TOI-700 and TRAPPIST-1 require the local pipeline (no fixture exists for them).
+        </div>
+      )}
+
+      {/* Flagship card — KIC 11904151 */}
+      <div style={{
+        border: '2px solid var(--np-rule)',
+        background: 'var(--np-surface)',
+        padding: '18px 20px',
+        marginBottom: 20,
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--np-muted)',
+          letterSpacing: '0.08em',
+          marginBottom: 6,
+        }}>
+          FEATURED TARGET · KEPLER · FULL PIPELINE RECORD
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
+          <span style={{ fontFamily: 'var(--font-head)', fontSize: 22, fontWeight: 700, color: 'var(--np-text)' }}>
+            Kepler-10 (KIC 11904151)
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--np-muted)' }}>
+            Kepler · long cadence · confirmed host star
+          </span>
+        </div>
+        <p style={{
+          fontFamily: 'var(--font-serif)',
+          fontSize: 13,
+          color: 'var(--np-muted)',
+          lineHeight: 1.6,
+          marginBottom: 14,
+          maxWidth: 560,
+        }}>
+          A star in NASA's Kepler Input Catalogue hosting the confirmed planet Kepler-10b.
+          This is the fully-worked example: ingest, detrend, TLS search, and seven vetting tests,
+          all from the committed pipeline artifact.
+        </p>
+        <button
+          className="btn-primary"
+          onClick={runExample}
+          disabled={busy}
+          aria-label={`Load the Kepler-10 (KIC 11904151) worked example`}
+          style={{ fontSize: 15, padding: '11px 24px' }}
+        >
+          {busy
+            ? <><span className="spinner" /> Loading…</>
+            : 'Load worked example: Kepler-10 →'
+          }
+        </button>
+      </div>
+
+      {/* III. BEGIN — custom target */}
+      <hr className="rule-hair" style={{ marginTop: 4 }} />
+      <div className="section-label" style={{ marginBottom: 10 }}>III. Investigate any target</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, margin: '0 0 24px' }}>
         <div>
-          <button
-            className="btn-primary"
-            onClick={runExample}
-            disabled={busy}
-            aria-label={
-              isFixtureMode
-                ? `Load committed fixture for ${FIXTURE_DISPLAY_NAME}`
-                : `Run live pipeline for ${FIXTURE_DISPLAY_NAME}`
-            }
-            style={{ fontSize: 16, padding: '13px 28px' }}
-          >
-            {busy
-              ? <><span className="spinner" /> Running…</>
-              : isFixtureMode
-                ? `Load fixture: ${FIXTURE_DISPLAY_NAME} →`
-                : `Run: ${FIXTURE_DISPLAY_NAME} →`
-            }
-          </button>
-          {/* In fixture mode: clarify that this loads a committed artifact, not a live run.
-              In live mode: no disclaimer needed — the button runs the real pipeline. */}
-          {isFixtureMode && (
-            <span className="disclaimer-secondary" style={{ marginLeft: 14, marginTop: 0 }}>
-              Committed fixture — no pipeline run.
-            </span>
-          )}
-        </div>
-
-        <div>
           <div style={{ fontFamily: 'var(--font-serif)', fontSize: 14, color: 'var(--np-muted)', marginBottom: 8 }}>
-            Or enter any Kepler / TESS catalogue identifier:
+            Enter any Kepler / TESS catalogue identifier:
           </div>
           <TargetForm />
         </div>
 
         <div>
-          <div className="section-label" style={{ marginBottom: 8 }}>Example targets</div>
+          <div className="section-label" style={{ marginBottom: 8 }}>Other example targets</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {EXAMPLE_TARGETS.map((t, i) => {
+            {EXAMPLE_TARGETS.filter((t) => t.id !== FIXTURE_TARGET_ID).map((t, _i) => {
+              // Map back to original index for tooltip tracking
+              const i = EXAMPLE_TARGETS.indexOf(t)
               // In fixture mode: chips without a committed fixture file cannot
               // run — disable them so users aren't left with a spinner.
-              // In live mode: all chips run the real pipeline — never disabled
-              // because of missing fixture.
               const noFixture = isFixtureMode && !t.hasFixture
               const chipDisabled = busy || noFixture
 
               if (noFixture) {
-                // Render as a non-interactive span with dashed border and "local only" tag.
                 return (
                   <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
                     <span
@@ -492,44 +526,42 @@ function LandingContent() {
                 )
               }
 
-              // title attribute used for the native tooltip; describes why the
-              // chip is disabled without requiring hover interaction.
               return (
-              <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
-                <button
-                  className="target-chip"
-                  onClick={() => {
-                    setTargetId(t.id)
-                    setMission(t.mission)
-                    setCadence(t.cadence)
-                    submitJob(t.id, t.mission, t.cadence)
-                  }}
-                  onMouseEnter={() => setTooltipIdx(i)}
-                  onMouseLeave={() => setTooltipIdx(null)}
-                  onFocus={() => setTooltipIdx(i)}
-                  onBlur={() => setTooltipIdx(null)}
-                  aria-describedby={`chip-tip-${i}`}
-                  disabled={chipDisabled}
-                >
-                  {t.label}
-                </button>
-                {tooltipIdx === i && (
-                  <div
-                    id={`chip-tip-${i}`}
-                    role="tooltip"
-                    style={{
-                      position: 'absolute', top: '100%', left: 0, zIndex: 50,
-                      background: 'var(--np-text)', color: 'var(--np-paper)',
-                      fontFamily: 'var(--font-serif)', fontSize: 12,
-                      padding: '6px 10px', borderRadius: 'var(--r)',
-                      whiteSpace: 'normal', maxWidth: 280, lineHeight: 1.5,
-                      marginTop: 4, pointerEvents: 'none',
+                <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
+                  <button
+                    className="target-chip"
+                    onClick={() => {
+                      setTargetId(t.id)
+                      setMission(t.mission)
+                      setCadence(t.cadence)
+                      submitJob(t.id, t.mission, t.cadence)
                     }}
+                    onMouseEnter={() => setTooltipIdx(i)}
+                    onMouseLeave={() => setTooltipIdx(null)}
+                    onFocus={() => setTooltipIdx(i)}
+                    onBlur={() => setTooltipIdx(null)}
+                    aria-describedby={`chip-tip-${i}`}
+                    disabled={chipDisabled}
                   >
-                    {t.gloss}
-                  </div>
-                )}
-              </div>
+                    {t.label}
+                  </button>
+                  {tooltipIdx === i && (
+                    <div
+                      id={`chip-tip-${i}`}
+                      role="tooltip"
+                      style={{
+                        position: 'absolute', top: '100%', left: 0, zIndex: 50,
+                        background: 'var(--np-text)', color: 'var(--np-paper)',
+                        fontFamily: 'var(--font-serif)', fontSize: 12,
+                        padding: '6px 10px', borderRadius: 'var(--r)',
+                        whiteSpace: 'normal', maxWidth: 280, lineHeight: 1.5,
+                        marginTop: 4, pointerEvents: 'none',
+                      }}
+                    >
+                      {t.gloss}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>

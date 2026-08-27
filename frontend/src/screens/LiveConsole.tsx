@@ -60,7 +60,7 @@ export default function LiveConsole() {
   }
 
   return (
-    <div className="screen" style={{ overflowY: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'hidden' }}>
 
       {/* Header with article dateline */}
       <div style={{
