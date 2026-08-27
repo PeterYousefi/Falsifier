@@ -66,7 +66,8 @@ html, body, #root {
 .app-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ── Header wrapper — constrains masthead, dateline, nav to same column ── */

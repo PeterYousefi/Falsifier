@@ -624,7 +624,7 @@ export default function OrbitalViewer({
   vet,
   stellarParams,
   jobId,
-  isFixture,
+  isFixture: _isFixture,
   jobStatus,
   progressStage,
   jobError,
@@ -632,8 +632,12 @@ export default function OrbitalViewer({
   vet: VetResult | null | undefined
   stellarParams: StellarParams | null | undefined
   jobId: string | null | undefined
-  /** When true the report is fixture-backed, not a live pipeline artifact.
-   *  The 3D scene is suppressed (same policy as the light-curve panel). */
+  /**
+   * Whether the report is fixture-backed.
+   * No longer used to gate the 3D scene — the gate is now driven by whether
+   * `vet.phased_lc.phase` is present, which is true for all committed fixtures.
+   * Kept in the prop signature so callers do not need to change.
+   */
   isFixture?: boolean
   /** Current job status — drives the three-state placeholder (never-run / running / failed). */
   jobStatus?: string | null
@@ -743,18 +747,20 @@ export default function OrbitalViewer({
     ? 'Planet candidate: a single body transiting the host star'
     : 'Uncertain geometry: disposition is ambiguous or has caveats'
 
-  // ── No live pipeline artifact: three-state placeholder ────────────────────
+  // ── No renderable data: three-state placeholder ───────────────────────────
   //
-  //   State A — never run: no job has been submitted (jobId is null, vet is null)
+  //   State A — never run: no job has been submitted (vet is null)
   //   State B — running:   a job is in-flight; show which stage is active
   //   State C — failed:    the job errored; show a user-facing message with
   //                        a collapsible raw-detail toggle
-  //   State D — fixture:   job ran against a fixture; orbital geometry absent
   //
-  // The Play button and scrubber are removed — they imply a populated scene.
-  if (!vet || isFixture) {
-    const isRunning = (jobStatus === 'running' || jobStatus === 'queued') && !isFixture
-    const isFailed  = jobStatus === 'failed' && !isFixture
+  // Gate: fall through to the 3D scene whenever vet AND phased_lc data are
+  // present — this includes fixture-backed reports (KIC 11904151, KIC 6965293)
+  // which carry real committed phasedLC arrays.  Only the *classifier* artifact
+  // is genuinely absent; the orbital geometry is not.
+  if (!vet || !vet.phased_lc?.phase?.length) {
+    const isRunning = (jobStatus === 'running' || jobStatus === 'queued')
+    const isFailed  = jobStatus === 'failed'
 
     // Staged pipeline labels for the running state — no scientific values (Rule 1)
     const STAGE_LABELS: Record<string, string> = {
@@ -784,16 +790,13 @@ export default function OrbitalViewer({
     // Determine chip label and body text (no scientific literals — Rule 1)
     const statusLabel = isRunning  ? 'RUNNING'
       : isFailed   ? 'FAILED'
-      : !vet       ? 'NOT YET RUN'
-      :              'ARTIFACT ABSENT'
+      :              'NOT YET RUN'
 
     const ariaDesc = isRunning
       ? `Orbital diagram: pipeline running — ${stageLabel}`
       : isFailed
       ? `Orbital diagram: pipeline failed — ${errorSummary}`
-      : !vet
-      ? 'Orbital diagram: not yet run. Submit a target to generate the diagram.'
-      : 'Orbital diagram: artifact absent. No trained classifier artifact exists.'
+      : 'Orbital diagram: not yet run. Submit a target to generate the diagram.'
 
     // Error details toggle — state local to this render path
     const [showDetail, setShowDetail] = useState(false)
@@ -931,9 +934,7 @@ export default function OrbitalViewer({
                 maxWidth: 340,
                 lineHeight: 1.5,
               }}>
-                {!vet
-                  ? 'Submit a target above to generate the orbital geometry diagram.'
-                  : 'No trained classifier artifact exists — orbital geometry cannot be computed. This is expected for fixture-backed reports.'}
+                Submit a target above to generate the orbital geometry diagram.
               </span>
             )}
           </div>
@@ -953,9 +954,7 @@ export default function OrbitalViewer({
               ? `Orbital diagram — pipeline in progress.`
               : isFailed
               ? `Orbital diagram — pipeline did not complete.`
-              : !vet
-              ? 'Orbital diagram — no pipeline run has been submitted.'
-              : 'Orbital diagram — no pipeline artifact present.'}
+              : 'Orbital diagram — no pipeline run has been submitted.'}
           </figcaption>
         </figure>
 

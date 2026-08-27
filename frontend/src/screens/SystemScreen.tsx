@@ -273,7 +273,7 @@ function VerdictPreview() {
 
 // ── Landing page content ──────────────────────────────────────────────────
 function LandingContent() {
-  const { setTargetId, setMission, setCadence, submitJob, setActiveScreen, jobStatus, isSubmitting } = useStore()
+  const { setTargetId, setMission, setCadence, submitJob, jobStatus, isSubmitting } = useStore()
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null)
 
   const runExample = () => {
@@ -282,7 +282,8 @@ function LandingContent() {
     setMission(ex.mission)
     setCadence(ex.cadence)
     submitJob(ex.id, ex.mission, ex.cadence)
-    setActiveScreen('detail')
+    // Do not navigate to 'detail' — VerdictPreview renders inline once report populates.
+    // "Read the full report →" inside VerdictPreview is the only navigation trigger.
   }
 
   const busy = isSubmitting || jobStatus === 'running' || jobStatus === 'queued'
