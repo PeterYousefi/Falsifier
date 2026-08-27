@@ -42,6 +42,11 @@ interface Step {
 // No scientific float literals are present; exit conditions are text only.
 // ---------------------------------------------------------------------------
 
+// All appLink hrefs below use absolute GitHub blob URLs so they resolve on the
+// hosted Vercel build (which only serves the frontend bundle, not the repo tree).
+const REPO = 'https://github.com/PeterYousefi/Falsifier'
+const BLOB = `${REPO}/blob/main`
+
 const STEPS: Step[] = [
   {
     title: 'Demo walkthrough',
@@ -57,7 +62,7 @@ const STEPS: Step[] = [
     exitCondition:
       'Blockquote at top of README.md states the non-claim; ' +
       'every API response carries X-Non-Claim header.',
-    appLink: { href: 'https://github.com/PeterYousefi/Falsifier#readme', label: 'View in README ↗' },
+    appLink: { href: `${REPO}#no-exoplanet-biosignature-has-ever-been-confirmed`, label: 'View in README ↗' },
   },
   {
     title: 'README claims regenerable',
@@ -88,14 +93,14 @@ const STEPS: Step[] = [
     verifies: `All ${DEFECT_COUNT} harness defects are documented`,
     command: '',
     exitCondition: `docs/WHAT_THE_GATES_CAUGHT.md — ${DEFECT_COUNT} entries`,
-    appLink: { href: 'docs/WHAT_THE_GATES_CAUGHT.md', label: 'Open defect log' },
+    appLink: { href: `${BLOB}/docs/WHAT_THE_GATES_CAUGHT.md`, label: 'Open defect log ↗' },
   },
   {
     title: 'Mutation gates proven',
     verifies: `${GATE_COUNT} mutation gates pass with verbatim output`,
     command: '',
     exitCondition: `docs/PROVEN_GATES.md — ${GATE_COUNT} EXECUTED rows`,
-    appLink: { href: 'docs/PROVEN_GATES.md', label: 'Open gates log' },
+    appLink: { href: `${BLOB}/docs/PROVEN_GATES.md`, label: 'Open gates log ↗' },
   },
   {
     title: 'Adversarial FAR (preliminary)',
@@ -104,6 +109,7 @@ const STEPS: Step[] = [
     exitCondition:
       'docs/tls_run_2026_q3_baseline.md — scrambled FAR = 0.20 at SDE = 9.0 ' +
       '(substrate later found contaminated; re-measurement pending)',
+    appLink: { href: `${BLOB}/docs/tls_run_2026_q3_baseline.md`, label: 'Open baseline doc ↗' },
   },
   {
     title: 'IBM Bob usage evidence',
@@ -111,7 +117,7 @@ const STEPS: Step[] = [
     command: '',
     exitCondition:
       'README §IBM AI Builders Challenge + pipeline-contracts-plan.md + docs/BOB_EVIDENCE.md',
-    appLink: { href: 'docs/BOB_EVIDENCE.md', label: 'Open Bob evidence' },
+    appLink: { href: `${BLOB}/docs/BOB_EVIDENCE.md`, label: 'Open Bob evidence ↗' },
   },
   {
     title: 'Judge walkthrough page',

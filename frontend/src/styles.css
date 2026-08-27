@@ -372,6 +372,19 @@ h3, .h3 {
   margin-left: 8px; letter-spacing: 0.04em;
 }
 
+/* INCONCLUSIVE row — reason shown inline, styled as a deliberate pending state */
+.vet-row.inconclusive { background: transparent; }
+.vet-inconclusive-reason {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--np-muted);
+  line-height: 1.55;
+  margin-top: 4px;
+  font-style: italic;
+  border-left: 2px solid var(--np-border);
+  padding-left: 8px;
+}
+
 /* ── Number expander ─────────────────────────────────────────────────────── */
 .expander-btn {
   background: none;

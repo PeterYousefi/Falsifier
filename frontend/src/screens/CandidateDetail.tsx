@@ -154,13 +154,16 @@ export function PhaseLCPlot({ phasedData }: { phasedData: PhasedLC | null | unde
   )
 }
 
-// ── Number expander row ────────────────────────────────────────────────────
+// ── Number expander row — only shown for rows that have a real metric value ──
 function MetricExpander({ metric_value, metric_unit, threshold }: {
   metric_value: number | null | undefined
   metric_unit: string | null | undefined
   threshold?: string
 }) {
   const [open, setOpen] = useState(false)
+  // Do not render the expander at all when there is no metric to show —
+  // an empty "Metric: —" line reads as broken rather than informative.
+  if (metric_value == null) return null
   return (
     <div>
       <button
@@ -173,34 +176,11 @@ function MetricExpander({ metric_value, metric_unit, threshold }: {
       {open && (
         <div className="expander-panel">
           <div>Metric: <span style={{ color: 'var(--np-text)' }}>
-            {metric_value != null ? `${metric_value}${metric_unit ? ' ' + metric_unit : ''}` : '—'}
+            {`${metric_value}${metric_unit ? ' ' + metric_unit : ''}`}
           </span></div>
           {threshold && <div>Threshold: <span style={{ color: 'var(--np-text)' }}>{threshold}</span></div>}
           <div style={{ fontSize: 11, marginTop: 3, color: 'var(--np-faint)' }}>Source: report.vet[].test_results</div>
         </div>
-      )}
-    </div>
-  )
-}
-
-// ── Vetting test row with numeral gutter ───────────────────────────────────
-// ── Skipped-reason expander (for INCONCLUSIVE rows) ───────────────────────
-// Collapses the full "why skipped" sentence behind a small click-to-expand
-// affordance, consistent with the "Show the numbers" pattern used for metrics.
-function SkippedReasonExpander({ reason }: { reason: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div style={{ marginTop: 2 }}>
-      <button
-        className="vet-why-btn"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label={open ? 'Hide skip reason' : 'Why skipped?'}
-      >
-        {open ? 'hide reason ▲' : 'why skipped? ▼'}
-      </button>
-      {open && (
-        <div className="vet-why-detail">{reason}</div>
       )}
     </div>
   )
@@ -212,14 +192,16 @@ function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetRe
   const isTriggering = vetResult.triggering_test === name
   const label = TEST_LABELS[name]
   const numeral = ROMAN_LOWER[index] ?? String(index + 1)
-  // For INCONCLUSIVE (skipped) rows: show the headline + a compact expandable
-  // reason rather than always-visible full sentence prose.
-  const isSkipped = outcome === 'INCONCLUSIVE'
+  const isInconclusive = outcome === 'INCONCLUSIVE'
+  // Use the real reason from the artifact — never the generic "why" copy.
+  // For INCONCLUSIVE rows the reason IS the primary content (e.g. "Centroid time
+  // series not available for this target; centroid shift test skipped.") and
+  // should be visible without an extra click.
   const reason = r?.reason ?? label?.why ?? '—'
 
   return (
     <div
-      className={`vet-row${isTriggering ? ' triggering' : ''}`}
+      className={`vet-row${isTriggering ? ' triggering' : ''}${isInconclusive ? ' inconclusive' : ''}`}
       aria-label={`${label?.short}: ${outcome}`}
     >
       <span className="vet-numeral">{numeral}</span>
@@ -229,10 +211,15 @@ function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetRe
           {label?.headline ?? label?.short ?? name}
           {isTriggering && <span className="vet-trigger-label">◀ deciding test</span>}
         </div>
-        {isSkipped
-          ? <SkippedReasonExpander reason={reason} />
-          : <div className="vet-why">{reason}</div>
-        }
+        {isInconclusive ? (
+          // Reason shown immediately — no click required.
+          // Style as a quiet attribution footnote consistent with the
+          // ClassifierUnavailablePanel "pending" treatment.
+          <div className="vet-inconclusive-reason">{reason}</div>
+        ) : (
+          <div className="vet-why">{reason}</div>
+        )}
+        {/* Only render the metric expander when a real value exists */}
         <MetricExpander
           metric_value={r?.metric_value}
           metric_unit={r?.metric_unit}
@@ -515,10 +502,24 @@ export default function CandidateDetail() {
             <div style={{ columnSpan: 'all', marginTop: 4 } as React.CSSProperties}>
               <hr className="rule-double" />
               <div className="section-label" style={{ marginTop: 16 }}>
-                III. The seven challenges
-                <span style={{ fontFamily: 'var(--font-serif)', textTransform: 'none', letterSpacing: 0, color: 'var(--np-muted)', marginLeft: 8, fontSize: 12 }}>
-                  (Metrics hidden by default — click "Show the numbers" on any row to expand)
-                </span>
+                {(() => {
+                  const results = vetResult.test_results ?? []
+                  const passed = results.filter((r) => r.outcome === 'PASS').length
+                  const inconclusive = results.filter((r) => r.outcome === 'INCONCLUSIVE').length
+                  const tally = passed > 0 || inconclusive > 0
+                    ? `${passed} passed · ${inconclusive} inconclusive — see why`
+                    : null
+                  return (
+                    <>
+                      III. The seven challenges
+                      {tally && (
+                        <span style={{ fontFamily: 'var(--font-serif)', textTransform: 'none', letterSpacing: 0, color: 'var(--np-muted)', marginLeft: 8, fontSize: 12 }}>
+                          ({tally})
+                        </span>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               <div style={{ background: 'var(--np-surface)', border: '1px solid var(--np-rule)', padding: '4px 16px' }}>
                 {VETTING_TEST_ORDER.map((name, idx) => (

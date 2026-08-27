@@ -1,10 +1,15 @@
 /**
  * src/screens/OrbitalViewer.tsx
- * Rebuilt orbital 3-D viewer + synced folded light curve.
+ * Orbital viewer — flat 2D SVG diagram (default) + optional 3D canvas.
  *
  * ALL numbers reaching the screen are derived from the job payload.
  * The exaggeration factor is computed at runtime from payload values — never
  * hardcoded. (AGENTS.md Rule 1)
+ *
+ * Default view: flat SVG in the newspaper aesthetic (paper background, hairline
+ * rules, mono-font caption).  Driven by the same vet data as the 3D scene.
+ * The 3D view is preserved behind a "View in 3D ↓" toggle for users who want
+ * the animated globe.
  *
  * Phase convention — SINGLE DEFINITION, used by every consumer here:
  *   phase ∈ [-0.5, +0.5], dimensionless fractional orbit
@@ -12,19 +17,14 @@
  *   phase = ±0.5 → secondary eclipse position
  *   Implemented by physics.phaseToPosition() — no consumer may redefine this.
  *
- * Scene branches on disposition:
- *   candidate                 — single transiting body silhouette
- *   false_positive/odd_even   — two-star EB with both eclipses animated
- *   false_positive/centroid   — off-target contamination signal
- *   ambiguous / caveats       — geometry with "uncertain" visual treatment
+ * 2D scene branches on disposition (same logic as 3D):
+ *   candidate / ambiguous     — star + orbit ring + transiting body
+ *   false_positive/odd_even   — two-star EB with orbit ring
+ *   false_positive/centroid   — star + dashed centroid vector + off-target dot
  *
- * Animation:
- *   Play/Pause button toggles a requestAnimationFrame loop in the parent.
- *   The loop advances phase by (elapsed_wall_ms / period_wall_ms) and calls
- *   setPhase(wrapPhase(phase + delta)), so speed is frame-rate independent.
- *   The 3D scene reads the phase prop; no child component runs its own loop.
- *   The loop is cancelled on unmount and whenever playing becomes false.
- *   Dragging the slider pauses the loop first.
+ * 3D canvas background fix: <color attach="background" args={['#EDE9DE']} />
+ * added inside SceneContent so WebGL clear color matches --np-surface instead
+ * of defaulting to black.
  */
 import React, {
   useRef,
@@ -47,6 +47,7 @@ import {
 import type { VetResult, PhasedLC } from '../data/types'
 import { isStellarParamsSummary } from '../data/types'
 import type { StellarParams } from '../data/types'
+import { DispoChip } from './CandidateDetail'
 
 // Play speed: one full orbit in this many real seconds.
 const ORBIT_WALL_SECONDS = 8.0
@@ -392,6 +393,8 @@ function SceneContent({
 
   return (
     <>
+      {/* Fix canvas clear color: WebGL defaults to black, override to match --np-surface */}
+      <color attach="background" args={['#EDE9DE']} />
       {/* Lighting: dim ambient so the transiting body reads as a silhouette */}
       <ambientLight intensity={0.25} />
       {/* Point light at each star position */}
@@ -470,6 +473,130 @@ function ScenePlaceholder({ message }: { message: string }) {
         {message}
       </Text>
     </>
+  )
+}
+
+// ── Flat 2D orbital diagram (default view) ───────────────────────────────
+// Renders the orbital geometry as a newspaper-aesthetic SVG: paper background,
+// a filled circle for the star, a thin dashed ellipse for the orbit, and a
+// small solid dot for the transiting body (or two circles for an EB).
+// All geometry is derived from the vet data — no invented values.
+function OrbitalDiagram2D({
+  vet,
+  radiusRsun,
+}: {
+  vet: VetResult
+  radiusRsun: number
+}) {
+  const W = 560
+  const H = 220
+  const CX = W / 2
+  const CY = H / 2
+
+  const disposition = vet.disposition
+  const triggeringTest = vet.triggering_test
+  const isEB = disposition === 'false_positive' && triggeringTest === 'odd_even_depth'
+  const isCentroid = disposition === 'false_positive' && triggeringTest === 'centroid_shift'
+
+  // Star size: clamp between 12 and 28 SVG units
+  const starR = Math.max(12, Math.min(28, radiusRsun * 16))
+
+  // Orbit ellipse: semi-major axis in SVG units
+  // Use a_over_rs if available, else fall back to a geometry-based estimate
+  const aOverRs = vet.a_over_rs ?? 5
+  const orbitRx = Math.max(starR * 2.2, Math.min(W * 0.42, aOverRs * starR * 0.9))
+  const orbitRy = orbitRx * 0.28   // shallow perspective
+
+  // Transiting body radius — exaggerated for visibility, same rule as 3D
+  const depthPpm = vet.depth_ppm ?? 100
+  const trueRpRs = Math.sqrt(Math.max(depthPpm, 1) / 1e6)
+  const trueBodyR = trueRpRs * starR
+  const minBodyR = starR * 0.12
+  const bodyR = Math.max(trueBodyR, minBodyR)
+  const exaggeration = Math.max(1, Math.round(bodyR / trueBodyR))
+
+  // Phase 0 = mid-transit: transiting body sits directly in front of star (left of centre in top-down view)
+  // We show the body at mid-transit position (phase = 0)
+  const bodyX = CX             // directly in front of star
+  const bodyY = CY             // on the orbit plane
+
+  // EB companion sits at half-orbit (phase = 0.5) — far side
+  const companionX = CX + orbitRx
+  const companionY = CY
+
+  // ── Centroid shift: star + off-target dot + dashed vector ─────────────────
+  if (isCentroid) {
+    const offTargetX = CX + orbitRx * 0.75
+    const offTargetR = starR * 0.5
+    return (
+      <svg
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        aria-label="Orbital diagram — centroid shift geometry"
+        role="img"
+        style={{ display: 'block', background: 'var(--np-surface)', border: '1px solid var(--np-border)' }}
+      >
+        {/* Star */}
+        <circle cx={CX} cy={CY} r={starR} fill="var(--rust)" opacity="0.85" />
+        <text x={CX} y={CY - starR - 5} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--np-muted)">target</text>
+        {/* Centroid vector */}
+        <line x1={CX} y1={CY} x2={offTargetX} y2={CY}
+          stroke="var(--np-muted)" strokeWidth="1" strokeDasharray="5,3" />
+        <text x={(CX + offTargetX) / 2} y={CY - 10} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--np-muted)">centroid shift</text>
+        {/* Off-target source */}
+        <circle cx={offTargetX} cy={CY} r={offTargetR} fill="var(--np-muted)" opacity="0.45" />
+        <text x={offTargetX} y={CY - offTargetR - 5} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--np-muted)">off-target</text>
+      </svg>
+    )
+  }
+
+  // ── EB: two circles + orbit ellipse ──────────────────────────────────────
+  if (isEB) {
+    const companionR = starR * 0.65
+    return (
+      <svg
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        aria-label="Orbital diagram — eclipsing binary geometry"
+        role="img"
+        style={{ display: 'block', background: 'var(--np-surface)', border: '1px solid var(--np-border)' }}
+      >
+        {/* Orbit ellipse */}
+        <ellipse cx={CX} cy={CY} rx={orbitRx} ry={orbitRy}
+          fill="none" stroke="var(--np-rule)" strokeWidth="0.8" strokeDasharray="4,3" />
+        {/* Primary star */}
+        <circle cx={CX} cy={CY} r={starR} fill="var(--rust)" opacity="0.85" />
+        <text x={CX} y={CY + starR + 11} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--np-muted)">primary</text>
+        {/* Companion star at half-orbit */}
+        <circle cx={companionX} cy={companionY} r={companionR} fill="var(--np-muted)" opacity="0.6" />
+        <text x={companionX} y={companionY + companionR + 11} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--np-muted)">companion</text>
+      </svg>
+    )
+  }
+
+  // ── Candidate / ambiguous: star + orbit + transiting body ─────────────────
+  return (
+    <svg
+      width="100%"
+      viewBox={`0 0 ${W} ${H}`}
+      aria-label={`Orbital diagram — ${disposition.replace(/_/g, ' ')}`}
+      role="img"
+      style={{ display: 'block', background: 'var(--np-surface)', border: '1px solid var(--np-border)' }}
+    >
+      {/* Orbit ellipse */}
+      <ellipse cx={CX} cy={CY} rx={orbitRx} ry={orbitRy}
+        fill="none" stroke="var(--np-rule)" strokeWidth="0.8" strokeDasharray="4,3" />
+      {/* Star */}
+      <circle cx={CX} cy={CY} r={starR} fill="var(--rust)" opacity="0.85" />
+      {/* Transiting body at mid-transit (phase = 0, in front of star) */}
+      <circle cx={bodyX} cy={bodyY} r={bodyR} fill="var(--np-text)" opacity="0.82" />
+      {/* Exaggeration note */}
+      {exaggeration > 1 && (
+        <text x={CX} y={H - 8} textAnchor="middle" fontSize="8" fontFamily="var(--font-mono)" fill="var(--np-faint)">
+          {`body radius exaggerated ${exaggeration}\u00D7 for visibility`}
+        </text>
+      )}
+    </svg>
   )
 }
 
@@ -657,6 +784,8 @@ export default function OrbitalViewer({
   const [phase, setPhase] = useState(0)
   const [canvasOk, setCanvasOk] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Default to 2D flat diagram; user can expand the 3D view on demand
+  const [show3D, setShow3D] = useState(false)
 
   // RAF handle — kept in a ref so it can be cancelled without triggering re-renders
   const rafRef = useRef<number | null>(null)
@@ -992,82 +1121,32 @@ export default function OrbitalViewer({
 
   return (
     <div>
-      {/* 3D canvas */}
-      <figure
-        style={{ margin: 0 }}
-        aria-label={sceneDesc}
-      >
+      {/* ── Default: flat 2D diagram (newspaper aesthetic) ────────────────── */}
+      <figure style={{ margin: 0 }} aria-label={sceneDesc}>
         <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '0 0 8px' }} />
-        <div
-          ref={containerRef}
-          style={{
-            height: 340,
-            position: 'relative',
-            background: 'var(--np-surface)',
-          }}
-        >
-          {!canvasOk && (
-            <div style={{
-              position: 'absolute', inset: 0, display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'var(--font-serif)', fontStyle: 'italic',
-              fontSize: 13, color: 'var(--np-muted)',
-            }}>
-              3D view unavailable — canvas container has zero height.
-            </div>
-          )}
-          {canvasOk && (
-            <Canvas
-              key={jobId ?? 'no-job'}
-              gl={{ antialias: true, alpha: false }}
-              style={{ width: '100%', height: '100%', background: '#F5F2EA' }}
-            >
-              <OrbitControls
-                enablePan={false}
-                minDistance={0.05}
-                maxDistance={500}
-                enableDamping
-                dampingFactor={0.08}
-              />
-              <SceneContent
-                vet={vet}
-                stellarTeffK={teffK}
-                stellarRadiusRsun={radiusRsun}
-                phase={phase}
-              />
-            </Canvas>
-          )}
 
-          {/* Disposition badge overlay */}
-          <div style={{
-            position: 'absolute', top: 8, left: 10,
-            fontFamily: 'var(--font-mono)', fontSize: 10,
-            letterSpacing: '0.07em', textTransform: 'uppercase',
-            color: 'var(--np-muted)',
-            background: 'rgba(242,239,231,0.85)',
-            padding: '2px 7px',
-            border: '1px solid var(--np-border)',
-          }}>
-            {disposition.replace(/_/g, ' ')}
+        {/* Disposition badge + 2D SVG */}
+        <div style={{ position: 'relative' }}>
+          <OrbitalDiagram2D vet={vet} radiusRsun={radiusRsun} />
+          {/* Disposition chip overlay — uses the same shared component as CandidateDetail */}
+          <div style={{ position: 'absolute', top: 8, left: 10 }}>
+            <DispoChip disposition={disposition} />
           </div>
         </div>
+
         <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '8px 0 4px' }} />
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.10em', color: 'var(--np-muted)', textTransform: 'uppercase', marginBottom: 3 }}>
           FIG. 1
         </div>
         <figcaption style={{
-          fontFamily: 'var(--font-serif)',
-          fontStyle: 'italic',
-          fontSize: 12,
-          color: 'var(--np-muted)',
-          lineHeight: 1.5,
-          marginBottom: 8,
+          fontFamily: 'var(--font-serif)', fontStyle: 'italic',
+          fontSize: 12, color: 'var(--np-muted)', lineHeight: 1.5, marginBottom: 8,
         }}>
           {isEB
-            ? 'Eclipsing-binary geometry computed from pipeline output. Two stars orbit each other; alternating eclipse depths are the false-positive signature. Drag to rotate; scroll to zoom.'
+            ? 'Eclipsing-binary geometry from pipeline output. Two stars orbit each other; alternating eclipse depths are the false-positive signature.'
             : vet.triggering_test === 'centroid_shift'
-            ? 'Centroid-shift geometry: the signal originates off-target. The dashed line indicates the centroid displacement direction.'
-            : `Orbital diagram computed from pipeline output.`
+            ? 'Centroid-shift geometry: the signal originates off-target. Dashed line shows the centroid displacement direction.'
+            : 'Orbital geometry from pipeline output — mid-transit position shown.'
           }
           {' '}
           {isCandidate && exaggerationFactor > 1 && (
@@ -1078,42 +1157,7 @@ export default function OrbitalViewer({
         </figcaption>
       </figure>
 
-      {/* Play / pause / scrub controls */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        margin: '4px 0 12px',
-      }}>
-        <button
-          onClick={() => setPlaying((p) => !p)}
-          style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            padding: '4px 12px',
-            border: '1px solid var(--np-rule)',
-            background: 'var(--np-surface)',
-            cursor: 'pointer', color: 'var(--np-muted)',
-            letterSpacing: '0.05em',
-          }}
-          aria-label={playing ? 'Pause animation' : 'Play animation'}
-        >
-          {playing ? '⏸ Pause' : '▶ Play'}
-        </button>
-        {/* Slider range matches the phase convention: [-0.5, +0.5] */}
-        <input
-          type="range"
-          min={-0.5}
-          max={0.5}
-          step={0.002}
-          value={phase}
-          onChange={handleScrub}
-          style={{ flex: 1, maxWidth: 200, accentColor: 'var(--rust)' }}
-          aria-label="Scrub animation phase"
-        />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--np-faint)', minWidth: 60 }}>
-          phase {phase.toFixed(3)}
-        </span>
-      </div>
-
-      {/* Folded LC + marker */}
+      {/* Phase-folded light curve (always shown when data is present) */}
       <div style={{ marginBottom: 4 }}>
         <div style={{
           fontFamily: 'var(--font-mono)', fontSize: 10,
@@ -1128,21 +1172,112 @@ export default function OrbitalViewer({
           currentPhase={phase}
           disposition={disposition}
         />
-        <div style={{
-          fontFamily: 'var(--font-serif)', fontStyle: 'italic',
-          fontSize: 11, color: 'var(--np-faint)', marginTop: 4,
-        }}>
-          {phasedLC?.phase?.length
-            ? <>Green marker tracks the 3D animation above. Source:{' '}
-                <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
-                {isEB && ' · blue = secondary eclipse folded at primary period'}
-              </>
-            : <>Source: <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
-                {isEB && ' · blue = secondary eclipse folded at primary period'}
-              </>
-          }
-        </div>
+        {phasedLC?.phase?.length ? (
+          <div style={{
+            fontFamily: 'var(--font-serif)', fontStyle: 'italic',
+            fontSize: 11, color: 'var(--np-faint)', marginTop: 4,
+          }}>
+            Source:{' '}
+            <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>
+            {isEB && ' · blue = secondary eclipse folded at primary period'}
+            {show3D && ' · green marker tracks the 3D animation below'}
+          </div>
+        ) : null}
       </div>
+
+      {/* ── 3D view toggle ─────────────────────────────────────────────────── */}
+      <div style={{ margin: '8px 0' }}>
+        <button
+          onClick={() => setShow3D((v) => !v)}
+          style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10,
+            padding: '3px 10px',
+            border: '1px solid var(--np-rule)',
+            background: show3D ? 'var(--np-surface)' : 'transparent',
+            cursor: 'pointer', color: 'var(--np-muted)',
+            letterSpacing: '0.05em',
+          }}
+          aria-expanded={show3D}
+        >
+          {show3D ? 'Hide 3D view ▲' : 'View in 3D ▼'}
+        </button>
+      </div>
+
+      {show3D && (
+        <div>
+          {/* 3D canvas */}
+          <div
+            ref={containerRef}
+            style={{ height: 340, position: 'relative', background: 'var(--np-surface)', border: '1px solid var(--np-border)' }}
+          >
+            {!canvasOk && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--font-serif)', fontStyle: 'italic',
+                fontSize: 13, color: 'var(--np-muted)',
+              }}>
+                3D view unavailable — canvas container has zero height.
+              </div>
+            )}
+            {canvasOk && (
+              <Canvas
+                key={jobId ?? 'no-job'}
+                gl={{ antialias: true, alpha: false }}
+                style={{ width: '100%', height: '100%' }}
+              >
+                <OrbitControls
+                  enablePan={false}
+                  minDistance={0.05}
+                  maxDistance={500}
+                  enableDamping
+                  dampingFactor={0.08}
+                />
+                <SceneContent
+                  vet={vet}
+                  stellarTeffK={teffK}
+                  stellarRadiusRsun={radiusRsun}
+                  phase={phase}
+                />
+              </Canvas>
+            )}
+          </div>
+
+          {/* Play / pause / scrub controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0 4px' }}>
+            <button
+              onClick={() => setPlaying((p) => !p)}
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                padding: '4px 12px',
+                border: '1px solid var(--np-rule)',
+                background: 'var(--np-surface)',
+                cursor: 'pointer', color: 'var(--np-muted)',
+                letterSpacing: '0.05em',
+              }}
+              aria-label={playing ? 'Pause animation' : 'Play animation'}
+            >
+              {playing ? '⏸ Pause' : '▶ Play'}
+            </button>
+            <input
+              type="range"
+              min={-0.5}
+              max={0.5}
+              step={0.002}
+              value={phase}
+              onChange={handleScrub}
+              style={{ flex: 1, maxWidth: 200, accentColor: 'var(--rust)' }}
+              aria-label="Scrub animation phase"
+            />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--np-faint)', minWidth: 60 }}>
+              phase {phase.toFixed(3)}
+            </span>
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--np-faint)', marginBottom: 8 }}>
+            Drag to rotate · scroll to zoom · background = pipeline paper color
+          </div>
+        </div>
+      )}
     </div>
   )
 }

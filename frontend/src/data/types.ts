@@ -70,6 +70,8 @@ export interface VetResult {
   stellar_density_rho_sun?: number | null
   /** Planet-to-star radius ratio Rp/Rs (dimensionless). */
   rp_rs?: number | null
+  /** Ratio of semi-major axis to stellar radius a/Rs (dimensionless). */
+  a_over_rs?: number | null
   phased_lc?: PhasedLC | null
 }
 
