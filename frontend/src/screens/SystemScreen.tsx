@@ -114,15 +114,29 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
         </button>
       </form>
 
-      {/* D4: degraded-backend notice — secondary (consequence of fixture-mode, stated once on landing) */}
+      {/* D4: degraded-backend notice — primary instruction for fixture-only deployment */}
       {backendAbsent && (
         <p
           role="status"
           aria-live="polite"
-          className="disclaimer-secondary"
-          style={{ marginTop: 6 }}
+          style={{
+            marginTop: 6,
+            fontFamily: 'var(--font-serif)',
+            fontSize: '0.95rem',
+            color: 'var(--np-text)',
+            lineHeight: 1.55,
+          }}
         >
-          Backend not deployed — fixture targets only.
+          Live runs require the local pipeline —{' '}
+          <a
+            href="https://github.com/PeterYousefi/Falsifier"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--rust)', textDecoration: 'underline' }}
+          >
+            clone the repo
+          </a>
+          {' '}to investigate any target.
         </p>
       )}
 
@@ -373,11 +387,57 @@ function LandingContent() {
               // because of missing fixture.
               const noFixture = isFixtureMode && !t.hasFixture
               const chipDisabled = busy || noFixture
+
+              if (noFixture) {
+                // Render as a non-interactive span with dashed border and "local only" tag.
+                return (
+                  <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        border: '1px dashed var(--np-border)',
+                        color: 'var(--np-faint)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        padding: '4px 10px',
+                        cursor: 'default',
+                      }}
+                      onMouseEnter={() => setTooltipIdx(i)}
+                      onMouseLeave={() => setTooltipIdx(null)}
+                      aria-describedby={`chip-tip-${i}`}
+                    >
+                      {t.label}
+                      <span style={{
+                        marginLeft: 6,
+                        fontFamily: 'var(--font-serif)',
+                        fontStyle: 'italic',
+                        fontSize: 10,
+                        color: 'var(--np-faint)',
+                      }}>local only</span>
+                    </span>
+                    {tooltipIdx === i && (
+                      <div
+                        id={`chip-tip-${i}`}
+                        role="tooltip"
+                        style={{
+                          position: 'absolute', top: '100%', left: 0, zIndex: 50,
+                          background: 'var(--np-text)', color: 'var(--np-paper)',
+                          fontFamily: 'var(--font-serif)', fontSize: 12,
+                          padding: '6px 10px', borderRadius: 'var(--r)',
+                          whiteSpace: 'normal', maxWidth: 280, lineHeight: 1.5,
+                          marginTop: 4, pointerEvents: 'none',
+                        }}
+                      >
+                        {t.gloss}
+                        {' Requires the local pipeline — clone the repo to run this target.'}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
               // title attribute used for the native tooltip; describes why the
               // chip is disabled without requiring hover interaction.
-              const chipTitle = noFixture
-                ? `${t.label} requires the deployed backend — no committed fixture exists for this target.`
-                : undefined
               return (
               <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
@@ -393,16 +453,9 @@ function LandingContent() {
                   onFocus={() => setTooltipIdx(i)}
                   onBlur={() => setTooltipIdx(null)}
                   aria-describedby={`chip-tip-${i}`}
-                  title={chipTitle}
                   disabled={chipDisabled}
                 >
                   {t.label}
-                  {noFixture && (
-                    <span
-                      aria-label="no committed fixture"
-                      style={{ marginLeft: 5, fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}
-                    >[no fixture]</span>
-                  )}
                 </button>
                 {tooltipIdx === i && (
                   <div
@@ -418,7 +471,6 @@ function LandingContent() {
                     }}
                   >
                     {t.gloss}
-                    {noFixture && ' Requires the deployed backend — no committed fixture for this target.'}
                   </div>
                 )}
               </div>
