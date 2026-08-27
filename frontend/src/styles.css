@@ -39,6 +39,7 @@
   --font-head:   'Playfair Display', 'Georgia', serif;
   --font-mono:   'JetBrains Mono', 'Menlo', 'Courier New', monospace;
   --font-ui:     system-ui, -apple-system, sans-serif;
+  --font-sans:   system-ui, -apple-system, sans-serif;
 
   /* Spacing */
   --r:    0px;
