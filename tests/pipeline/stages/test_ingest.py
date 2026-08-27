@@ -310,6 +310,59 @@ class TestIngestCache:
         h2 = query_hash("mast:Kepler:Kepler:long:KIC 11904151:sectors=4")
         assert h1 != h2
 
+    @pytest.mark.no_network
+    def test_put_is_atomic_no_partial_file_on_failure(self, tmp_path):
+        """
+        If put() fails partway through writing (simulated by a write error),
+        no partial artifact file is left behind and cache.get() returns None.
+
+        Regression guard for the non-atomic write bug fixed in 2025:
+        previously path.write_bytes(data) wrote directly to the final path,
+        leaving a corrupt file visible to readers on any write failure.
+        """
+        import os
+        import unittest.mock as mock
+        from falsifier.pipeline.ingest.cache import IngestCache
+
+        cache = IngestCache(tmp_path / "cache")
+        query = "mast:Kepler:Kepler:long:KIC 11904151:sectors=3"
+
+        # Simulate an OS-level write error partway through the write
+        original_os_write = os.write
+
+        def _bad_write(fd, data):
+            raise OSError("simulated disk full")
+
+        with mock.patch("falsifier.pipeline.ingest.cache.os.write", _bad_write):
+            with pytest.raises(OSError, match="simulated disk full"):
+                cache.put(
+                    query,
+                    ".fits",
+                    b"fake fits data",
+                    source_doi="10.17909/TEST",
+                    source_url="mast://test",
+                    access_date=__import__("datetime").date.today(),
+                    row_count=10,
+                    description="atomic write test",
+                )
+
+        # No partial artifact or stale sidecar should remain
+        hit = cache.get(query, ".fits")
+        assert hit is None, (
+            "cache.get() returned a hit after a failed put().\n"
+            "put() must not leave a partial file visible to readers."
+        )
+
+        # The cache dir should contain no .fits files (only maybe .tmp leftovers
+        # that get cleaned up — but even those should be gone)
+        qhash = __import__("falsifier.pipeline.ingest.cache", fromlist=["query_hash"]).query_hash(query)
+        artifact_dir = cache._artifact_dir(qhash)
+        if artifact_dir.exists():
+            fits_files = list(artifact_dir.glob("*.fits"))
+            assert fits_files == [], (
+                f"Partial .fits file left behind after failed put(): {fits_files}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Typed exceptions

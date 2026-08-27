@@ -9,7 +9,7 @@
   "time_reference": "BJD - 2454833.0",
   "flux_column": "SAP_FLUX",
   "flux_unit": "e-/s",
-  "access_date": "2026-08-25",
+  "access_date": "2026-08-26",
   "sha256": "93e85344e2a0c4dd745058fdb92310c3fe19a87a8bd142056613df2b2715947c",
   "row_count": 4140,
   "source_doi": "10.17909/T9-NMC8-F686",

@@ -44,6 +44,8 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import os
+import tempfile
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -262,7 +264,27 @@ class IngestCache:
         qhash = query_hash(query)
         path = self.artifact_path(qhash, suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+
+        # Atomic write: write to a temp file in the same directory, then
+        # rename into place.  This ensures that a reader never sees a
+        # partially-written artifact, and that a crash between write and
+        # rename leaves no file for cache.get() to find (the sidecar is
+        # written only after the rename succeeds).
+        tmp_fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=suffix + ".tmp")
+        try:
+            try:
+                os.write(tmp_fd, data)
+            finally:
+                os.close(tmp_fd)
+            os.replace(tmp_name, path)  # atomic on POSIX; best-effort on Windows
+        except BaseException:
+            # Clean up the temp file so it does not linger in the cache
+            # directory and confuse future runs.
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
 
         manifest = write_sidecar(
             path,

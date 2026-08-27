@@ -249,6 +249,11 @@ def fetch_lightcurve(
             warnings.simplefilter("ignore")
             results = lk.search_lightcurve(target_id, **search_kwargs)
     except Exception as exc:
+        log.exception(
+            "lightkurve.search_lightcurve failed for target=%r search_kwargs=%s",
+            target_id,
+            search_kwargs,
+        )
         raise MastFetchError(
             f"lightkurve.search_lightcurve failed: {exc}",
             endpoint=MAST_API_URL,
@@ -307,13 +312,51 @@ def fetch_lightcurve(
 
         log.debug("Downloading %s result %d/%d", target_id, i + 1, len(results))
 
+        # Resolve the product filename for diagnostics before downloading
+        _product_fn: str = "unknown"
+        try:
+            _product_fn = str(
+                result_row.table.get("productFilename", "unknown")
+                if hasattr(result_row, "table") else "unknown"
+            )
+        except Exception:
+            pass
+
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 lc = result_row.download()
         except Exception as exc:
+            # Attempt to measure the file size of any locally cached copy that
+            # lightkurve may have written before raising.
+            _cache_path: str | None = None
+            _cache_size: int | None = None
+            try:
+                import lightkurve as _lk_diag
+                _lk_cache = Path(_lk_diag.conf.cache_dir)
+                # lightkurve names cached files after the product filename
+                _candidate = _lk_cache / _product_fn
+                if _candidate.exists():
+                    _cache_path = str(_candidate)
+                    _cache_size = _candidate.stat().st_size
+            except Exception:
+                pass
+
+            log.exception(
+                "lightkurve download failed  target=%r  item=%d/%d  "
+                "product_filename=%r  cached_path=%s  cached_size_bytes=%s",
+                target_id,
+                i + 1,
+                len(results),
+                _product_fn,
+                _cache_path,
+                _cache_size,
+            )
             raise MastFetchError(
-                f"lightkurve download failed for {target_id!r} item {i}: {exc}",
+                f"lightkurve download failed for {target_id!r} item {i} "
+                f"(product={_product_fn!r}, "
+                f"cached_path={_cache_path!r}, "
+                f"cached_size_bytes={_cache_size!r}): {exc}",
                 endpoint=MAST_API_URL,
                 query=target_id,
             ) from exc

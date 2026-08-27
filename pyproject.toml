@@ -88,4 +88,5 @@ markers = [
     "no_network: block outbound sockets; any network attempt fails immediately.",
     "timeout: per-test wall-clock budget in seconds.",
     "requires_astropy: test requires astropy (and optionally pandas/xgboost/lightkurve); excluded from the fast CI job.",
+    "live_network: test requires a live internet connection to MAST; skip with -m 'not live_network' in offline CI.",
 ]

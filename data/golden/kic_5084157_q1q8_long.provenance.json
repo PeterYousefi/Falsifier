@@ -9,7 +9,7 @@
   "time_reference": "BJD - 2454833.0",
   "flux_column": "SAP_FLUX",
   "flux_unit": "e-/s",
-  "access_date": "2026-08-25",
+  "access_date": "2026-08-26",
   "sha256": "b4a9216328214286f6fe8586df8e0a049dfeb1a1c13b11f560cb64b40de22304",
   "row_count": 26394,
   "source_doi": "10.17909/T9-NMC8-F686",
@@ -46,6 +46,5 @@
     7,
     8
   ],
-  "baseline_days": 670.8,
-  "mast_uri": "mast:Kepler/url/public/lightcurves/0050/005084157/"
+  "baseline_days": 670.8
 }

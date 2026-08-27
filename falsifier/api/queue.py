@@ -322,39 +322,53 @@ async def _run_stage(
     Run *fn* in the thread pool, emit start/done/error events.
     Returns (ok, result_or_exception).
     """
+    import logging as _logging
+    _qlog = _logging.getLogger(__name__)
+
     eq = _event_queues.get(job_id)
+    record = _job_store.get(job_id)
     t0 = loop.time()
 
-    if eq:
-        await eq.put(StageEvent(
-            event="stage_start",
-            stage=stage_name,
-            status="ok",
-            detail=f"{stage_name}: starting",
-        ))
+    def _emit(evt: StageEvent) -> None:
+        """Push event to both the SSE queue and the durable record.events list."""
+        if eq:
+            eq.put_nowait(evt)
+        if record is not None:
+            record.events.append(evt)
+
+    _emit(StageEvent(
+        event="stage_start",
+        stage=stage_name,
+        status="ok",
+        detail=f"{stage_name}: starting",
+    ))
 
     try:
         result = await loop.run_in_executor(_executor, fn)
         elapsed = loop.time() - t0
-        if eq:
-            await eq.put(StageEvent(
-                event="stage_done",
-                stage=stage_name,
-                status="ok",
-                detail=f"{stage_name}: done in {elapsed:.2f}s",
-                elapsed_seconds=elapsed,
-            ))
+        _emit(StageEvent(
+            event="stage_done",
+            stage=stage_name,
+            status="ok",
+            detail=f"{stage_name}: done in {elapsed:.2f}s",
+            elapsed_seconds=elapsed,
+        ))
         return True, result
     except Exception as exc:  # noqa: BLE001
         elapsed = loop.time() - t0
-        if eq:
-            await eq.put(StageEvent(
-                event="stage_error",
-                stage=stage_name,
-                status="error",
-                detail=f"{stage_name}: {type(exc).__name__}: {exc}",
-                elapsed_seconds=elapsed,
-            ))
+        _qlog.exception(
+            "Stage %r failed for job %s after %.2fs",
+            stage_name,
+            job_id,
+            elapsed,
+        )
+        _emit(StageEvent(
+            event="stage_error",
+            stage=stage_name,
+            status="error",
+            detail=f"{stage_name}: {type(exc).__name__}: {exc}",
+            elapsed_seconds=elapsed,
+        ))
         return False, exc
 
 
