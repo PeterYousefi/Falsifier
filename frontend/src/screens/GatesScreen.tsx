@@ -275,13 +275,13 @@ export default function GatesScreen() {
           Every defect found by the project's checking layers before any bad number was committed.
           Each entry states what the defect was, which check caught it, and what would have been
           published without it. Sourced from{' '}
-          <a href="https://github.com/ajdarstudio/Falsifier/blob/main/docs/WHAT_THE_GATES_CAUGHT.md"
+          <a href="https://github.com/PeterYousefi/Falsifier/blob/main/docs/WHAT_THE_GATES_CAUGHT.md"
              target="_blank" rel="noreferrer"
              style={{ color: 'var(--np-accent, #3b82d4)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
             docs/WHAT_THE_GATES_CAUGHT.md ↗
           </a>
           {' and '}
-          <a href="https://github.com/ajdarstudio/Falsifier/blob/main/docs/PROVEN_GATES.md"
+          <a href="https://github.com/PeterYousefi/Falsifier/blob/main/docs/PROVEN_GATES.md"
              target="_blank" rel="noreferrer"
              style={{ color: 'var(--np-accent, #3b82d4)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
             docs/PROVEN_GATES.md ↗
@@ -308,7 +308,7 @@ export default function GatesScreen() {
           <p style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.6, marginBottom: 12 }}>
             For each gate: the exact mutation applied, the file/line that caught it, and verbatim pytest
             failure output. See{' '}
-            <a href="https://github.com/ajdarstudio/Falsifier/blob/main/docs/PROVEN_GATES.md"
+            <a href="https://github.com/PeterYousefi/Falsifier/blob/main/docs/PROVEN_GATES.md"
                target="_blank" rel="noreferrer"
                style={{ color: 'var(--np-accent, #3b82d4)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
               docs/PROVEN_GATES.md ↗

@@ -734,28 +734,56 @@ export default function OrbitalViewer({
     ? 'Planet candidate: a single body transiting the host star'
     : 'Uncertain geometry: disposition is ambiguous or has caveats'
 
-  // ── No pipeline artifact: show empty state identical to the light-curve panel ──
-  // This covers both (a) no vet at all and (b) a fixture-backed report where no
-  // live pipeline run has produced orbital geometry.  Interactive controls that
-  // drive a scene containing only a star are suppressed — they imply something is
-  // being displayed.
+  // ── No pipeline artifact: show a deliberate absence indicator ──────────────
+  // Two states:
+  //   !vet         → job has not run yet (NOT YET RUN)
+  //   isFixture    → job ran against a fixture; no trained classifier produced
+  //                  orbital geometry (ARTIFACT ABSENT)
+  // The Play button and scrubber are removed — they imply a populated scene.
+  // Their accessible labels are preserved in the status chip's aria-label.
   if (!vet || isFixture) {
+    const statusLabel = !vet ? 'NOT YET RUN' : 'ARTIFACT ABSENT'
+    const ariaDesc = !vet
+      ? 'Orbital diagram: not yet run. Submit a target to generate the diagram.'
+      : 'Orbital diagram: artifact absent. Play animation and phase scrubber are unavailable — no trained classifier artifact exists.'
     return (
       <div>
-        <figure style={{ margin: 0 }}>
+        <figure style={{ margin: 0 }} aria-label={ariaDesc}>
           <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '0 0 8px' }} />
-          <div style={{
-            height: 340,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--np-surface)',
-            border: '1px solid var(--np-border)',
-          }}>
-            <span className="disclaimer-secondary" style={{ textAlign: 'center', maxWidth: 320, marginTop: 0 }}>
+          <div
+            role="status"
+            aria-label={ariaDesc}
+            style={{
+              padding: '18px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+              background: 'transparent',
+              border: '1px dashed var(--np-rule)',
+            }}
+          >
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              color: 'var(--np-muted)',
+              border: '1px solid var(--np-rule)',
+              padding: '2px 8px',
+            }}>
+              {statusLabel}
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-serif)',
+              fontSize: 12,
+              color: 'var(--np-muted)',
+              textAlign: 'center',
+              maxWidth: 340,
+              lineHeight: 1.5,
+            }}>
               {!vet
-                ? 'Run a target above to see the orbital diagram.'
-                : 'Orbital diagram unavailable — see fixture notice above.'}
+                ? 'Submit a target above to generate the orbital geometry diagram.'
+                : 'No trained classifier artifact exists — orbital geometry cannot be computed. This is expected for fixture-backed reports.'}
             </span>
           </div>
           <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '8px 0 4px' }} />
@@ -770,40 +798,10 @@ export default function OrbitalViewer({
             lineHeight: 1.5,
             marginBottom: 8,
           }}>
-            Orbital diagram — no pipeline artifact present.
+            Orbital diagram — {!vet ? 'no pipeline run has been submitted' : 'no pipeline artifact present'}.
           </figcaption>
         </figure>
 
-        {/* Controls — disabled */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 12px', opacity: 0.4, pointerEvents: 'none' }}>
-          <button
-            disabled
-            style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11,
-              padding: '4px 12px',
-              border: '1px solid var(--np-rule)',
-              background: 'var(--np-surface)',
-              color: 'var(--np-muted)',
-              letterSpacing: '0.05em',
-            }}
-            aria-label="Play animation — unavailable"
-            aria-disabled="true"
-          >
-            ▶ Play
-          </button>
-          <input
-            type="range"
-            min={-0.5}
-            max={0.5}
-            step={0.002}
-            value={0}
-            readOnly
-            disabled
-            style={{ flex: 1, maxWidth: 200, accentColor: 'var(--rust)' }}
-            aria-label="Scrub animation phase — unavailable"
-            aria-disabled="true"
-          />
-        </div>
 
         {/* Folded LC label — no dangling marker caption when no LC data */}
         {vet && (

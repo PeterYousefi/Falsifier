@@ -24,6 +24,10 @@ interface AppState {
   // Target / job state
   targetId: string
   setTargetId: (v: string) => void
+  mission: string
+  setMission: (v: string) => void
+  cadence: string
+  setCadence: (v: string) => void
   jobId: string | null
   jobStatus: string | null
   report: DetectionReport | null
@@ -84,6 +88,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   targetId: '',
   setTargetId: (v) => set({ targetId: v }),
+  mission: 'Kepler',
+  setMission: (v) => set({ mission: v }),
+  cadence: 'long',
+  setCadence: (v) => set({ cadence: v }),
   jobId: null,
   jobStatus: null,
   report: null,

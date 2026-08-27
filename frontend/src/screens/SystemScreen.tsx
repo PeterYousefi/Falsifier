@@ -43,9 +43,12 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
   defaultMission?: string
   defaultCadence?: string
 }) {
-  const { targetId, setTargetId, isSubmitting, jobStatus, jobError, submitJob, progressStage, progressElapsed } = useStore()
-  const [mission, setMission] = useState(defaultMission ?? 'Kepler')
-  const [cadence, setCadence] = useState(defaultCadence ?? 'long')
+  const {
+    targetId, setTargetId,
+    mission, setMission,
+    cadence, setCadence,
+    isSubmitting, jobStatus, jobError, submitJob, progressStage, progressElapsed,
+  } = useStore()
   const busy = isSubmitting || jobStatus === 'running' || jobStatus === 'queued'
   // D4: form controls are non-functional when the backend is not deployed.
   const backendAbsent = isFixtureMode
@@ -208,12 +211,14 @@ const DEMO_VIDEO_URL = '__DEMO_VIDEO_URL__'
 
 // ── Landing page content ──────────────────────────────────────────────────
 function LandingContent() {
-  const { setTargetId, submitJob, setActiveScreen, jobStatus, isSubmitting } = useStore()
+  const { setTargetId, setMission, setCadence, submitJob, setActiveScreen, jobStatus, isSubmitting } = useStore()
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null)
 
   const runExample = () => {
     const ex = EXAMPLE_TARGETS[0]
     setTargetId(ex.id)
+    setMission(ex.mission)
+    setCadence(ex.cadence)
     submitJob(ex.id, ex.mission, ex.cadence)
     setActiveScreen('detail')
   }
@@ -366,25 +371,38 @@ function LandingContent() {
               // run — disable them so users aren't left with a spinner.
               // In live mode: all chips run the real pipeline — never disabled
               // because of missing fixture.
-              const chipDisabled = busy || (isFixtureMode && !t.hasFixture)
-              // Normalise the target ID to check for a fixture; if none exists
-              // in fixture mode, show a hint in the tooltip.
-              const noFixtureHint = isFixtureMode && !t.hasFixture
-                ? ' (live mode only — no committed fixture)'
-                : ''
+              const noFixture = isFixtureMode && !t.hasFixture
+              const chipDisabled = busy || noFixture
+              // title attribute used for the native tooltip; describes why the
+              // chip is disabled without requiring hover interaction.
+              const chipTitle = noFixture
+                ? `${t.label} requires the deployed backend — no committed fixture exists for this target.`
+                : undefined
               return (
               <div key={t.id} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   className="target-chip"
-                  onClick={() => { setTargetId(t.id); submitJob(t.id, t.mission, t.cadence) }}
+                  onClick={() => {
+                    setTargetId(t.id)
+                    setMission(t.mission)
+                    setCadence(t.cadence)
+                    submitJob(t.id, t.mission, t.cadence)
+                  }}
                   onMouseEnter={() => setTooltipIdx(i)}
                   onMouseLeave={() => setTooltipIdx(null)}
                   onFocus={() => setTooltipIdx(i)}
                   onBlur={() => setTooltipIdx(null)}
                   aria-describedby={`chip-tip-${i}`}
+                  title={chipTitle}
                   disabled={chipDisabled}
                 >
                   {t.label}
+                  {noFixture && (
+                    <span
+                      aria-label="no committed fixture"
+                      style={{ marginLeft: 5, fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}
+                    >[no fixture]</span>
+                  )}
                 </button>
                 {tooltipIdx === i && (
                   <div
@@ -399,7 +417,8 @@ function LandingContent() {
                       marginTop: 4, pointerEvents: 'none',
                     }}
                   >
-                    {t.gloss}{noFixtureHint}
+                    {t.gloss}
+                    {noFixture && ' Requires the deployed backend — no committed fixture for this target.'}
                   </div>
                 )}
               </div>

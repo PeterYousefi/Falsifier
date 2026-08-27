@@ -431,8 +431,9 @@ export default function CandidateDetail() {
                 Phase-folded light curve for <span style={{ fontFamily: 'var(--font-mono)' }}>{vetResult.tce_id}</span>,
                 plotted point-by-point from <span style={{ fontFamily: 'var(--font-mono)' }}>report.vet[].phased_lc</span>.
                 Each point is one binned observation; flux is normalised to the out-of-transit baseline.
-                A genuine limb-darkened planet transit appears as a U-shaped dip with a curved floor, symmetric about phase zero.
-                An empty panel here means no phased light curve is present in the artifact — the pipeline has not run.
+                {vetResult.phased_lc?.phase?.length
+                  ? ' A genuine limb-darkened planet transit appears as a U-shaped dip with a curved floor, symmetric about phase zero.'
+                  : ' An empty panel here means no phased light curve is present in the artifact — the pipeline has not run.'}
               </figcaption>
             </figure>
 

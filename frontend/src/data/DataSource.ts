@@ -57,6 +57,22 @@ import fixtureEvents from '../fixtures/events.json'
 import fixtureChat from '../fixtures/chat.json'
 import fixtureTraining from '../fixtures/training.json'
 
+/**
+ * Thrown by FixtureDataSource when a requested target has no committed
+ * fixture artifact.  The message names the target and lists identifiers
+ * that can actually be served, so the caller can surface a useful error.
+ */
+export class NoFixtureError extends Error {
+  constructor(target_id: string) {
+    const available = Object.keys(_FIXTURE_MAP).join(', ')
+    super(
+      `No committed fixture for "${target_id}". ` +
+      `Fixture mode can serve: ${available}.`
+    )
+    this.name = 'NoFixtureError'
+  }
+}
+
 // Maps normalised target IDs to their committed fixtures.
 // Only targets with a committed fixture file are listed here.
 const _FIXTURE_MAP: Record<string, unknown> = {
@@ -68,26 +84,45 @@ const _FIXTURE_MAP: Record<string, unknown> = {
   'kic6965293':   fixtureJobEB,
 }
 
-function _jobForTarget(target_id: string): unknown {
-  const key = target_id.trim().toLowerCase()
-  return _FIXTURE_MAP[key] ?? fixtureJob
+/** Normalise a target identifier the same way _normAlias does in SystemScreen. */
+function _normKey(target_id: string): string {
+  return target_id.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Return the committed fixture for target_id, or null if none exists.
+ * Never falls back to another target's artifact.
+ */
+function _jobForTarget(target_id: string): unknown | null {
+  const key = _normKey(target_id)
+  return _FIXTURE_MAP[key] ?? null
+}
+
+/** Committed job_id values, keyed for O(1) lookup by getJob. */
+const _FIXTURE_BY_JOB_ID: Record<string, unknown> = {
+  [(fixtureJob as any).job_id]:   fixtureJob,
+  [(fixtureJobEB as any).job_id]: fixtureJobEB,
 }
 
 export class FixtureDataSource implements DataSource {
   async submitJob(params: SubmitJobParams): Promise<string> {
     // Simulate async submission
     await _delay(180)
-    const job = _jobForTarget(params.target_id) as { job_id: string }
-    return job.job_id
+    const job = _jobForTarget(params.target_id)
+    if (job === null) throw new NoFixtureError(params.target_id)
+    return (job as { job_id: string }).job_id
   }
 
   async getJob(job_id: string): Promise<JobRecord> {
     await _delay(80)
-    // Allow lookup by job_id for the EB fixture as well
-    if (job_id === (fixtureJobEB as any).job_id) {
-      return fixtureJobEB as unknown as JobRecord
+    const record = _FIXTURE_BY_JOB_ID[job_id]
+    if (!record) {
+      throw new Error(
+        `No fixture record for job_id "${job_id}". ` +
+        `Known fixture jobs: ${Object.keys(_FIXTURE_BY_JOB_ID).join(', ')}.`
+      )
     }
-    return fixtureJob as unknown as JobRecord
+    return record as unknown as JobRecord
   }
 
   streamJob(
@@ -352,7 +387,7 @@ export const isFixtureMode: boolean = _mode !== 'api'
 // ---------------------------------------------------------------------------
 // Re-export for use in store and screens that need a target-aware fixture job
 // ---------------------------------------------------------------------------
-export { _jobForTarget as getFixtureJobForTarget }
+export { _jobForTarget as getFixtureJobForTarget, _normKey as normaliseFixtureKey }
 
 // ---------------------------------------------------------------------------
 // Helpers

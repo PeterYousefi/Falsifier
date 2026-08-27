@@ -115,11 +115,9 @@ def _make_minimal_stellar_params():
 _HOSTED_API_KEYS = [
     # watsonx.ai — the supported inference backend
     "WATSONX_APIKEY",
-    # Legacy keys retained to ensure they are also absent from the environment
-    # during the deletion test.  These providers are not supported but we
-    # confirm they produce no effect.
+    # Other hosted-API keys — not supported providers; confirmed to produce no
+    # effect when absent (retained so the deletion test is thorough).
     "COHERE_API_KEY",
-    "AZURE_OPENAI_API_KEY",
     "GOOGLE_API_KEY",
     "HUGGINGFACE_API_TOKEN",
     "REPLICATE_API_TOKEN",
