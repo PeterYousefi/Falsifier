@@ -625,6 +625,9 @@ export default function OrbitalViewer({
   stellarParams,
   jobId,
   isFixture,
+  jobStatus,
+  progressStage,
+  jobError,
 }: {
   vet: VetResult | null | undefined
   stellarParams: StellarParams | null | undefined
@@ -632,6 +635,12 @@ export default function OrbitalViewer({
   /** When true the report is fixture-backed, not a live pipeline artifact.
    *  The 3D scene is suppressed (same policy as the light-curve panel). */
   isFixture?: boolean
+  /** Current job status — drives the three-state placeholder (never-run / running / failed). */
+  jobStatus?: string | null
+  /** The pipeline stage currently executing, sourced from SSE stage_start events. */
+  progressStage?: string | null
+  /** Error message when jobStatus === 'failed' — shown with a collapsible raw-detail toggle. */
+  jobError?: string | null
 }) {
   const { teffK, radiusRsun } = useMemo(
     () => extractStellarParams(stellarParams),
@@ -734,18 +743,65 @@ export default function OrbitalViewer({
     ? 'Planet candidate: a single body transiting the host star'
     : 'Uncertain geometry: disposition is ambiguous or has caveats'
 
-  // ── No pipeline artifact: show a deliberate absence indicator ──────────────
-  // Two states:
-  //   !vet         → job has not run yet (NOT YET RUN)
-  //   isFixture    → job ran against a fixture; no trained classifier produced
-  //                  orbital geometry (ARTIFACT ABSENT)
+  // ── No live pipeline artifact: three-state placeholder ────────────────────
+  //
+  //   State A — never run: no job has been submitted (jobId is null, vet is null)
+  //   State B — running:   a job is in-flight; show which stage is active
+  //   State C — failed:    the job errored; show a user-facing message with
+  //                        a collapsible raw-detail toggle
+  //   State D — fixture:   job ran against a fixture; orbital geometry absent
+  //
   // The Play button and scrubber are removed — they imply a populated scene.
-  // Their accessible labels are preserved in the status chip's aria-label.
   if (!vet || isFixture) {
-    const statusLabel = !vet ? 'NOT YET RUN' : 'ARTIFACT ABSENT'
-    const ariaDesc = !vet
+    const isRunning = (jobStatus === 'running' || jobStatus === 'queued') && !isFixture
+    const isFailed  = jobStatus === 'failed' && !isFixture
+
+    // Staged pipeline labels for the running state — no scientific values (Rule 1)
+    const STAGE_LABELS: Record<string, string> = {
+      ingest:   'Stage 1 of 5 — fetching light curve data from archive',
+      detrend:  'Stage 2 of 5 — detrending stellar variability',
+      search:   'Stage 3 of 5 — running Transit Least Squares search',
+      vet:      'Stage 4 of 5 — running seven vetting tests',
+      classify: 'Stage 5 of 5 — computing ranking score',
+    }
+    const stageLabel = progressStage
+      ? (STAGE_LABELS[progressStage] ?? `Running — ${progressStage}`)
+      : 'Pipeline starting…'
+
+    // Error message: strip Python exception class prefix (everything before ': ')
+    // to surface only the human-readable portion, per the defect report.
+    const errorSummary: string = (() => {
+      if (!jobError) return 'The pipeline run did not complete.'
+      // Remove leading "ExceptionClass: " prefix if present, e.g.
+      //   "MastFetchError: lightkurve download failed…" → "lightkurve download failed…"
+      // Stop at the first newline (stack trace begins there).
+      const firstLine = jobError.split('\n')[0] ?? jobError
+      const colonIdx = firstLine.indexOf(': ')
+      const cleaned = colonIdx > 0 ? firstLine.slice(colonIdx + 2) : firstLine
+      return cleaned.trim() || 'The pipeline run did not complete.'
+    })()
+
+    // Determine chip label and body text (no scientific literals — Rule 1)
+    const statusLabel = isRunning  ? 'RUNNING'
+      : isFailed   ? 'FAILED'
+      : !vet       ? 'NOT YET RUN'
+      :              'ARTIFACT ABSENT'
+
+    const ariaDesc = isRunning
+      ? `Orbital diagram: pipeline running — ${stageLabel}`
+      : isFailed
+      ? `Orbital diagram: pipeline failed — ${errorSummary}`
+      : !vet
       ? 'Orbital diagram: not yet run. Submit a target to generate the diagram.'
-      : 'Orbital diagram: artifact absent. Play animation and phase scrubber are unavailable — no trained classifier artifact exists.'
+      : 'Orbital diagram: artifact absent. No trained classifier artifact exists.'
+
+    // Error details toggle — state local to this render path
+    const [showDetail, setShowDetail] = useState(false)
+
+    const chipColor = isRunning ? 'var(--np-accent, #3b82d4)'
+      : isFailed ? 'var(--fail, #b0220a)'
+      : 'var(--np-muted)'
+
     return (
       <div>
         <figure style={{ margin: 0 }} aria-label={ariaDesc}>
@@ -753,6 +809,7 @@ export default function OrbitalViewer({
           <div
             role="status"
             aria-label={ariaDesc}
+            aria-live={isRunning ? 'polite' : undefined}
             style={{
               padding: '18px 24px',
               display: 'flex',
@@ -760,31 +817,125 @@ export default function OrbitalViewer({
               alignItems: 'center',
               gap: 8,
               background: 'transparent',
-              border: '1px dashed var(--np-rule)',
+              border: `1px ${isFailed ? 'solid' : 'dashed'} var(--np-rule)`,
+              borderLeft: isFailed ? '3px solid var(--fail, #b0220a)' : undefined,
             }}
           >
+            {/* Status chip */}
             <span style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 11,
               letterSpacing: '0.08em',
-              color: 'var(--np-muted)',
-              border: '1px solid var(--np-rule)',
+              color: chipColor,
+              border: `1px solid ${isFailed ? 'var(--fail, #b0220a)' : 'var(--np-rule)'}`,
               padding: '2px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
             }}>
+              {isRunning && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: 'var(--np-accent, #3b82d4)',
+                    animation: 'pulse 1.4s ease-in-out infinite',
+                  }}
+                  aria-hidden="true"
+                />
+              )}
               {statusLabel}
             </span>
-            <span style={{
-              fontFamily: 'var(--font-serif)',
-              fontSize: 12,
-              color: 'var(--np-muted)',
-              textAlign: 'center',
-              maxWidth: 340,
-              lineHeight: 1.5,
-            }}>
-              {!vet
-                ? 'Submit a target above to generate the orbital geometry diagram.'
-                : 'No trained classifier artifact exists — orbital geometry cannot be computed. This is expected for fixture-backed reports.'}
-            </span>
+
+            {/* Body text — three states, no invented values */}
+            {isRunning && (
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--np-muted)',
+                textAlign: 'center',
+                maxWidth: 380,
+                lineHeight: 1.6,
+              }}>
+                {stageLabel}
+              </span>
+            )}
+
+            {isFailed && (
+              <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
+                <p style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 13,
+                  color: 'var(--np-muted)',
+                  lineHeight: 1.55,
+                  margin: '0 0 6px',
+                }}>
+                  {errorSummary}
+                </p>
+                {/* Collapsible raw detail — keeps exception strings off the main surface */}
+                {jobError && jobError !== errorSummary && (
+                  <div>
+                    <button
+                      onClick={() => setShowDetail((v) => !v)}
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        letterSpacing: '0.05em',
+                        color: 'var(--np-muted)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px 0',
+                        textDecoration: 'underline',
+                      }}
+                      aria-expanded={showDetail}
+                      aria-controls="orbital-error-detail"
+                    >
+                      {showDetail ? '▲ hide details' : '▼ show details'}
+                    </button>
+                    {showDetail && (
+                      <pre
+                        id="orbital-error-detail"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          color: 'var(--np-muted)',
+                          background: 'var(--np-surface)',
+                          border: '1px solid var(--np-rule)',
+                          padding: '8px 10px',
+                          marginTop: 6,
+                          textAlign: 'left',
+                          overflowX: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
+                          maxHeight: 160,
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {jobError}
+                      </pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isRunning && !isFailed && (
+              <span style={{
+                fontFamily: 'var(--font-serif)',
+                fontSize: 12,
+                color: 'var(--np-muted)',
+                textAlign: 'center',
+                maxWidth: 340,
+                lineHeight: 1.5,
+              }}>
+                {!vet
+                  ? 'Submit a target above to generate the orbital geometry diagram.'
+                  : 'No trained classifier artifact exists — orbital geometry cannot be computed. This is expected for fixture-backed reports.'}
+              </span>
+            )}
           </div>
           <hr style={{ border: 'none', borderTop: '1px solid var(--np-text)', margin: '8px 0 4px' }} />
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.10em', color: 'var(--np-muted)', textTransform: 'uppercase', marginBottom: 3 }}>
@@ -798,12 +949,17 @@ export default function OrbitalViewer({
             lineHeight: 1.5,
             marginBottom: 8,
           }}>
-            Orbital diagram — {!vet ? 'no pipeline run has been submitted' : 'no pipeline artifact present'}.
+            {isRunning
+              ? `Orbital diagram — pipeline in progress.`
+              : isFailed
+              ? `Orbital diagram — pipeline did not complete.`
+              : !vet
+              ? 'Orbital diagram — no pipeline run has been submitted.'
+              : 'Orbital diagram — no pipeline artifact present.'}
           </figcaption>
         </figure>
 
-
-        {/* Folded LC label — no dangling marker caption when no LC data */}
+        {/* Folded LC — only rendered when vet data is available (fixture path) */}
         {vet && (
           <div style={{ marginBottom: 4 }}>
             <div style={{

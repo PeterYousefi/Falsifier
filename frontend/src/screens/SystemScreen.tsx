@@ -32,10 +32,78 @@ const FIXTURE_DISPLAY_NAME = 'Kepler-10 (KIC 11904151)'
 
 const EXAMPLE_TARGETS = [
   { id: 'KIC 11904151', mission: 'Kepler',  cadence: 'long',  label: 'Kepler-10 (KIC 11904151)', hasFixture: true, gloss: 'Kepler-10 (KIC 11904151) — a star in NASA\'s Kepler Input Catalogue, hosting the confirmed planet Kepler-10b' },
-  { id: 'TIC 150428135', mission: 'TESS',   cadence: 'long',  label: 'TOI-700 (TESS)',             hasFixture: false, gloss: 'TOI-700 — a star observed by NASA\'s TESS satellite, hosting planet candidates in its habitable zone' },
-  { id: 'TIC 200322593', mission: 'TESS',   cadence: 'long',  label: 'TRAPPIST-1 (TESS)',          hasFixture: false, gloss: 'TRAPPIST-1 — an ultra-cool dwarf star hosting seven confirmed planets, observed by NASA\'s TESS satellite' },
+  // TOI-700 and TRAPPIST-1 have no TESS long-cadence (30-min) SPOC products.
+  // Their SPOC data is short-cadence (2-min) only — cadence='long' returns zero
+  // results and produces a misleading "try a different mission" error.
+  { id: 'TIC 150428135', mission: 'TESS',   cadence: 'short', label: 'TOI-700 (TESS)',             hasFixture: false, gloss: 'TOI-700 — a star observed by NASA\'s TESS satellite, hosting planet candidates in its habitable zone. Short cadence (2 min).' },
+  { id: 'TIC 200322593', mission: 'TESS',   cadence: 'short', label: 'TRAPPIST-1 (TESS)',          hasFixture: false, gloss: 'TRAPPIST-1 — an ultra-cool dwarf star hosting seven confirmed planets, observed by NASA\'s TESS satellite. Short cadence (2 min).' },
   { id: 'KIC 6965293',   mission: 'Kepler', cadence: 'long',  label: 'KIC 6965293 (Kepler EB)',    hasFixture: true, gloss: 'KIC 6965293 — a star in the Kepler Input Catalogue; its signal is an eclipsing binary (not a planet). Has committed fixture.' },
 ]
+
+// ── Error banner — user-facing summary with collapsible raw detail ─────────
+// Strips the Python exception class prefix ("MastFetchError: …") so only the
+// human-readable portion is shown at top level.  The raw string is available
+// behind a disclosure button.  No scientific values are rendered (Rule 1).
+function ErrorBanner({ jobError }: { jobError: string }) {
+  const [showDetail, setShowDetail] = useState(false)
+
+  // Strip "ExceptionClass: " prefix and stop at first newline.
+  const firstLine = jobError.split('\n')[0] ?? jobError
+  const colonIdx = firstLine.indexOf(': ')
+  const summary = (colonIdx > 0 ? firstLine.slice(colonIdx + 2) : firstLine).trim()
+    || 'The pipeline run did not complete.'
+
+  const hasDetail = jobError !== summary
+
+  return (
+    <div role="alert" aria-live="assertive" style={{
+      marginTop: 8, padding: '8px 12px',
+      background: 'var(--np-surface)',
+      border: '1px solid var(--np-rule)',
+      borderLeft: '3px solid var(--fail)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fail)', letterSpacing: '0.06em', flexShrink: 0 }}>
+          PIPELINE ERROR
+        </strong>
+        <span style={{ fontFamily: 'var(--font-serif)', fontSize: 13, color: 'var(--np-muted)', lineHeight: 1.55 }}>
+          {summary}
+        </span>
+      </div>
+      {hasDetail && (
+        <div style={{ marginTop: 4 }}>
+          <button
+            onClick={() => setShowDetail((v) => !v)}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              letterSpacing: '0.05em', color: 'var(--np-muted)',
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '2px 0', textDecoration: 'underline',
+            }}
+            aria-expanded={showDetail}
+            aria-controls="error-banner-detail"
+          >
+            {showDetail ? '▲ hide details' : '▼ show details'}
+          </button>
+          {showDetail && (
+            <pre
+              id="error-banner-detail"
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10,
+                color: 'var(--np-muted)', background: 'var(--np-surface)',
+                border: '1px solid var(--np-rule)', padding: '6px 8px',
+                marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                overflowX: 'auto', maxHeight: 160, overflowY: 'auto',
+              }}
+            >
+              {jobError}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Target search form ─────────────────────────────────────────────────────
 function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
@@ -154,21 +222,9 @@ function TargetForm({ defaultTarget, defaultMission, defaultCadence }: {
         </div>
       )}
 
-      {/* Error display — surfaces ingest / network errors immediately */}
+      {/* Error display — user-facing summary + collapsible raw detail */}
       {jobStatus === 'failed' && jobError && (
-        <div role="alert" aria-live="assertive" style={{
-          marginTop: 8, padding: '8px 12px',
-          background: 'var(--np-surface)',
-          border: '1px solid var(--np-rule)',
-          borderLeft: '3px solid var(--fail)',
-          fontFamily: 'var(--font-serif)', fontSize: 13,
-          color: 'var(--np-muted)', lineHeight: 1.55,
-        }}>
-          <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fail)', letterSpacing: '0.06em' }}>
-            PIPELINE ERROR
-          </strong>
-          {' '}{jobError}
-        </div>
+        <ErrorBanner jobError={jobError} />
       )}
     </div>
   )
@@ -494,30 +550,37 @@ function LandingContent() {
 
 // ── Orbital figure (used after running a job) ─────────────────────────────
 function OrbitalFigure() {
-  const { report, jobStatus, selectedTceId } = useStore()
-  if (!report) return null
+  const { report, jobStatus, jobError, progressStage, targetId, jobId, selectedTceId } = useStore()
 
-  const vets = report.vet ?? []
+  // While a job is actively running (or has failed without a report yet),
+  // render the viewer with no vet data so it shows the RUNNING / FAILED state.
+  // Once the report arrives the vet data populates the scene normally.
+  const isInFlight = (jobStatus === 'running' || jobStatus === 'queued') && !report
+  const isFailedNoReport = jobStatus === 'failed' && !report
+
+  if (!report && !isInFlight && !isFailedNoReport) return null
+
+  const vets = report?.vet ?? []
   const activeVet = vets.find((v) => v.tce_id === selectedTceId) ?? vets[0] ?? null
+  const displayTarget = report?.target_id ?? targetId
 
   return (
     <div className="page-body" style={{ paddingTop: 0 }}>
     <hr className="rule-hair" />
     <div className="section-label" style={{ marginBottom: 12 }}>
-      Orbital system — {report.target_id}
-      {/* D2: only show the job-status chip while a job is actively running.
-          Do not show "DONE" (green) alongside the "no pipeline artifact" message
-          — the orbital diagram is absent precisely because the job served a
-          fixture, not a live pipeline result. */}
+      {displayTarget ? `Orbital system — ${displayTarget}` : 'Orbital system'}
       {jobStatus && jobStatus !== 'done' && (
         <span className={`job-status-badge ${jobStatus}`} style={{ marginLeft: 10 }}>{jobStatus}</span>
       )}
     </div>
       <OrbitalViewer
         vet={activeVet}
-        stellarParams={report.stellar_params}
-        jobId={report.job_id}
-        isFixture={!!report.fixture_provenance}
+        stellarParams={report?.stellar_params}
+        jobId={report?.job_id ?? jobId}
+        isFixture={!!report?.fixture_provenance}
+        jobStatus={jobStatus}
+        progressStage={progressStage}
+        jobError={jobError}
       />
     </div>
   )

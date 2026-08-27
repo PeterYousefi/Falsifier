@@ -2,10 +2,20 @@
  * src/store.ts
  * Central Zustand store — no scientific literals allowed (AGENTS.md Rule 1).
  * All displayed values come from API responses / fixture artifacts.
+ *
+ * Job-id persistence
+ * ------------------
+ * The active jobId is written to sessionStorage under SESSION_JOB_KEY
+ * whenever it changes, and cleared when a new job starts or when the job
+ * completes with an error.  On mount (App.tsx useEffect) the persisted value
+ * is read back via rehydrateJob(), which calls GET /jobs/{id} and, if the job
+ * is still running, attaches a new SSE stream.
  */
 import { create } from 'zustand'
-import { dataSource } from './data/DataSource'
+import { dataSource, isFixtureMode } from './data/DataSource'
 import type { DetectionReport, ProvenanceReport, StageEvent, ChatMessage } from './data/types'
+
+export const SESSION_JOB_KEY = 'falsifier_active_job_id'
 
 interface ConsoleEntry {
   ts: string
@@ -64,6 +74,12 @@ interface AppState {
   // Actions
   submitJob: (targetId: string, mission: string, cadence: string) => Promise<void>
   loadProvenance: () => Promise<void>
+  /**
+   * On mount: if sessionStorage has a persisted jobId, fetch its current state
+   * from GET /jobs/{id} and reattach a stream when the job is still in-flight.
+   * Called once from App.tsx useEffect — idempotent if jobId is already set.
+   */
+  rehydrateJob: () => Promise<void>
   /** @deprecated loadFixtureJob is no longer called automatically.
    *  Kept for backward compatibility; call explicitly to pre-load fixture data. */
   loadFixtureJob: () => Promise<void>
@@ -131,6 +147,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   submitJob: async (targetId, mission, cadence) => {
     const { pushConsoleLine, replaceLastConsole } = get()
+    // Clear any persisted job before starting a new one
+    try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
     set({
       isSubmitting: true,
       jobId: null,
@@ -145,8 +163,10 @@ export const useStore = create<AppState>((set, get) => ({
     pushConsoleLine({ ts: ts(), method: 'POST', url: '/jobs', status: null, ms: null, pending: true })
 
     try {
-      const jobId = await dataSource.submitJob({ target_id: targetId, mission, author: mission, cadence })
+      const jobId = await dataSource.submitJob({ target_id: targetId, mission, cadence })
       replaceLastConsole({ status: 202, ms: Math.round(performance.now() - t0) })
+      // Persist job_id so a page reload can resume streaming
+      try { sessionStorage.setItem(SESSION_JOB_KEY, jobId) } catch (_) {}
       set({ jobId, jobStatus: 'queued', isSubmitting: false })
 
       pushConsoleLine({ ts: ts(), method: 'SSE', url: `/jobs/${jobId}/stream`, status: null, ms: null, pending: true })
@@ -179,10 +199,13 @@ export const useStore = create<AppState>((set, get) => ({
           if (panel && evt.event === 'stage_done') get().setHighlightedPanel(panel)
           if (evt.event === 'job_done') {
             set({ jobStatus: 'done', progressStage: null })
+            // Job is complete — no need to persist the id further
+            try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
           }
           if (evt.event === 'job_failed') {
             // Extract the error detail from the event for user-facing display
             set({ jobStatus: 'failed', jobError: evt.detail, progressStage: null })
+            try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
           }
         },
         async () => {
@@ -199,6 +222,100 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = err instanceof Error ? err.message : String(err)
       replaceLastConsole({ status: 'ERR', ms: Math.round(performance.now() - t0) })
       set({ isSubmitting: false, jobStatus: 'failed', jobError: msg, progressStage: null })
+      try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
+    }
+  },
+
+  rehydrateJob: async () => {
+    // Do not rehydrate if a job is already loaded in this session
+    if (get().jobId) return
+    // In fixture mode there is no live backend — skip silently
+    if (isFixtureMode) return
+
+    let storedId: string | null = null
+    try { storedId = sessionStorage.getItem(SESSION_JOB_KEY) } catch (_) {}
+    if (!storedId) return
+
+    try {
+      const record = await dataSource.getJob(storedId)
+      if (record.status === 'done') {
+        // Job finished while we were away — restore the report silently
+        try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
+        set({
+          jobId: record.job_id,
+          jobStatus: 'done',
+          report: record.report ?? null,
+          targetId: record.request?.target_id ?? '',
+          mission: record.request?.mission ?? 'Kepler',
+          cadence: record.request?.cadence ?? 'long',
+        })
+        return
+      }
+      if (record.status === 'failed') {
+        try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
+        set({
+          jobId: record.job_id,
+          jobStatus: 'failed',
+          jobError: record.error ?? 'Pipeline run failed.',
+          targetId: record.request?.target_id ?? '',
+          mission: record.request?.mission ?? 'Kepler',
+          cadence: record.request?.cadence ?? 'long',
+        })
+        return
+      }
+
+      // Job is still running (queued / running) — restore state and reattach stream
+      set({
+        jobId: record.job_id,
+        jobStatus: record.status,
+        targetId: record.request?.target_id ?? '',
+        mission: record.request?.mission ?? 'Kepler',
+        cadence: record.request?.cadence ?? 'long',
+        // Replay any events already stored in the job record
+        stageEvents: record.events ?? [],
+        progressStage: (() => {
+          const evts = record.events ?? []
+          const last = [...evts].reverse().find(e => e.event === 'stage_start' || e.event === 'stage_done')
+          return last?.stage ?? null
+        })(),
+      })
+
+      const { pushConsoleLine, replaceLastConsole } = get()
+      const sseT0 = performance.now()
+      pushConsoleLine({ ts: ts(), method: 'SSE', url: `/jobs/${record.job_id}/stream`, status: null, ms: null, pending: true })
+
+      dataSource.streamJob(
+        record.job_id,
+        (evt) => {
+          set((s) => ({ stageEvents: [...s.stageEvents, evt] }))
+          if (evt.event === 'stage_start') {
+            set({ progressStage: evt.stage, progressElapsed: null })
+          } else if (evt.event === 'stage_done') {
+            set({ progressStage: evt.stage, progressElapsed: evt.elapsed_seconds })
+          } else if (evt.event === 'stage_error') {
+            set({ progressStage: evt.stage, progressElapsed: evt.elapsed_seconds })
+          }
+          if (evt.event === 'job_done') {
+            set({ jobStatus: 'done', progressStage: null })
+            try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
+          }
+          if (evt.event === 'job_failed') {
+            set({ jobStatus: 'failed', jobError: evt.detail, progressStage: null })
+            try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
+          }
+        },
+        async () => {
+          replaceLastConsole({ status: 200, ms: Math.round(performance.now() - sseT0) })
+          try {
+            const rec = await dataSource.getJob(record.job_id)
+            if (rec.report) set({ report: rec.report })
+            if (rec.error) set({ jobError: rec.error })
+          } catch (_) {}
+        },
+      )
+    } catch (_) {
+      // Backend unreachable or job id stale — clear the persisted key silently
+      try { sessionStorage.removeItem(SESSION_JOB_KEY) } catch (_) {}
     }
   },
 

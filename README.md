@@ -70,6 +70,7 @@ A candidate that survives is one that could not be killed.
 | Phase-zero t0 convention | `phased_lc` constructed with t0 shifted by one Kepler long-cadence | Analytical | Yes |
 | Unregistered-numeric scanner | README contains `4.7×10⁻⁶` outside any CLAIM block | Fixture mutation | Yes |
 | Fixture disposition consistency | `centroid_shift` mutated to `FLAG` while `disposition` stays `"ambiguous"` — `VetResult` validator fires | Fixture mutation | Yes |
+| MAST serialisation | `to_fits(output_fn=buf)` silently drops kwarg → empty buffer → `OSError`; `result_row.table.get(...)` → `AttributeError` on astropy Table | In-process (broken code exercised directly) | Yes |
 
 ---
 
@@ -161,7 +162,7 @@ Harness defects caught before commit: 13
 Proven gates (mutation log with verbatim output):
 
 <!-- CLAIM:n_proven_gates -->
-Gates proven by mutation testing: 9
+Gates proven by mutation testing: 10
 <!-- /CLAIM:n_proven_gates -->
 
 Tests collected (CI, full-dev):

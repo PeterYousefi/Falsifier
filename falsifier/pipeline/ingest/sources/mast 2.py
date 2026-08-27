@@ -44,6 +44,7 @@ warning is logged.
 from __future__ import annotations
 
 import datetime
+import io
 import logging
 import warnings
 from pathlib import Path
@@ -178,98 +179,6 @@ def _flux_unit_from_header(header: Any, col_name: str, fits_path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Empty-result diagnostic helper
-# ---------------------------------------------------------------------------
-
-# Maps lightkurve exptime (seconds) → human-readable cadence label.
-# Lightkurve's own buckets: 'fast' ≤ 20 s, 'short' ≤ 120 s, else 'long'.
-_EXPTIME_TO_CADENCE: list[tuple[float, str]] = [
-    (20.0,   "fast (20 s)"),
-    (120.0,  "short (2 min)"),
-    (600.0,  "long (10 min)"),
-    (1800.0, "long (30 min)"),
-]
-
-
-def _exptime_to_cadence_label(exptime_s: float) -> str:
-    """Return a human-readable cadence label for an exptime in seconds."""
-    for threshold, label in _EXPTIME_TO_CADENCE:
-        if exptime_s <= threshold:
-            return label
-    return f"long ({exptime_s:.0f} s)"
-
-
-def _empty_result_error(
-    *,
-    target_id: str,
-    mission: str,
-    author: str,
-    cadence: str,
-    search_kwargs: dict,
-    lk: object,
-) -> TargetNotFoundError:
-    """
-    Build an informative ``TargetNotFoundError`` when the primary search
-    returns zero results.
-
-    Strategy
-    --------
-    1. Re-run without the ``cadence`` filter (same mission + author).
-       If products exist, the error names which cadences ARE available and
-       tells the user to change the cadence control — not the mission.
-    2. If still zero: target has no products under this mission at all.
-       Suggest a different mission.
-
-    The diagnostic search is read-only and never substitutes data — the
-    caller will still raise, not proceed (AGENTS.md: no source substitution).
-    """
-    # --- probe 1: same mission, any cadence ---
-    probe_kwargs: dict = {
-        "mission": mission,
-        "author": author,
-    }
-    probe_results = None
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            probe_results = lk.search_lightcurve(target_id, **probe_kwargs)  # type: ignore[attr-defined]
-    except Exception:
-        # Diagnostic probe failed — fall back to the generic message
-        pass
-
-    if probe_results is not None and len(probe_results) > 0:
-        # Products exist at a different cadence. Report which ones.
-        try:
-            import numpy as _np
-            exptimes = sorted(set(
-                float(e) for e in probe_results.table["exptime"]
-                if e is not None
-            ))
-            cadence_labels = [_exptime_to_cadence_label(e) for e in exptimes]
-            available_str = ", ".join(cadence_labels) if cadence_labels else "unknown"
-        except Exception:
-            available_str = "other cadences"
-
-        return TargetNotFoundError(
-            f"No {cadence!r} cadence products found for target={target_id!r} "
-            f"under mission={mission!r}.\n"
-            f"Available cadence(s) for this target and mission: {available_str}.\n"
-            f"Change the cadence selector and resubmit.",
-            endpoint=MAST_API_URL,
-            query=str(search_kwargs),
-        )
-
-    # --- probe 2: no products at all under this mission ---
-    return TargetNotFoundError(
-        f"No MAST products found for target={target_id!r} under "
-        f"mission={mission!r} (author={author!r}).\n"
-        f"Try selecting a different mission.",
-        endpoint=MAST_API_URL,
-        query=str(search_kwargs),
-    )
-
-
-# ---------------------------------------------------------------------------
 # Core fetch
 # ---------------------------------------------------------------------------
 
@@ -352,34 +261,24 @@ def fetch_lightcurve(
         ) from exc
 
     if len(results) == 0:
-        raise _empty_result_error(
-            target_id=target_id,
-            mission=mission,
-            author=author,
-            cadence=cadence,
-            search_kwargs=search_kwargs,
-            lk=lk,
+        raise TargetNotFoundError(
+            f"No MAST results for target={target_id!r} with {search_kwargs}",
+            endpoint=MAST_API_URL,
+            query=str(search_kwargs),
         )
 
     # Pin to specific product if requested
     if mast_product_id is not None:
-        # results.table is an astropy Table; rows are astropy Row objects which
-        # have no .get() method.  Use column-name + row-index access instead.
-        _tbl = results.table
-        _fn_col = "productFilename" if "productFilename" in _tbl.colnames else None
-        _id_col = "obs_id" if "obs_id" in _tbl.colnames else None
-        matched_indices = []
-        for _i in range(len(_tbl)):
-            _fn_val = str(_tbl[_fn_col][_i]) if _fn_col else ""
-            _id_val = str(_tbl[_id_col][_i]) if _id_col else ""
-            if mast_product_id in (_fn_val or _id_val):
-                matched_indices.append(_i)
+        matched_indices = [
+            i for i, row in enumerate(results.table)
+            if mast_product_id in str(row.get("productFilename", "")
+                                     or row.get("obs_id", ""))
+        ]
         if not matched_indices:
-            _avail = list(_tbl[_fn_col]) if _fn_col else []
             raise NoProductMatchError(
                 f"No result matches mast_product_id={mast_product_id!r} "
                 f"for target={target_id!r}.\n"
-                f"Available products: {_avail}",
+                f"Available products: {list(results.table['productFilename'])}",
                 endpoint=MAST_API_URL,
                 query=mast_product_id,
             )
@@ -413,18 +312,13 @@ def fetch_lightcurve(
 
         log.debug("Downloading %s result %d/%d", target_id, i + 1, len(results))
 
-        # Resolve the product filename for diagnostics before downloading.
-        # result_row.table is an astropy Table (not a dict); use column +
-        # row-index access.  Table has no .get() — that is the Row/dict API.
+        # Resolve the product filename for diagnostics before downloading
         _product_fn: str = "unknown"
         try:
-            _tbl = result_row.table if hasattr(result_row, "table") else None
-            if (
-                _tbl is not None
-                and len(_tbl) > 0
-                and "productFilename" in _tbl.colnames
-            ):
-                _product_fn = str(_tbl["productFilename"][0])
+            _product_fn = str(
+                result_row.table.get("productFilename", "unknown")
+                if hasattr(result_row, "table") else "unknown"
+            )
         except Exception:
             pass
 
@@ -474,24 +368,14 @@ def fetch_lightcurve(
                 query=target_id,
             )
 
-        # --- open the original FITS file lightkurve already downloaded ---
-        # lightkurve stores the local cache path in lc.meta["FILENAME"] after
-        # read_generic_lightcurve runs tab.meta["FILENAME"] = filename.
-        # Reading that file directly gives us the authentic MAST primary header
-        # (with TIMESYS, TELESCOP, QUARTER, TIMEUNIT, TUNIT* etc.) without any
-        # round-trip through to_fits(), which rebuilds only a stripped template
-        # header and would silently lose TIMESYS.
-        _fits_filename: str | None = lc.meta.get("FILENAME")
-        if not _fits_filename or not Path(_fits_filename).exists():
-            raise MastFetchError(
-                f"lightkurve did not record a local FITS path in lc.meta['FILENAME'] "
-                f"for {target_id!r} item {i} (got {_fits_filename!r}).  "
-                "Cannot read FITS header without the original file.",
-                endpoint=MAST_API_URL,
-                query=target_id,
-            )
+        # --- serialize to in-memory FITS to read the header properly ---
+        buf = io.BytesIO()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            lc.to_fits(output_fn=buf, overwrite=True)
+        buf.seek(0)
 
-        with fits.open(_fits_filename) as hdul:
+        with fits.open(buf) as hdul:
             # Primary header for time system, secondary for table columns
             primary_hdr = hdul[0].header
             table_hdr = hdul[1].header
@@ -500,15 +384,15 @@ def fetch_lightcurve(
             # Determine which header has TIMESYS — usually primary for Kepler
             header_for_time = primary_hdr if "TIMESYS" in primary_hdr else table_hdr
 
-            # If neither has it, raise — never guess a time system
+            # If neither has it, check both combined
             if "TIMESYS" not in primary_hdr and "TIMESYS" not in table_hdr:
                 raise HeaderMissingKeyError(
                     f"Neither primary nor table header has TIMESYS for {target_id!r}",
-                    fits_path=_fits_filename,
+                    fits_path=str(target_id),
                     key="TIMESYS",
                 )
 
-            fits_path_str = _fits_filename
+            fits_path_str = f"in-memory:{target_id}[{i}]"
             time_scale, time_format = extract_time_system(header_for_time, fits_path_str)
 
             # Sector/quarter number
@@ -545,20 +429,11 @@ def fetch_lightcurve(
                     unit="pix",
                 )
 
-        # Determine MAST URI from the result table.
-        # result_row.table is an astropy Table; prefer "dataURI" then
-        # "t_obs_release".  Table has no .get() — use colnames + row-index.
-        # A wrong-but-non-crashing value here is an AGENTS.md Rule 3 violation:
-        # mast_uri feeds source_url in the provenance sidecar.
-        mast_uri: str = "MAST"
-        _uri_tbl = result_row.table if hasattr(result_row, "table") else None
-        if _uri_tbl is not None and len(_uri_tbl) > 0:
-            for _uri_col in ("dataURI", "t_obs_release"):
-                if _uri_col in _uri_tbl.colnames:
-                    _val = str(_uri_tbl[_uri_col][0]).strip()
-                    if _val:
-                        mast_uri = _val
-                        break
+        # Determine MAST URI from the result table
+        mast_uri = str(
+            result_row.table.get("dataURI", result_row.table.get("t_obs_release", "MAST"))
+            if hasattr(result_row, "table") else "MAST"
+        )
 
         segment = LightCurveSegment(
             sector=sector_num,

@@ -45,10 +45,11 @@ const LOCKED_NON_CLAIM =
   'Classifier probability is a ranking score only — not a verdict'
 
 export default function App() {
-  const { activeScreen, setActiveScreen, loadProvenance } = useStore()
+  const { activeScreen, setActiveScreen, loadProvenance, rehydrateJob } = useStore()
 
   useEffect(() => {
     loadProvenance()
+    rehydrateJob()
   }, [])
 
   const renderScreen = () => {

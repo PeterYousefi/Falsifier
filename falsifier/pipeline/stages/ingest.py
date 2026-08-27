@@ -376,6 +376,10 @@ def _fetch_lightcurves(
     total_rows = sum(rc for _, _, rc in segments_and_meta)
     first_uri = segments_and_meta[0][1] if segments_and_meta else "MAST"
 
+    # Record which reduction pipeline (author) reduced the photometry.
+    # This is a provenance fact per AGENTS.md Rule 3: SPOC and TASOC produce
+    # independent flux arrays for the same TESS target; the choice is auditable.
+    _author_tag = f"author={inp.author}" if inp.author else "author=unspecified"
     cache.put(
         cache_query,
         ".fits",
@@ -384,7 +388,10 @@ def _fetch_lightcurves(
         source_url=first_uri,
         access_date=access_date,
         row_count=total_rows,
-        description=f"{inp.target_id} {inp.mission} {inp.cadence} Q/S={inp.sectors}",
+        description=(
+            f"{inp.target_id} {inp.mission} {inp.cadence} {_author_tag}"
+            f" Q/S={inp.sectors}"
+        ),
     )
 
     provenance_records.append(
@@ -393,7 +400,10 @@ def _fetch_lightcurves(
             source_url=first_uri,
             access_date=access_date,
             row_count=total_rows,
-            description=f"{inp.target_id} {inp.mission} {inp.cadence} cadence",
+            description=(
+                f"{inp.target_id} {inp.mission} {inp.cadence} cadence"
+                f" {_author_tag}"
+            ),
         )
     )
 

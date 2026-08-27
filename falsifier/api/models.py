@@ -42,6 +42,23 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+# ---------------------------------------------------------------------------
+# Mission → default MAST author mapping
+# ---------------------------------------------------------------------------
+# Kepler → "Kepler"  (the only reduction pipeline for that mission)
+# K2     → "K2"      (the only reduction pipeline for that mission)
+# TESS   → "SPOC"    (Space Photometry Operations Center; confirmed by live
+#                     MAST query — "Kepler" returns 0 products for any TIC)
+#
+# The author is overridable via the API request body (e.g. author="TASOC").
+# Do NOT change this mapping without a live MAST verification and an update
+# to tests/test_mast_serialisation.py::TestMissionAuthorDerivation.
+_MISSION_DEFAULT_AUTHOR: dict[str, str] = {
+    "Kepler": "Kepler",
+    "K2": "K2",
+    "TESS": "SPOC",
+}
+
 
 # ---------------------------------------------------------------------------
 # Shared sub-models
@@ -90,9 +107,31 @@ class JobRequest(BaseModel):
     """Canonical target identifier, e.g. ``"KIC 11904151"`` or ``"TIC 261136679"``."""
 
     mission: Literal["Kepler", "K2", "TESS"] = "Kepler"
-    author: str = "Kepler"
+    author: str | None = None
+    """
+    MAST pipeline author, e.g. ``"SPOC"`` or ``"Kepler"``.
+
+    When ``None`` (the default), the author is derived from ``mission``:
+      Kepler → ``"Kepler"``, K2 → ``"K2"``, TESS → ``"SPOC"``.
+
+    Pass an explicit value to override, e.g. ``"TASOC"`` for TESS targets
+    reduced by the TASOC pipeline.
+    """
     cadence: Literal["short", "long", "fast"] = "long"
     sectors: list[int] | None = None
+
+    @model_validator(mode="after")
+    def _resolve_author(self) -> "JobRequest":
+        """
+        Derive ``author`` from ``mission`` when not explicitly supplied.
+
+        This validator fires on every construction path — live API, fixture
+        load, and direct unit tests.  It ensures a TESS request can never
+        accidentally carry ``author="Kepler"``.
+        """
+        if self.author is None:
+            self.author = _MISSION_DEFAULT_AUTHOR[self.mission]
+        return self
 
     # Stage-specific toggles (all default to running the stage)
     run_classify: bool = True

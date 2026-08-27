@@ -23,7 +23,7 @@ import { useStore } from '../store'
 const KEPLER10_JOB_ID = 'fixture-job-001'
 const EB_JOB_ID       = 'fixture-job-eb-001'
 
-const BASE_PARAMS = { mission: 'Kepler', author: 'Kepler', cadence: 'long' }
+const BASE_PARAMS = { mission: 'Kepler', cadence: 'long' }
 
 describe('FixtureDataSource.submitJob', () => {
   const ds = new FixtureDataSource()

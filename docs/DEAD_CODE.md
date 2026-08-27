@@ -12,6 +12,9 @@ unreachable from `scripts/reproduce.sh` is a policy violation (AGENTS.md Rule 6)
 | `falsifier/pipeline/stages/disequilibrium.py` | **Exploratory** — wired only via `scripts/run_batch.py` | Requires FastChem + VULCAN |
 | `falsifier/pipeline/batch/runner.py` | **Exploratory** — CLI only via `scripts/run_batch.py` | Offline batch process; no API route calls it |
 | `falsifier/pipeline/stages/search.py` `_MAX_PLANETS = 1` | **Known limitation** — iterative masking structurally present but inert | `_MAX_PLANETS = 1` means only the strongest signal is returned |
+| `falsifier/api/queue 2.py` | **Scratch / macOS duplicate** — untracked, not importable | Filename contains a space (macOS Finder duplicate artefact); Python cannot import it. Contains the pre-fix version of `falsifier/api/queue.py` with the original `to_fits(output_fn=…)` defect. Not wired into any import chain or CLI entry point. |
+| `falsifier/pipeline/ingest/cache 2.py` | **Scratch / macOS duplicate** — untracked, not importable | Same origin as above; duplicate of `falsifier/pipeline/ingest/cache.py`. Not wired into any import chain. |
+| `falsifier/pipeline/ingest/sources/mast 2.py` | **Scratch / macOS duplicate** — untracked, not importable | Duplicate of `falsifier/pipeline/ingest/sources/mast.py` carrying the original `to_fits(output_fn=buf)` and `Table.get()` defects that were fixed in the live file. Not wired into any import chain. |
 
 ## Training refused: train/serve feature skew
 

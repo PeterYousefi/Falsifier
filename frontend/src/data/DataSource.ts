@@ -25,7 +25,7 @@ import type {
 export interface SubmitJobParams {
   target_id: string
   mission: string
-  author: string
+  author?: string
   cadence: string
 }
 

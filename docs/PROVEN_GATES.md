@@ -21,6 +21,7 @@ modified.  Each stub was written to a temporary file and deleted after the run.
 | 7 | Phase-zero t0 convention — `test_t0_shift_moves_minimum_out_of_zero_bin` | `tests/test_figures_trace_to_artifacts.py` | ✅ EXECUTED — analytical mutation (t0 shifted by one Kepler long-cadence) and verbatim centroid output recorded |
 | 8 | Unregistered-numeric scanner — `test_verify_readme_catches_unregistered.py` | `scripts/verify_readme.py` + `tests/test_verify_readme_catches_unregistered.py` | ✅ EXECUTED — fixture README injected with `4.7×10⁻⁶` outside CLAIM block; scanner exits 2 with token+line; verbatim output recorded |
 | 9 | Fixture disposition consistency — `test_fixtures_satisfy_contracts.py` | `tests/test_fixtures_satisfy_contracts.py` + `falsifier/api/models.py` `VetResult` | ✅ EXECUTED — `centroid_shift` outcome mutated from `INCONCLUSIVE` to `FLAG` while `disposition` remained `"ambiguous"`; `ValidationError` fires at `DetectionReport` construction; verbatim output recorded |
+| 10 | MAST serialisation — `TestMastSerialisation` | `tests/test_mast_serialisation.py` | ✅ EXECUTED — broken code from main exercised in-process; all three assertions fail with verbatim output recorded |
 
 **Mutation levels used in this document**:
 - **Pipeline-level** (gates 1 and 2): `unittest.mock.patch` replaces the stage function
@@ -890,3 +891,151 @@ Exit code: **1** (non-zero as required).
   meaningful — that is the pipeline's responsibility.
 - It does not check that `triggering_test` and `triggering_reason` are set correctly;
   those fields are validated by `VetOutput` in the pipeline layer, not by `VetResult`.
+
+---
+
+## Gate 10 — MAST serialisation: `TestMastSerialisation` ✅ EXECUTED
+
+> **What this gate guards**: The serialise-then-reopen step in
+> `falsifier/pipeline/ingest/sources/mast.py` must produce a non-empty, valid
+> FITS buffer whose primary header carries `TIMESYS` and `TELESCOP`, so that
+> `extract_time_system` can return the correct `("tdb", "bkjd")` pair without
+> raising `HeaderMissingKeyError`.
+
+### What was mutated (or, in this case: what was left broken)
+
+No mutation was injected.  The broken code already existed on `main`.  The test
+exercises the exact call at `mast.py` line ~375 in-process:
+
+```python
+# mast.py line ~375 — the defective call
+lc.to_fits(output_fn=buf, overwrite=True)
+```
+
+`lightkurve.LightCurve.to_fits` has no `output_fn` parameter.  The kwarg is
+absorbed into `**extra_data` and then discarded by the
+`isinstance(extra_data[kw], (str, float, int, bool, type(None)))` guard inside
+`_make_primary_hdu` (a `BytesIO` object does not match any of those types).
+`to_fits` only writes to disk when its `path` argument is a non-`None` string;
+because `path` defaults to `None`, the call returns an `HDUList` and writes
+**nothing** to `buf`.
+
+### Three-level failure cascade
+
+The gate uses three sequential assertions that expose the cascade:
+
+1. **`test_buffer_is_non_empty_after_to_fits`** — `buf` is 0 bytes after
+   the broken call; this is the root cause.
+2. **`test_fits_open_succeeds_on_serialised_buffer`** — `fits.open(buf)` raises
+   `OSError: Empty or corrupt FITS file` because the buffer is empty.
+3. **`test_extract_time_system_returns_tdb_bkjd`** — even if the previous two
+   were fixed by correcting `output_fn` → `path`, `to_fits` rebuilds the
+   primary header from `lc-ext0-header.txt` and copies only `MISSION` and
+   `TELESCOP` from `lc.meta`; `TIMESYS` is not transferred, so
+   `extract_time_system` would raise `HeaderMissingKeyError`.
+
+### Verbatim pytest failure output — current main
+
+```
+============================= test session starts ==============================
+platform darwin -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/ajdar/Desktop/Falsifier
+configfile: pyproject.toml
+
+tests/test_mast_serialisation.py::TestMastSerialisation::test_buffer_is_non_empty_after_to_fits FAILED [ 33%]
+tests/test_mast_serialisation.py::TestMastSerialisation::test_fits_open_succeeds_on_serialised_buffer FAILED [ 66%]
+tests/test_mast_serialisation.py::TestMastSerialisation::test_extract_time_system_returns_tdb_bkjd FAILED [100%]
+
+=================================== FAILURES ===================================
+_________ TestMastSerialisation.test_buffer_is_non_empty_after_to_fits _________
+
+    def test_buffer_is_non_empty_after_to_fits(self):
+        lc = _make_kepler_lc()
+        buf = io.BytesIO()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            lc.to_fits(output_fn=buf, overwrite=True)
+        buf_size = len(buf.getvalue())
+>       assert buf_size > 0, (
+            f"to_fits(output_fn=buf) wrote {buf_size} bytes — output_fn is not "
+            "a valid parameter; lightkurve silently absorbs it into **extra_data "
+            "and writes nothing to the buffer.\n"
+            f"buf.tell() == {buf.tell()}; fits.open(buf) will raise OSError.\n\n"
+            "Fix: replace lc.to_fits(output_fn=buf, overwrite=True) with\n"
+            "     fits.open(lc.meta['FILENAME']) to read the header from the\n"
+            "     already-downloaded original FITS file on disk."
+        )
+E       AssertionError: to_fits(output_fn=buf) wrote 0 bytes — output_fn is not a valid parameter;
+E         lightkurve silently absorbs it into **extra_data and writes nothing to the buffer.
+E         buf.tell() == 0; fits.open(buf) will raise OSError.
+E
+E         Fix: replace lc.to_fits(output_fn=buf, overwrite=True) with
+E              fits.open(lc.meta['FILENAME']) to read the header from the
+E              already-downloaded original FITS file on disk.
+E       assert 0 > 0
+
+tests/test_mast_serialisation.py:139: AssertionError
+
+______ TestMastSerialisation.test_fits_open_succeeds_on_serialised_buffer ______
+
+    def test_fits_open_succeeds_on_serialised_buffer(self):
+        lc = _make_kepler_lc()
+        buf = io.BytesIO()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            lc.to_fits(output_fn=buf, overwrite=True)
+        buf.seek(0)
+>       with fits.open(buf) as hdul:
+             ^^^^^^^^^^^^^^
+E       OSError: Empty or corrupt FITS file
+
+.venv/lib/python3.11/site-packages/astropy/io/fits/hdu/hdulist.py:1272: OSError
+
+_______ TestMastSerialisation.test_extract_time_system_returns_tdb_bkjd ________
+
+    def test_extract_time_system_returns_tdb_bkjd(self):
+        lc = _make_kepler_lc()
+        buf = io.BytesIO()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            lc.to_fits(output_fn=buf, overwrite=True)
+        buf.seek(0)
+>       with fits.open(buf) as hdul:
+             ^^^^^^^^^^^^^^
+E       OSError: Empty or corrupt FITS file
+
+.venv/lib/python3.11/site-packages/astropy/io/fits/hdu/hdulist.py:1272: OSError
+
+=========================== short test summary info ============================
+FAILED tests/test_mast_serialisation.py::TestMastSerialisation::test_buffer_is_non_empty_after_to_fits
+FAILED tests/test_mast_serialisation.py::TestMastSerialisation::test_fits_open_succeeds_on_serialised_buffer
+FAILED tests/test_mast_serialisation.py::TestMastSerialisation::test_extract_time_system_returns_tdb_bkjd
+
+3 failed in 2.50s
+```
+
+### What this gate proves
+
+1. **Root-cause capture**: `to_fits(output_fn=buf)` produces 0 bytes — the
+   argument is silently dropped.  Any future call to `to_fits` with a
+   non-existent keyword that happens to be a `BytesIO` or similar non-scalar
+   will also be caught.
+2. **Cascade isolation**: the three sequential assertions separate the empty-buffer
+   defect from the would-be TIMESYS-loss defect; a partial fix that only corrects
+   the parameter name (not the serialisation round-trip itself) would pass the
+   first assertion and fail the third.
+3. **No network required**: the test builds a `LightCurve` entirely in-process.
+   The session-scoped socket guard in `conftest.py` blocks any accidental outbound
+   connection; a regression that tried to re-download would be caught before it
+   reached the network.
+
+### What this gate does not claim
+
+- It does not test the full `fetch_lightcurve` path end-to-end; that requires a
+  real or mock `SearchResult.download()`.  The gate covers only the portion of
+  the code from "we have a `LightCurve` object" onward.
+- It does not verify the fix; it verifies only that the broken code fails as
+  described.  The fix (open `lc.meta["FILENAME"]` directly) will be validated
+  separately once implemented.
+- It does not check that `lc.meta["FILENAME"]` is always set; a guard for the
+  absent-`FILENAME` case is part of the fix, not this gate.
