@@ -1,0 +1,18 @@
+# Requirements for the Vercel Python serverless function at frontend/api/chat.py.
+# Only the subset of falsifier's deps actually imported by falsifier.api.chat.*
+# is listed here — pipeline-only deps (lightkurve, astropy, etc.) are excluded.
+#
+# AGENTS.md Rule 2: astropy.units is required for any physical quantity. The
+# chat module itself does not cross module boundaries with bare floats — it
+# reads tool results as dicts from the job store and passes them through as-is.
+# No physics computation happens inside the serverless function.
+
+ibm-watsonx-ai>=1.1
+pydantic>=2.0
+numpy>=1.24
+# transformers is needed so guardian.py can attempt to load the local
+# Granite Guardian model. On Vercel (no local HuggingFace cache) it will
+# fall back to the heuristic screener — which is correct per guardian.py.
+transformers>=4.40
+# fastapi is used by falsifier.api.models (imported transitively by session.py)
+fastapi>=0.111

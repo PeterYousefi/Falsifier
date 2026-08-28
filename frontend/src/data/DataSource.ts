@@ -356,12 +356,78 @@ export class ApiDataSource implements DataSource {
 }
 
 // ---------------------------------------------------------------------------
+// HybridDataSource — fixture for everything except chat, which goes live.
+//
+// Enabled by setting VITE_LIVE_CHAT=true.
+// All other methods delegate to FixtureDataSource so targets, reports, gates,
+// and the console keep running off committed fixtures exactly as before.
+//
+// chat() checks _OFFLINE_ANSWERS first — matched questions answer instantly
+// for free and do NOT count against the 3-question rate-limit budget. Only
+// genuinely open-ended questions fall through to the live /api/chat endpoint.
+//
+// The /api/chat response includes a `remaining` field (0–3). We store it in
+// module-level state so ChatPanel can read it via getLiveRemaining().
+// ---------------------------------------------------------------------------
+
+let _liveRemaining: number | null = null
+
+/** Current remaining live-chat budget as reported by the last server response. */
+export function getLiveRemaining(): number | null {
+  return _liveRemaining
+}
+
+export class HybridDataSource extends FixtureDataSource {
+  async chat(
+    job_id: string | null,
+    message: string,
+    history: { role: string; content: string }[],
+  ): Promise<ChatMessage> {
+    // Check canned answers first — free, instant, no budget cost.
+    const canned = _tryOfflineAnswer(message)
+    if (canned !== null) {
+      return canned
+    }
+
+    // Live call to the Python serverless function.
+    // credentials: 'include' sends the session cookie so the server-side
+    // rate limit key is consistent across invocations.
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ job_id, message, history }),
+    })
+
+    if (!res.ok) {
+      throw new Error(`Live chat request failed: ${res.status}`)
+    }
+
+    const data = await res.json()
+    // Update module-level remaining count from server response.
+    if (typeof data.remaining === 'number') {
+      _liveRemaining = data.remaining
+    }
+
+    return {
+      role: 'assistant',
+      content: typeof data.reply === 'string' ? data.reply : '',
+      tool_calls: data.tool_calls ?? [],
+      sources: data.sources ?? [],
+      guardian_verdict: data.guardian_verdict ?? null,
+      offline_mode: data.offline_mode ?? false,
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Factory — driven by VITE_DATA_SOURCE and VITE_API_BASE_URL env vars
 //
 // Switching rules (first match wins):
 //   1. VITE_DATA_SOURCE=api         → ApiDataSource (live backend)
 //   2. VITE_API_BASE_URL is set     → ApiDataSource (live backend)
-//   3. otherwise                    → FixtureDataSource (committed JSON)
+//   3. VITE_LIVE_CHAT=true          → HybridDataSource (fixture + live chat)
+//   4. otherwise                    → FixtureDataSource (committed JSON)
 //
 // This means a production Vercel deploy just needs VITE_API_BASE_URL set;
 // no separate VITE_DATA_SOURCE=api is required.
@@ -369,9 +435,14 @@ export class ApiDataSource implements DataSource {
 
 const _env = typeof import.meta !== 'undefined' ? (import.meta as any).env ?? {} : {}
 const _mode = _env.VITE_DATA_SOURCE ?? (_env.VITE_API_BASE_URL ? 'api' : 'fixture')
+const _liveChat = _env.VITE_LIVE_CHAT === 'true' || _env.VITE_LIVE_CHAT === true
 
 export const dataSource: DataSource =
-  _mode === 'api' ? new ApiDataSource() : new FixtureDataSource()
+  _mode === 'api'
+    ? new ApiDataSource()
+    : _liveChat
+    ? new HybridDataSource()
+    : new FixtureDataSource()
 
 /**
  * True when the app is running against committed fixture data rather than a
@@ -542,6 +613,30 @@ function _offlineAnswer(message: string): ChatMessage {
     role: 'assistant',
     content: entry.content,
     sources: entry.sources,
+    guardian_verdict: {
+      safe: true,
+      risk_label: 'safe',
+      model_used: 'heuristic',
+      confidence: null,
+    },
+    offline_mode: true,
+  }
+}
+
+/**
+ * Like _offlineAnswer but returns null when the message has no canned match.
+ * Used by HybridDataSource to decide whether to fall through to the live call.
+ * Matched answers are returned as offline_mode: true so the UI renders them
+ * identically to fixture answers, and they do NOT consume the rate-limit budget.
+ */
+function _tryOfflineAnswer(message: string): ChatMessage | null {
+  const norm = _normMsg(message)
+  const match = _OFFLINE_ANSWERS.find((a) => a.match.some((m) => norm.includes(_normMsg(m))))
+  if (!match) return null
+  return {
+    role: 'assistant',
+    content: match.entry.content,
+    sources: match.entry.sources,
     guardian_verdict: {
       safe: true,
       risk_label: 'safe',

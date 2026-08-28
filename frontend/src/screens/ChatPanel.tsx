@@ -7,7 +7,7 @@
  */
 import React, { useState, useRef, useEffect, Component, type ReactNode, type ErrorInfo } from 'react'
 import { useStore } from '../store'
-import { dataSource } from '../data/DataSource'
+import { dataSource, getLiveRemaining } from '../data/DataSource'
 import type { ChatMessage } from '../data/types'
 import { FixtureProvenanceBadge } from './CandidateDetail'
 
@@ -132,6 +132,8 @@ export default function ChatPanel() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loadedFixture, setLoadedFixture] = useState(false)
+  // Remaining live-chat budget — null means no live-chat mode or not yet used.
+  const [remaining, setRemaining] = useState<number | null>(getLiveRemaining)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -161,6 +163,9 @@ export default function ChatPanel() {
         history,
       )
       setChatHistory((prev: ChatMessage[]) => [...prev, reply])
+      // Sync remaining count after each live call.
+      const r = getLiveRemaining()
+      if (r !== null) setRemaining(r)
     } catch (err) {
       const errMsg: ChatMessage = {
         role: 'assistant',
@@ -250,6 +255,22 @@ export default function ChatPanel() {
           {sending ? <span className="spinner" /> : 'Send'}
         </button>
       </div>
+      {remaining !== null && (
+        <div
+          style={{
+            padding: '4px 16px 8px',
+            fontSize: 12,
+            color: remaining === 0 ? 'var(--fail, #8b1a1a)' : 'var(--np-muted, #57606a)',
+            fontFamily: 'var(--font-mono, monospace)',
+            textAlign: 'right',
+          }}
+          aria-live="polite"
+        >
+          {remaining === 0
+            ? 'Live question limit reached for this session'
+            : `${remaining} of ${3} live question${remaining !== 1 ? 's' : ''} remaining this session`}
+        </div>
+      )}
     </div>
     </ChatErrorBoundary>
   )
