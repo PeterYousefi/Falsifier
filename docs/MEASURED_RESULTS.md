@@ -90,7 +90,7 @@ Test asserts: (a) `disposition == "false_positive"`, (b) `triggering_test == "od
 **Period-match tolerance:** 2%
 *(Source: `scripts/injection_recovery.py` → `PERIOD_MATCH_TOLERANCE`)*
 
-Nine defects were caught before any artifact was committed (see `docs/WHAT_THE_GATES_CAUGHT.md`).
+Fourteen defects were caught before any artifact was committed (see `docs/WHAT_THE_GATES_CAUGHT.md`).
 
 ---
 

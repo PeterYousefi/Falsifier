@@ -1,9 +1,9 @@
 # Completeness Curve and Adversarial False-Alarm Rate
 
-## Completeness curve — harness built, nine defects caught, artifact not yet committed
+## Completeness curve — harness built, fourteen defects caught, artifact not yet committed
 
 The injection-recovery harness is built, unit-tested, and sharded across a
-45-job matrix (5 stars × 9 depths, 30 injections each). Nine defects were
+45-job matrix (5 stars × 9 depths, 30 injections each). Fourteen defects were
 caught and fixed before any numbers were committed
 (see `docs/WHAT_THE_GATES_CAUGHT.md`).
 
@@ -57,4 +57,4 @@ quiet-star list under TLS.
 | `blank_sky` | Gaussian noise at ~300 ppm instrument floor |
 
 See `docs/tls_run_2026_q3_baseline.md` and `docs/WHAT_THE_GATES_CAUGHT.md` for
-the nine defects caught before commit.
+the thirteen defects caught before commit.

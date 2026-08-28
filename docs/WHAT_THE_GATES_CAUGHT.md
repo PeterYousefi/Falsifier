@@ -513,3 +513,38 @@ This is the most interesting defect in this list: the verification tooling was
 correct and the input was coincidentally round.  The automated gate now guards
 against the case where `impact_facts.py` is modified and a future author
 accidentally introduces a SELECT TOP clause.
+
+---
+
+## 14 — Prose count references said "nine defects" and "eight gates" while CLAIMs rendered 13 and 10
+
+**What the defect was.**  After Gates 8–10 and entries 11–13 were proven and documented,
+several prose strings throughout the repository still read the old counts:
+
+| File | Stale prose | Correct value |
+|---|---|---|
+| `README.md` (docs index table) | "Nine defects caught before commit" | Thirteen |
+| `README.md` (docs index table) | "Eight mutation gates — verbatim output" | Ten |
+| `docs/MEASURED_RESULTS.md` | "Nine defects were caught before any artifact was committed" | Thirteen |
+| `docs/COMPLETENESS_AND_FAR.md` (section heading) | "nine defects caught" | thirteen |
+| `docs/COMPLETENESS_AND_FAR.md` (body paragraph) | "Nine defects were caught" | Thirteen |
+| `docs/COMPLETENESS_AND_FAR.md` (closing line) | "the nine defects caught before commit" | thirteen |
+
+The `CLAIM:n_what_the_gates_caught` block in README.md correctly rendered 13 and
+`CLAIM:n_proven_gates` correctly rendered 10 — `scripts/verify_readme.py --strict`
+exited 0.  The stale text lived entirely outside CLAIM blocks in prose descriptions
+and a docs-index table, so neither `verify_readme.py` nor
+`tests/test_readme_tables_match_claims.py` flagged it.
+
+**Which check caught it.**  Manual audit of prose count references against the
+authoritative CLAIM values, conducted during competition-readiness review.
+
+**What would have been published without it.**  A judge reading the docs-index table
+would see "Nine defects" and "Eight mutation gates" while the CLAIM blocks just above
+say 13 and 10 — a visible internal contradiction of the same class as entry 10.
+
+**Fix.**  Updated all six stale prose strings to "Thirteen" / "thirteen" / "Ten" / "ten"
+as appropriate.  No CLAIM block body was edited; the fix is purely prose alignment.
+The structural root cause (prose outside CLAIM blocks can drift silently) is inherited
+from entry 10; `tests/test_readme_tables_match_claims.py` guards the gate-summary
+table count, but free-form prose strings remain unguarded.

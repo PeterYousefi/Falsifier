@@ -156,7 +156,7 @@ Vetting tests: 7
 Harness defects caught before commit:
 
 <!-- CLAIM:n_what_the_gates_caught -->
-Harness defects caught before commit: 13
+Harness defects caught before commit: 14
 <!-- /CLAIM:n_what_the_gates_caught -->
 
 Proven gates (mutation log with verbatim output):
@@ -249,8 +249,8 @@ See [`docs/BOB_EVIDENCE.md`](docs/BOB_EVIDENCE.md) for committed Bob artifacts a
 | Full measured results with methodology | [`docs/MEASURED_RESULTS.md`](docs/MEASURED_RESULTS.md) |
 | Test coverage detail | [`docs/TEST_COVERAGE.md`](docs/TEST_COVERAGE.md) |
 | Completeness curve & FAR methodology | [`docs/COMPLETENESS_AND_FAR.md`](docs/COMPLETENESS_AND_FAR.md) |
-| Nine defects caught before commit | [`docs/WHAT_THE_GATES_CAUGHT.md`](docs/WHAT_THE_GATES_CAUGHT.md) |
-| Eight mutation gates — verbatim output | [`docs/PROVEN_GATES.md`](docs/PROVEN_GATES.md) |
+| Fourteen defects caught before commit | [`docs/WHAT_THE_GATES_CAUGHT.md`](docs/WHAT_THE_GATES_CAUGHT.md) |
+| Ten mutation gates — verbatim output | [`docs/PROVEN_GATES.md`](docs/PROVEN_GATES.md) |
 | Dead / experimental code declaration | [`docs/DEAD_CODE.md`](docs/DEAD_CODE.md) |
 | Skipped tests inventory | [`docs/SKIPPED_TESTS.md`](docs/SKIPPED_TESTS.md) |
 | Prior-art positioning | [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md) |
