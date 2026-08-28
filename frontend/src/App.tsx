@@ -1,6 +1,6 @@
 /**
  * src/App.tsx
- * Root application shell: newspaper masthead, dateline, nav, screens, locked footer.
+ * Root application shell: newspaper masthead, dateline, nav, screens.
  * All scientific values flow from the data layer — no literals here.
  *
  * Screen order (judge path first, then secondary):
@@ -39,10 +39,6 @@ const SECONDARY_SCREENS = [
 ]
 
 const SCREENS = [...PRIMARY_SCREENS, ...SECONDARY_SCREENS]
-
-const LOCKED_NON_CLAIM =
-  'Not a biosignature detector · No exoplanet biosignature has ever been confirmed · ' +
-  'Classifier probability is a ranking score only — not a verdict'
 
 export default function App() {
   const { activeScreen, setActiveScreen, loadProvenance, rehydrateJob } = useStore()
@@ -128,11 +124,6 @@ export default function App() {
       <main className="screen" role="main">
         {renderScreen()}
       </main>
-
-      {/* Page footer — locked non-claim on every page */}
-      <footer className="page-footer" role="contentinfo">
-        {LOCKED_NON_CLAIM}
-      </footer>
     </div>
   )
 }

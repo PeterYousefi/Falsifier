@@ -933,20 +933,6 @@ h3, .h3 {
   margin-top: 3px;
 }
 
-/* ── Page footer — locked non-claim ─────────────────────────────────────── */
-.page-footer {
-  flex-shrink: 0;
-  border-top: 1px solid var(--np-rule);
-  padding: 8px 32px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  color: var(--np-faint);
-  text-align: center;
-  background: var(--np-surface);
-  user-select: none;
-}
-
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
