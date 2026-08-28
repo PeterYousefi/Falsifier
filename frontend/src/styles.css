@@ -386,6 +386,34 @@ h3, .h3 {
   padding-left: 8px;
 }
 
+/* NOT-RUN row — authoring gap, visually distinct from INCONCLUSIVE */
+.vet-badge.NOT_RUN {
+  background: var(--np-surface);
+  color: var(--np-faint);
+  border: 1px solid var(--np-border);
+  font-family: var(--font-mono);
+  font-size: 18px;
+}
+.vet-row.not-run { opacity: 0.6; }
+.vet-not-run-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--np-faint);
+  margin-left: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  border: 1px solid var(--np-border);
+  padding: 1px 4px;
+}
+.vet-not-run-reason {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--np-faint);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
 /* ── Number expander ─────────────────────────────────────────────────────── */
 .expander-btn {
   background: none;

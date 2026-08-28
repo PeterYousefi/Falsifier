@@ -70,6 +70,7 @@ const OUTCOME_ICONS: Record<string, string> = {
   FAIL:        '✗',
   FLAG:        '⚑',
   INCONCLUSIVE: '?',
+  NOT_RUN:     '–',
 }
 
 // ── VetBadge ──────────────────────────────────────────────────────────────
@@ -77,6 +78,27 @@ export function VetBadge({ outcome }: { outcome: VettingTestOutcome | string }) 
   return (
     <div className={`vet-badge ${outcome}`} aria-label={outcome}>
       {OUTCOME_ICONS[outcome] ?? outcome[0]}
+    </div>
+  )
+}
+
+// ── NotRunBadge — visually distinct from INCONCLUSIVE ─────────────────────
+// Used when a test entry is completely absent from the fixture, meaning it
+// was never wired into the pipeline run — not a scientific INCONCLUSIVE.
+function NotRunBadge() {
+  return (
+    <div
+      className="vet-badge NOT_RUN"
+      aria-label="not yet run"
+      title="This test was not run — no entry present in the pipeline artifact"
+      style={{
+        background: 'var(--np-surface)',
+        border: '1px solid var(--np-border)',
+        color: 'var(--np-faint)',
+        fontFamily: 'var(--font-mono)',
+      }}
+    >
+      –
     </div>
   )
 }
@@ -188,11 +210,15 @@ function MetricExpander({ metric_value, metric_unit, threshold }: {
 
 function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetResult; index: number }) {
   const r = vetResult.test_results?.find((t) => t.test_name === name)
+  // Distinguish two different unresolved states:
+  //   r is present + outcome INCONCLUSIVE → genuine scientific limitation, show reason
+  //   r is absent entirely               → authoring gap / pipeline never ran this test
+  const isNotRun = r == null
   const outcome = r?.outcome ?? 'INCONCLUSIVE'
   const isTriggering = vetResult.triggering_test === name
   const label = TEST_LABELS[name]
   const numeral = ROMAN_LOWER[index] ?? String(index + 1)
-  const isInconclusive = outcome === 'INCONCLUSIVE'
+  const isInconclusive = !isNotRun && outcome === 'INCONCLUSIVE'
   // Use the real reason from the artifact — never the generic "why" copy.
   // For INCONCLUSIVE rows the reason IS the primary content (e.g. "Centroid time
   // series not available for this target; centroid shift test skipped.") and
@@ -201,29 +227,45 @@ function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetRe
 
   return (
     <div
-      className={`vet-row${isTriggering ? ' triggering' : ''}${isInconclusive ? ' inconclusive' : ''}`}
-      aria-label={`${label?.short}: ${outcome}`}
+      className={`vet-row${isTriggering ? ' triggering' : ''}${isInconclusive ? ' inconclusive' : ''}${isNotRun ? ' not-run' : ''}`}
+      aria-label={`${label?.short}: ${isNotRun ? 'not yet run' : outcome}`}
     >
       <span className="vet-numeral">{numeral}</span>
-      <VetBadge outcome={outcome} />
+      {isNotRun ? <NotRunBadge /> : <VetBadge outcome={outcome} />}
       <div className="vet-body">
         <div className="vet-headline">
           {label?.headline ?? label?.short ?? name}
           {isTriggering && <span className="vet-trigger-label">◀ deciding test</span>}
+          {isNotRun && (
+            <span
+              className="vet-not-run-label"
+              title="No test_results entry for this test name in the pipeline artifact"
+            >
+              not yet run
+            </span>
+          )}
         </div>
         {isInconclusive ? (
           // Reason shown immediately — no click required.
           // Style as a quiet attribution footnote consistent with the
           // ClassifierUnavailablePanel "pending" treatment.
           <div className="vet-inconclusive-reason">{reason}</div>
+        ) : isNotRun ? (
+          // Authoring gap — not a scientific result. Show neutral grey note.
+          <div className="vet-not-run-reason">
+            No entry for this test in the pipeline artifact. This is an authoring gap,
+            not a scientific INCONCLUSIVE — the test was never wired into this run.
+          </div>
         ) : (
           <div className="vet-why">{reason}</div>
         )}
         {/* Only render the metric expander when a real value exists */}
-        <MetricExpander
-          metric_value={r?.metric_value}
-          metric_unit={r?.metric_unit}
-        />
+        {!isNotRun && (
+          <MetricExpander
+            metric_value={r?.metric_value}
+            metric_unit={r?.metric_unit}
+          />
+        )}
       </div>
     </div>
   )

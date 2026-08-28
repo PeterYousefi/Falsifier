@@ -20,7 +20,7 @@
     "finished_at": "2024-01-15T14:01:12Z",
     "ingest": {
       "host_star_id": "KIC 6965293",
-      "n_segments": 17,
+      "n_segments": 1,
       "has_stellar_params": false,
       "code_version": "0.1.0-dev",
       "input_hash": "b7e3d2a1f0c948b5e3d2a1f0c948b5e3d2a1f0c948b5e3d2a1f0c948b5e3d2",
@@ -28,14 +28,14 @@
     },
     "detrend": {
       "host_star_id": "KIC 6965293",
-      "n_segments": 17,
+      "n_segments": 1,
       "detrending_method": "biweight",
       "wall_time_seconds": 9.03
     },
     "search": {
       "host_star_id": "KIC 6965293",
       "n_tces": 1,
-      "tls_version": "1.0.31",
+      "tls_version": "1.32",
       "wall_time_seconds": 28.61,
       "tce_ids": ["KIC 6965293.01"]
     },
@@ -44,22 +44,64 @@
         "tce_id": "KIC 6965293.01",
         "disposition": "false_positive",
         "triggering_test": "odd_even_depth",
-        "triggering_reason": "Odd and even transit depths differ by 6.68 (primary 0.1396 vs secondary 0.0209 fractional depth), far exceeding the 2-sigma threshold. Eclipsing binary confirmed.",
+        "triggering_reason": "Odd/even transit depth mismatch 4.32 exceeds threshold 3.0; alternating depth asymmetry is consistent with an eclipsing binary.",
         "wall_time_seconds": 1.97,
         "test_results": [
           {
             "test_name": "odd_even_depth",
             "outcome": "FAIL",
-            "metric_value": 6.68,
+            "metric_value": 4.321895592186598,
             "metric_unit": "dimensionless",
-            "reason": "Primary eclipse depth 0.1396 vs secondary 0.0209 — ratio 6.68 far exceeds 2-sigma threshold. Eclipsing binary signature."
+            "reason": "Odd/even transit depth mismatch 4.32 exceeds threshold 3.0; alternating depth asymmetry is consistent with an eclipsing binary."
+          },
+          {
+            "test_name": "secondary_eclipse",
+            "outcome": "PASS",
+            "metric_value": null,
+            "metric_unit": null,
+            "reason": "No secondary eclipse detected above the search threshold."
+          },
+          {
+            "test_name": "centroid_shift",
+            "outcome": "INCONCLUSIVE",
+            "metric_value": null,
+            "metric_unit": null,
+            "reason": "Centroid time series not available for this target; centroid shift test skipped."
+          },
+          {
+            "test_name": "transit_shape",
+            "outcome": "PASS",
+            "metric_value": 13314.630657159543,
+            "metric_unit": "ppm",
+            "reason": "Transit depth 13315 ppm is within the planetary regime."
+          },
+          {
+            "test_name": "stellar_density",
+            "outcome": "INCONCLUSIVE",
+            "metric_value": null,
+            "metric_unit": null,
+            "reason": "Stellar density not available for this target; stellar density consistency test skipped."
+          },
+          {
+            "test_name": "gaia_ruwe",
+            "outcome": "INCONCLUSIVE",
+            "metric_value": null,
+            "metric_unit": null,
+            "reason": "Gaia RUWE not available for this target; RUWE test skipped."
+          },
+          {
+            "test_name": "systematics_coincidence",
+            "outcome": "INCONCLUSIVE",
+            "metric_value": null,
+            "metric_unit": null,
+            "reason": "Systematics catalogue not available; systematics coincidence test skipped."
           }
         ],
-        "period_days": 2.6045,
-        "depth_ppm": 139600,
-        "duration_hours": 4.31,
-        "epoch_bkjd": 2454834.112,
-        "inclination_deg": 87.2,
+        "period_days": 2.5388040093205793,
+        "depth_ppm": 13314.630657159543,
+        "duration_hours": 2.1977423332020574,
+        "epoch_bkjd": 261.5934722032755,
+        "inclination_deg": null,
         "phased_lc": {
           "phase": [-0.49, -0.47, -0.45, -0.43, -0.41, -0.39, -0.37, -0.35, -0.33, -0.31, -0.29, -0.27, -0.25, -0.23, -0.21, -0.19, -0.17, -0.15, -0.13, -0.11, -0.09, -0.07, -0.05, -0.03, -0.01, 0.01, 0.03, 0.05, 0.07, 0.09, 0.11, 0.13, 0.15, 0.17, 0.19, 0.21, 0.23, 0.25, 0.27, 0.29, 0.31, 0.33, 0.35, 0.37, 0.39, 0.41, 0.43, 0.45, 0.47, 0.49],
           "flux": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.999, 0.995, 0.983, 0.970, 0.965, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.862, 0.970, 0.983, 0.995, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
@@ -80,7 +122,8 @@
       "schema_version": "1",
       "fixture_id": "fixture-job-eb-001",
       "generated_date": "2024-01-15",
-      "note": "Hand-authored EB fixture; no live pipeline run has been performed. Values in this fixture are NOT pipeline outputs. Do not treat these values as measured quantities."
+      "source_doi": "10.1088/0004-6256/141/3/83",
+      "note": "All seven test_results produced by run_vet() against data/golden/kic6965293_q3_long.fits (TLS 1.32, biweight detrend window=2.0 d). odd_even_depth=4.3219 (FAIL) is the load-bearing rejection gate; TLS odd/even mismatch exceeds the 3.0 threshold. transit_shape=13315 ppm (PASS because the depth threshold is 30000 ppm). centroid_shift/stellar_density/gaia_ruwe/systematics_coincidence are INCONCLUSIVE (no centroid arrays, no stellar parameters, no Gaia RUWE, no systematics catalogue in the golden fixture). Note: TLS detected depth=13315 ppm on Q3 data only; the catalog primary depth 139600 ppm (0.1396 fractional) is a full-baseline value from Prsa+2011 (DOI:10.1088/0004-6256/141/3/83). The phased_lc flux arrays are illustrative schematic curves scaled to the catalog depth, not TLS-output binned cadences."
     },
     "stellar_params": {
       "teff_K": 5200,

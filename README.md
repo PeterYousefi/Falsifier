@@ -168,7 +168,7 @@ Gates proven by mutation testing: 10
 Tests collected (CI, full-dev):
 
 <!-- CLAIM:n_tests_ci -->
-Full test suite (CI, full-dev): 467 collected
+Full test suite (CI, full-dev): 522 collected
 <!-- /CLAIM:n_tests_ci -->
 
 Time round-trip tolerance:

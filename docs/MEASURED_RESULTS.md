@@ -132,7 +132,7 @@ See [`docs/PROVEN_GATES.md`](PROVEN_GATES.md) for verbatim mutation output.
 
 ## Test count
 
-**Full test suite (CI, full-dev):** 467 collected
+**Full test suite (CI, full-dev):** 522 collected
 *(Source: `tests/CI_TEST_COUNT`)*
 
 ---
