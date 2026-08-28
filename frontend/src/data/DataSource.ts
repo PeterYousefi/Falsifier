@@ -527,9 +527,10 @@ const _OFFLINE_ANSWERS: Array<{ match: string[]; entry: _OfflineEntry }> = [
 
 const _OFFLINE_FALLBACK: _OfflineEntry = {
   content:
-    '**Offline mode** — no watsonx.ai backend is configured. ' +
-    'Answers for the suggested prompts are assembled from the committed KIC 11904151 fixture artifact. ' +
-    'For other questions, connect the pipeline backend (set WATSONX_APIKEY).',
+    '**Demo mode** — this deployment answers from a fixed set of canned responses about ' +
+    'the KIC 11904151 example. It is not connected to a live watsonx.ai backend. ' +
+    'Clone the repo and run the Python backend locally (see README) to ask open-ended ' +
+    'questions against a real pipeline run.',
   sources: [],
 }
 

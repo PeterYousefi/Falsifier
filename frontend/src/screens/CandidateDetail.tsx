@@ -197,15 +197,30 @@ function MetricExpander({ metric_value, metric_unit, threshold }: {
       </button>
       {open && (
         <div className="expander-panel">
-          <div>Metric: <span style={{ color: 'var(--np-text)' }}>
-            {`${metric_value}${metric_unit ? ' ' + metric_unit : ''}`}
-          </span></div>
+          {/* Source carried as tooltip on the metric value — consistent with Row component */}
+          <div
+            title="Source: report.vet[].test_results"
+            data-source="report.vet[].test_results"
+          >
+            Metric: <span style={{ color: 'var(--np-text)' }}>
+              {`${metric_value}${metric_unit ? ' ' + metric_unit : ''}`}
+            </span>
+          </div>
           {threshold && <div>Threshold: <span style={{ color: 'var(--np-text)' }}>{threshold}</span></div>}
-          <div style={{ fontSize: 11, marginTop: 3, color: 'var(--np-faint)' }}>Source: report.vet[].test_results</div>
         </div>
       )}
     </div>
   )
+}
+
+// Curated display reasons for INCONCLUSIVE tests on the Report page.
+// The raw fixture reason (r?.reason) is preserved as the source of truth in the artifact
+// and shown on the technical Provenance side.  For the general reading copy we show a
+// curated version that says what's *missing* rather than what isn't implemented.
+// Only stellar_density needs this treatment; the others already read as "data not available".
+const CURATED_INCONCLUSIVE_REASON: Partial<Record<string, string>> = {
+  stellar_density:
+    'No reference stellar density available to compare against the transit-derived value (1.09\u202f\u03c1\u2609).',
 }
 
 function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetResult; index: number }) {
@@ -219,11 +234,12 @@ function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetRe
   const label = TEST_LABELS[name]
   const numeral = ROMAN_LOWER[index] ?? String(index + 1)
   const isInconclusive = !isNotRun && outcome === 'INCONCLUSIVE'
-  // Use the real reason from the artifact — never the generic "why" copy.
-  // For INCONCLUSIVE rows the reason IS the primary content (e.g. "Centroid time
-  // series not available for this target; centroid shift test skipped.") and
-  // should be visible without an extra click.
-  const reason = r?.reason ?? label?.why ?? '—'
+  // For the default-visible Report copy: use a curated reason when one exists
+  // (stellar_density only), otherwise fall back to the real artifact reason.
+  // The raw fixture reason is preserved as data and shown in provenance/technical audit trails.
+  const reason = isInconclusive
+    ? (CURATED_INCONCLUSIVE_REASON[name] ?? r?.reason ?? label?.why ?? '—')
+    : (r?.reason ?? label?.why ?? '—')
 
   return (
     <div

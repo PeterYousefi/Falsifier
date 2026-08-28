@@ -16,13 +16,6 @@
       "description": "Kepler Q3 long-cadence, KIC 6965293 (EB) — Prsa et al. 2011, AJ 141, 83"
     },
     {
-      "name": "gaia_dr3_kic11904151",
-      "source_doi": "10.1051/0004-6361/202243940",
-      "access_date": "2024-01-10",
-      "row_count": 1,
-      "description": "Gaia DR3 stellar parameters, KIC 11904151"
-    },
-    {
       "name": "nasa_exoplanet_archive_koi",
       "source_doi": "10.26133/NEA12",
       "access_date": "2024-01-08",
