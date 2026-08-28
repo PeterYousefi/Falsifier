@@ -932,7 +932,9 @@ def main(argv: list[str] | None = None) -> int:
                 result = fn()
                 print(f"OK             [{label}]  {result!r}")
             except Exception as exc:
-                gate_check_errors.append(f"DRIFT          [{label}]\n  {exc}")
+                msg = f"DRIFT          [{label}]\n  {exc}"
+                gate_check_errors.append(msg)
+                print(f"FAIL           [{label}]  {exc}", file=sys.stderr)
 
         for line in gate_check_errors:
             print(f"ERROR: {line}", file=sys.stderr)

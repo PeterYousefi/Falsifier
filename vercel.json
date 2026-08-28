@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd frontend && npm ci",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
+  "framework": null,
+  "functions": {
+    "frontend/api/chat.py": {
+      "runtime": "vercel-python@4.x"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/chat",
+      "destination": "/frontend/api/chat"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

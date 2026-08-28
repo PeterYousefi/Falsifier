@@ -30,6 +30,26 @@ To update:
 
 ---
 
+## Vercel project settings
+
+The Vercel project must be configured with **Root Directory = `.` (repo root)** — this is
+the default when the project is created from the GitHub repo directly.  A root-level
+`vercel.json` handles the rest:
+
+- `buildCommand`/`installCommand` — run `npm ci` and `npm run build` inside `frontend/`
+- `outputDirectory` — `frontend/dist`
+- `functions` — scopes the Python runtime to `frontend/api/chat.py` only
+- `rewrites` — routes `/api/chat` to the function; SPA catch-all for all other paths
+- `.vercelignore` — excludes `pyproject.toml` from the Vercel upload so the Python
+  framework scanner doesn't try to deploy the FastAPI backend as a serverless function
+  (the FastAPI backend runs on Fly.io/Docker, not Vercel)
+
+**Do not** set Root Directory to `frontend/` — that would break the `/api/chat` function
+path (it would be at `frontend/api/chat.py` relative to repo root, which maps to the
+correct URL `/api/chat` only via the `rewrites` rule in the root `vercel.json`).
+
+---
+
 ## Vercel Deployment Protection
 
 ⚠️ **Action required before judging:**

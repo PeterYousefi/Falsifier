@@ -1,0 +1,32 @@
+# .vercelignore
+# Tell Vercel not to deploy these files/directories.
+# This prevents Vercel's Python framework auto-detection from triggering on
+# pyproject.toml, which would cause it to scan for a FastAPI/Django/Flask app
+# and fail with "No entrypoint found" — the FastAPI backend runs on Fly.io/Docker,
+# not on Vercel.  The falsifier/ package itself IS deployed (needed by the
+# frontend/api/chat.py serverless function at runtime via sys.path).
+
+# Python project metadata — excludes from framework detection only.
+# The falsifier/ package source is still deployed so the serverless function
+# can import it.
+pyproject.toml
+falsifier.egg-info/
+
+# Development and local artifacts
+.env
+.venv/
+.benchmarks/
+.pytest_cache/
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+
+# CI/CD config not needed at runtime
+.github/
+
+# Test suite — not needed in the deployed function bundle
+tests/
+
+# Build artifacts not needed in the deployed bundle
+frontend/node_modules/
