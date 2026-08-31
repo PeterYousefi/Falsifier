@@ -12,8 +12,8 @@
  * is still running, attaches a new SSE stream.
  */
 import { create } from 'zustand'
-import { dataSource, isFixtureMode } from './data/DataSource'
-import type { DetectionReport, ProvenanceReport, StageEvent, ChatMessage } from './data/types'
+import { dataSource, isFixtureMode, fixtureJob } from './data/DataSource'
+import type { DetectionReport, JobRecord, ProvenanceReport, StageEvent, ChatMessage } from './data/types'
 
 export const SESSION_JOB_KEY = 'falsifier_active_job_id'
 
@@ -80,9 +80,8 @@ interface AppState {
    * Called once from App.tsx useEffect — idempotent if jobId is already set.
    */
   rehydrateJob: () => Promise<void>
-  /** @deprecated loadFixtureJob is no longer called automatically.
-   *  Kept for backward compatibility; call explicitly to pre-load fixture data. */
-  loadFixtureJob: () => Promise<void>
+  /** Load the Kepler-10 worked example directly from the committed artifact. */
+  loadFixtureJob: () => void
 }
 
 function ts(): string {
@@ -332,12 +331,26 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  loadFixtureJob: async () => {
-    try {
-      const record = await dataSource.getJob('fixture-job-001')
-      if (record.report) {
-        set({ report: record.report, jobId: record.job_id, jobStatus: 'done' })
-      }
-    } catch (_) {}
+  /**
+   * Load the Kepler-10 worked example directly from the committed pipeline
+   * artifact (frontend/src/fixtures/job.json).  Never triggers a live pipeline
+   * run — safe in both fixture and API mode.
+   */
+  loadFixtureJob: () => {
+    const record = fixtureJob as JobRecord
+    if (record.report) {
+      set({
+        report: record.report,
+        jobId: record.job_id,
+        jobStatus: 'done',
+        jobError: null,
+        targetId: record.request?.target_id ?? 'KIC 11904151',
+        mission: record.request?.mission ?? 'Kepler',
+        cadence: record.request?.cadence ?? 'long',
+        progressStage: null,
+        progressElapsed: null,
+        isSubmitting: false,
+      })
+    }
   },
 }))

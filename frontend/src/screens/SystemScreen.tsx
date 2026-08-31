@@ -273,15 +273,13 @@ function VerdictPreview() {
 
 // ── Landing page content ──────────────────────────────────────────────────
 function LandingContent() {
-  const { setTargetId, setMission, setCadence, submitJob, jobStatus, isSubmitting } = useStore()
+  const { setTargetId, setMission, setCadence, submitJob, loadFixtureJob, jobStatus, isSubmitting } = useStore()
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null)
 
   const runExample = () => {
-    const ex = EXAMPLE_TARGETS[0]
-    setTargetId(ex.id)
-    setMission(ex.mission)
-    setCadence(ex.cadence)
-    submitJob(ex.id, ex.mission, ex.cadence)
+    // Always load from the committed pipeline artifact (job.json) — never triggers
+    // a live pipeline run, so the button works identically in fixture and API mode.
+    loadFixtureJob()
     // Do not navigate to 'detail' — VerdictPreview renders inline once report populates.
     // "Read the full report →" inside VerdictPreview is the only navigation trigger.
   }

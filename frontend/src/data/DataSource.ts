@@ -68,7 +68,7 @@ const _ABSENT_JOB = {
   events: [],
 }
 
-const fixtureJob: unknown =
+export const fixtureJob: unknown =
   (_jobGlobs['../fixtures/job.json'] as { default?: unknown } | undefined)?.default ?? _ABSENT_JOB
 const fixtureJobEB: unknown =
   (_jobEBGlobs['../fixtures/job_false_positive.json'] as { default?: unknown } | undefined)?.default ?? _ABSENT_JOB
