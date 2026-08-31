@@ -14,11 +14,10 @@ import React, { useState } from 'react'
 import { GATE_COUNT, DEFECT_COUNT } from './GatesScreen'
 
 // ---------------------------------------------------------------------------
-// Demo video — points to the hosted Vercel deployment walkthrough page.
-// Update this constant when the real video URL is published.
+// Demo video — YouTube walkthrough. Live app at https://falsifier.vercel.app
 // ---------------------------------------------------------------------------
-const DEMO_VIDEO_URL = 'https://falsifier.vercel.app'
-const DEMO_VIDEO_LABEL = '▶ Watch the 3-min walkthrough (enter a target ID, watch pipeline stream, see disposition)'
+const DEMO_VIDEO_URL = 'https://youtu.be/yL43JO7a5nE'
+const DEMO_VIDEO_LABEL = '▶ Watch the 3-min walkthrough on YouTube (enter a target ID, watch pipeline stream, see disposition)'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,7 +52,7 @@ const STEPS: Step[] = [
     verifies: 'End-to-end pipeline run: enter ID → stream → disposition',
     command: '',
     exitCondition: DEMO_VIDEO_LABEL,
-    appLink: { href: DEMO_VIDEO_URL, label: '▶ Open demo video' },
+    appLink: { href: DEMO_VIDEO_URL, label: '▶ Watch on YouTube ↗' },
   },
   {
     title: 'Non-claim locked',

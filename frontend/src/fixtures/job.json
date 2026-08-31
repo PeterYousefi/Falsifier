@@ -44,7 +44,7 @@
     "vet": [
       {
         "tce_id": "KIC 11904151.01",
-        "disposition": "candidate",
+        "disposition": "ambiguous",
         "triggering_test": null,
         "triggering_reason": null,
         "wall_time_seconds": 0.01,
@@ -65,10 +65,10 @@
           },
           {
             "test_name": "centroid_shift",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — Batalha et al. (2011) centroid analysis on this exact target found no shift (used as the field’s ~2″ benchmark)."
+            "reason": "INCONCLUSIVE — centroid time series not available in the Q3 golden fixture; the pipeline does not propagate centroid arrays."
           },
           {
             "test_name": "transit_shape",
@@ -79,24 +79,24 @@
           },
           {
             "test_name": "stellar_density",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — asteroseismic density (19 oscillation frequencies) matches the transit-derived density closely."
+            "reason": "INCONCLUSIVE — stellar parameters not propagated by the pipeline for this Q3 fixture run."
           },
           {
             "test_name": "gaia_ruwe",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — no binarity flagged anywhere in the literature; RUWE likely ≈1.0."
+            "reason": "INCONCLUSIVE — Gaia RUWE not available in the pipeline run for this fixture."
           },
           {
             "test_name": "systematics_coincidence",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — best-vetted small planet in the Kepler sample with no reported systematics issue."
+            "reason": "INCONCLUSIVE — systematics catalogue not available for this pipeline run."
           }
         ],
         "period_days": 0.8374854177807519,

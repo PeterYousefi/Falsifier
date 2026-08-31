@@ -47,23 +47,26 @@ def _parse_claim_integer(readme_text: str, claim_name: str) -> int:
     raise KeyError(f"CLAIM:{claim_name} not found in README.md")
 
 
-def _count_gate_table_rows(readme_text: str) -> int:
+def _count_gate_table_rows(_readme_text: str) -> int:
     """
-    Count data rows in the README gate-summary table.
+    Count data rows in the gate-summary table in docs/PROVEN_GATES.md.
 
-    The table is identified by its header line containing 'Gate' and 'What it catches'.
+    The table is identified by its header line containing 'Gate name'.
     Data rows are pipe-delimited lines that are NOT the header or separator rows.
     """
+    if not _PROVEN_GATES_DOC.exists():
+        return 0
+    text = _PROVEN_GATES_DOC.read_text(encoding="utf-8")
     in_table = False
     data_rows = 0
-    for line in readme_text.splitlines():
+    for line in text.splitlines():
         stripped = line.strip()
         if not stripped.startswith("|"):
             if in_table:
                 break
             continue
-        # Detect the header row of the gate-summary table
-        if "Gate" in stripped and "What it catches" in stripped:
+        # Detect the header row of the gate-summary table (contains "Gate name")
+        if "Gate name" in stripped:
             in_table = True
             continue
         if in_table:

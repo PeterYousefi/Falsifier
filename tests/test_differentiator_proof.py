@@ -40,7 +40,9 @@ import pathlib
 
 import numpy as np
 import pytest
-from astropy.io import fits
+
+astropy = pytest.importorskip("astropy", reason="astropy not installed")
+from astropy.io import fits  # noqa: E402 — guarded by importorskip above
 
 pytestmark = [pytest.mark.requires_astropy, pytest.mark.timeout(120)]
 

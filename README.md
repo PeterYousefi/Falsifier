@@ -18,7 +18,7 @@ humanity has ever built — Falsifier makes sure humanity doesn't point it at an
 
 Most transit-detection pipelines and AI classification models are built to *find* planets, inherently suffering from confirmation bias when dealing with noisy deep-space data. This one is built to destroy its own candidates. A dimming light curve is not a discovery until it has survived seven independent attempts to explain it away as something else — and until then, the pipeline is designed to fail it, not flatter it.
 
-▶ [Watch the walkthrough](__DEMO_VIDEO_URL__) — enter a Kepler/TESS target ID, watch every pipeline stage stream live, see the named rejection mechanism fire.
+▶ [Watch the walkthrough](https://youtu.be/yL43JO7a5nE) — enter a Kepler/TESS target ID, watch every pipeline stage stream live, see the named rejection mechanism fire.
 
 ---
 
