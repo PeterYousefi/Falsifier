@@ -30,6 +30,18 @@ class ArtifactCorruptedError(RuntimeError):
     """
 
     def __init__(self, message: str, *, path: Path, expected: str, actual: str) -> None:
+        """
+        Parameters
+        ----------
+        message : str
+            Human-readable description of the integrity failure.
+        path : Path
+            Path to the file that failed the SHA-256 check.
+        expected : str
+            SHA-256 hex digest recorded in the ``ArtifactRef``.
+        actual : str
+            SHA-256 hex digest computed from the file on disk.
+        """
         super().__init__(message)
         self.path = path
         self.expected = expected
@@ -49,6 +61,22 @@ class ArtifactCorruptedError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 def _sha256_file(path: Path) -> str:
+    """
+    Compute the SHA-256 hex digest of the file at *path*.
+
+    Reads the file in 64 KiB chunks to avoid loading large FITS/JSON
+    artifacts fully into memory.
+
+    Parameters
+    ----------
+    path : Path
+        File to hash.  Must exist and be readable.
+
+    Returns
+    -------
+    str
+        Lowercase hexadecimal SHA-256 digest (64 characters).
+    """
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
@@ -62,6 +90,16 @@ def input_hash(model: BaseModel) -> str:
 
     Used to detect cache hits: if the upstream output's hash matches a stored
     artifact's ``StageManifest.input_hash``, the stage body can be skipped.
+
+    Parameters
+    ----------
+    model : BaseModel
+        Any Pydantic model that supports ``model_dump_json()``.
+
+    Returns
+    -------
+    str
+        Lowercase hexadecimal SHA-256 digest (64 characters).
     """
     return hashlib.sha256(
         model.model_dump_json().encode("utf-8")
@@ -81,6 +119,20 @@ def artifact_write(model: BaseModel, directory: Path) -> ArtifactRef:
 
     Computes the SHA-256 of the written file bytes and includes it in the
     returned ``ArtifactRef``.
+
+    Parameters
+    ----------
+    model : BaseModel
+        A pipeline output model with ``model.manifest.stage`` and
+        ``model.input.pipeline_run_id`` attributes.
+    directory : Path
+        Directory to write the artifact into.  Created (including parents)
+        if absent.
+
+    Returns
+    -------
+    ArtifactRef
+        Points to the newly written file with its SHA-256 and stage metadata.
     """
     stage = model.manifest.stage  # type: ignore[attr-defined]
     run_id = model.input.pipeline_run_id  # type: ignore[attr-defined]
@@ -112,6 +164,25 @@ def artifact_read(ref: ArtifactRef, model_class: type[T]) -> T:
     2. Verifies the SHA-256 of the file bytes against ``ref.sha256``;
        raises ``ArtifactCorruptedError`` if they differ.
     3. Deserialises with ``model_class.model_validate_json()``.
+
+    Parameters
+    ----------
+    ref : ArtifactRef
+        Reference to the artifact, including path and expected SHA-256.
+    model_class : type[T]
+        Pydantic model class used to deserialise the JSON.
+
+    Returns
+    -------
+    T
+        Validated instance of *model_class*.
+
+    Raises
+    ------
+    ArtifactCorruptedError
+        If the SHA-256 of the file on disk does not match ``ref.sha256``.
+    FileNotFoundError
+        If ``ref.path`` does not exist.
     """
     path = ref.path
     raw = path.read_bytes()

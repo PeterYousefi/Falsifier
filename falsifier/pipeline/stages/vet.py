@@ -105,6 +105,17 @@ def _test_odd_even_depth(tce: TCE) -> VettingTestResult:
     which is the hallmark of an eclipsing binary where what appears to be
     two transits per period are actually the primary and secondary eclipses.
 
+    Parameters
+    ----------
+    tce : TCE
+        The candidate transit event to evaluate.
+
+    Returns
+    -------
+    VettingTestResult
+        Outcome is ``"FAIL"`` if mismatch > 3.0, ``"FLAG"`` if > 1.5,
+        otherwise ``"PASS"``.
+
     References
     ----------
     Hippke & Heller 2019, DOI 10.1051/0004-6361/201834672, §5.
@@ -149,6 +160,18 @@ def _test_secondary_eclipse(tce: TCE) -> VettingTestResult:
 
     A deep secondary eclipse (relative to the primary transit depth) is
     inconsistent with a planet transit and indicates a stellar binary.
+
+    Parameters
+    ----------
+    tce : TCE
+        The candidate transit event to evaluate.
+
+    Returns
+    -------
+    VettingTestResult
+        Outcome is ``"FAIL"`` if secondary/primary depth ratio > 0.5,
+        ``"INCONCLUSIVE"`` if primary depth is zero, ``"PASS"`` if no
+        secondary eclipse is detected or the ratio is within bounds.
     """
     if tce.secondary_eclipse_depth is None:
         return VettingTestResult(
@@ -202,6 +225,19 @@ def _test_centroid_shift(tce: TCE, search_output: SearchOutput) -> VettingTestRe
 
     Without centroid data (not available in the golden fixture), this test
     returns INCONCLUSIVE.
+
+    Parameters
+    ----------
+    tce : TCE
+        The candidate transit event to evaluate.
+    search_output : SearchOutput
+        The upstream search-stage output (used for host-star context).
+
+    Returns
+    -------
+    VettingTestResult
+        Always ``"INCONCLUSIVE"`` in the current implementation because
+        centroid time series are not yet propagated through the pipeline.
     """
     # Centroid data is not propagated through the current pipeline contract
     # (LightCurveSegment.centroid_col / centroid_row are Optional and absent
@@ -218,12 +254,23 @@ def _test_centroid_shift(tce: TCE, search_output: SearchOutput) -> VettingTestRe
 
 def _test_transit_shape(tce: TCE) -> VettingTestResult:
     """
-    Transit shape test.
+    Transit shape / depth test.
 
     Extremely deep transits (> 30 000 ppm = 3 %) are inconsistent with a
     Jupiter-sized planet transiting a Sun-like star and indicate a stellar
     eclipse.  The odd_even_mismatch encodes V-shape information implicitly;
     a very high mismatch combined with a deep transit is the clearest flag.
+
+    Parameters
+    ----------
+    tce : TCE
+        The candidate transit event to evaluate.
+
+    Returns
+    -------
+    VettingTestResult
+        Outcome is ``"FAIL"`` if ``depth > 30 000 ppm``, otherwise
+        ``"PASS"``.  The ``metric_value`` is the transit depth in ppm.
     """
     depth_ppm: float = tce.depth.values[0]
     if depth_ppm > _DEPTH_VSHAPE_FAIL_PPM:
@@ -262,6 +309,22 @@ def _test_stellar_density(
     - If stellar_density_rho_sun is None: the data is genuinely absent.
     - If stellar_density_rho_sun is present but the check is not implemented:
       the reason says so explicitly rather than falsely claiming missing data.
+
+    Parameters
+    ----------
+    tce : TCE
+        The candidate transit event.
+    search_output : SearchOutput
+        Upstream search-stage output (context only; not used in the current
+        stub).
+    stellar_density_rho_sun : float or None
+        Mean stellar density in solar density units (ρ☉ = 1.411 g/cm³).
+        Sourced from spectroscopic or photometric stellar models.
+
+    Returns
+    -------
+    VettingTestResult
+        Always ``"INCONCLUSIVE"`` in the current implementation.
     """
     if stellar_density_rho_sun is None:
         reason = (
@@ -290,6 +353,18 @@ def _test_gaia_ruwe(search_output: SearchOutput) -> VettingTestResult:
     RUWE > 1.4 indicates excess astrometric residuals, possibly from an
     unresolved binary.  Without Gaia data in the pipeline fixture, returns
     INCONCLUSIVE.
+
+    Parameters
+    ----------
+    search_output : SearchOutput
+        Upstream search-stage output.  Currently not used directly; RUWE
+        would need to be threaded through from ``IngestOutput.stellar_params``.
+
+    Returns
+    -------
+    VettingTestResult
+        Always ``"INCONCLUSIVE"`` in the current implementation because
+        Gaia RUWE is not yet propagated to this stage.
     """
     # RUWE is stored in IngestOutput.stellar_params which is not threaded
     # through the current DetrendOutput / SearchOutput chain in golden tests.
@@ -314,9 +389,10 @@ def _compute_a_over_rs(
     Compute the normalised semi-major axis a/R* for a circular orbit.
 
     Uses Kepler's third law:
-        (a/R*)³ = G * rho * P² / (3π)
 
-    where rho is in kg/m³ and P is in seconds.
+        (a/R*)³ = G · ρ · P² / (3π)
+
+    where ρ is in kg m⁻³ and P is in seconds.
 
     Parameters
     ----------
@@ -328,12 +404,12 @@ def _compute_a_over_rs(
     Returns
     -------
     float or None
-        a/R* (dimensionless), or None if the inputs are non-positive.
+        Dimensionless a/R*, or ``None`` if either input is non-positive.
 
     References
     ----------
     Seager & Mallén-Ornelas 2003, ApJ 585, 1038.
-    Batalha et al. 2011, DOI:10.1088/0004-637X/729/1/27 — Kepler-10b parameters.
+    Batalha et al. 2011, DOI 10.1088/0004-637X/729/1/27 — Kepler-10b parameters.
     """
     if stellar_density_rho_sun <= 0 or period_days <= 0:
         return None
@@ -350,6 +426,17 @@ def _test_systematics_coincidence(tce: TCE) -> VettingTestResult:
     Checks whether the transit epoch and period are suspiciously aligned with
     known Kepler/TESS systematic artefacts (reaction wheel events, thermal
     breathing, data gaps).  Without a systematics model, returns INCONCLUSIVE.
+
+    Parameters
+    ----------
+    tce : TCE
+        The candidate transit event to evaluate.
+
+    Returns
+    -------
+    VettingTestResult
+        Always ``"INCONCLUSIVE"`` in the current implementation because the
+        systematics catalogue has not yet been committed.
     """
     return VettingTestResult(
         test_name="systematics_coincidence",

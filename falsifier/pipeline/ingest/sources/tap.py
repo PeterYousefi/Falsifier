@@ -54,7 +54,20 @@ _APPROVED_TABLES = frozenset({"ps", "pscomppars", "cumulative"})
 
 
 def _guard_table(adql: str) -> None:
-    """Raise if *adql* references any retired table."""  # retired-table-ref-ok
+    """
+    Raise ``ValueError`` if *adql* references any retired NEA table.
+
+    Parameters
+    ----------
+    adql : str
+        The ADQL query string to inspect.
+
+    Raises
+    ------
+    ValueError
+        If the query contains the name of a retired table (``exoplanet``,
+        ``exomultpars``, or ``compositepars``).
+    """  # retired-table-ref-ok
     lower = adql.lower()
     for t in _RETIRED_TABLES:
         if t in lower:
@@ -67,12 +80,23 @@ def _guard_table(adql: str) -> None:
 
 def _tap_with_retry(fn):
     """
-    Thin wrapper that retries the TAP call once on transient HTTP errors.
+    Decorator that retries the wrapped TAP function once on transient errors.
 
-    Uses ``functools.wraps`` so ``fn.__wrapped__`` is accessible.  This
-    allows ``tests/pipeline/stages/test_ingest.py::TestTapTableGuard::
+    Uses ``functools.wraps`` so ``fn.__wrapped__`` is accessible.  This allows
+    ``tests/pipeline/stages/test_ingest.py::TestTapTableGuard::
     test_invalid_table_arg_raises`` to call the underlying function directly
     (bypassing the retry logic) without hitting the network.
+
+    Parameters
+    ----------
+    fn : callable
+        The TAP fetch function to wrap.
+
+    Returns
+    -------
+    callable
+        Wrapped function with one automatic retry on ``TapFetchError``.
+        Non-network errors (e.g. ``ValueError``) are re-raised immediately.
     """
     @functools.wraps(fn)
     def _wrapper(*args, **kwargs):

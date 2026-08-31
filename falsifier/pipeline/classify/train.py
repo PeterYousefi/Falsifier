@@ -122,7 +122,35 @@ def _write_model_sidecar(
     eval_metrics_path: Path,
     diagram_path: Path | None,
 ) -> Path:
-    """Write a JSON sidecar alongside *model_path*."""
+    """
+    Write a JSON sidecar alongside *model_path*.
+
+    The sidecar records all artifact paths and metadata needed to reproduce
+    the model and interpret its outputs.
+
+    Parameters
+    ----------
+    model_path : Path
+        Path to the ``.ubj`` model file.  The sidecar is written at
+        ``model_path.with_suffix(".json")``.
+    version : str
+        Model version string (``"YYYYMMDD-{sha256[:12]}"``) to embed.
+    feature_names : list[str]
+        Ordered feature column names.
+    calibrator_path : Path
+        Path to the pickled ``IsotonicRegression`` calibrator.
+    split_indices_path : Path
+        Path to the committed split-index JSON.
+    eval_metrics_path : Path
+        Path to the evaluation metrics JSON.
+    diagram_path : Path or None
+        Path to the reliability diagram PNG, or ``None`` if not produced.
+
+    Returns
+    -------
+    Path
+        Path to the written sidecar JSON file.
+    """
     sidecar = model_path.with_suffix(".json")
     data: dict[str, Any] = {
         "model_version": version,

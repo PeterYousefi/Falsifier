@@ -54,11 +54,40 @@ _SENTINEL_SHA256 = "0" * 64
 
 
 def _make_ref(run_id: str) -> ArtifactRef:
+    """
+    Build a synthetic ``ArtifactRef`` for the golden fixture path.
+
+    Parameters
+    ----------
+    run_id : str
+        Synthetic run identifier (e.g. ``"synth-1-0"``).
+
+    Returns
+    -------
+    ArtifactRef
+        Points to the sentinel golden FITS path with an all-zero SHA-256.
+    """
     return ArtifactRef(path=_SENTINEL_PATH, sha256=_SENTINEL_SHA256,
                        stage="vet", pipeline_run_id=run_id)
 
 
 def _make_manifest(run_id: str, ref: ArtifactRef) -> StageManifest:
+    """
+    Build a synthetic ``StageManifest`` for unit-test use.
+
+    Parameters
+    ----------
+    run_id : str
+        Synthetic run identifier.
+    ref : ArtifactRef
+        Artifact reference to embed in the manifest.
+
+    Returns
+    -------
+    StageManifest
+        Manifest labelled ``"vet"`` with a deterministic input hash derived
+        from *run_id* and provenance noting synthetic data.
+    """
     return StageManifest(
         stage="vet", code_version="0.0.0-synthetic",
         input_hash=hashlib.sha256(run_id.encode()).hexdigest(),
@@ -71,6 +100,19 @@ def _make_manifest(run_id: str, ref: ArtifactRef) -> StageManifest:
 
 
 def _all_pass(rng: random.Random) -> list[VettingTestResult]:
+    """
+    Generate seven PASS ``VettingTestResult`` objects with random metrics.
+
+    Parameters
+    ----------
+    rng : random.Random
+        Seeded random instance for reproducibility.
+
+    Returns
+    -------
+    list[VettingTestResult]
+        One PASS result per test in ``VETTING_TEST_ORDER``.
+    """
     return [VettingTestResult(test_name=n, outcome="PASS",  # type: ignore[arg-type]
                               metric_value=round(rng.uniform(0.0, 1.0), 4),
                               metric_unit="dimensionless",
@@ -79,6 +121,21 @@ def _all_pass(rng: random.Random) -> list[VettingTestResult]:
 
 
 def _odd_even_fail(rng: random.Random) -> list[VettingTestResult]:
+    """
+    Generate seven ``VettingTestResult`` objects where ``odd_even_depth``
+    is FAIL and the remaining six are PASS.
+
+    Parameters
+    ----------
+    rng : random.Random
+        Seeded random instance for reproducibility.
+
+    Returns
+    -------
+    list[VettingTestResult]
+        One result per test in ``VETTING_TEST_ORDER``.  The ``odd_even_depth``
+        result has an elevated metric value (3.5–8.0) and a FAIL outcome.
+    """
     results = []
     for n in VETTING_TEST_ORDER:
         if n == "odd_even_depth":

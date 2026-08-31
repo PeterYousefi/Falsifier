@@ -46,6 +46,19 @@ from ..classify.features import FEATURE_NAMES, extract_features
 
 
 def _sha256_file(path: Path) -> str:
+    """
+    Compute the SHA-256 hex digest of the file at *path*.
+
+    Parameters
+    ----------
+    path : Path
+        File to hash.  Must exist and be readable.
+
+    Returns
+    -------
+    str
+        Lowercase hexadecimal SHA-256 digest (64 characters).
+    """
     import hashlib as _hl
     h = _hl.sha256()
     with open(path, "rb") as f:

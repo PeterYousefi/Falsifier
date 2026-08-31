@@ -32,8 +32,19 @@ async def event_stream(job_id: str) -> AsyncIterator[str]:
     """
     Yield SSE-formatted text frames for *job_id* until the worker signals done.
 
-    If the job is unknown or has no queue (e.g. already finished), yields a
-    single ``job_done`` event with the job's current status and then closes.
+    Each frame has the form ``data: <json>\\n\\n`` per the W3C SSE spec.
+    If the job is unknown or has no active queue (e.g. it already finished),
+    yields a single synthetic ``job_done`` (or ``job_failed``) event and closes.
+
+    Parameters
+    ----------
+    job_id : str
+        The pipeline job identifier to stream events for.
+
+    Yields
+    ------
+    str
+        SSE text frames ready to be sent as ``text/event-stream`` content.
     """
     from .queue import get_job_store
     job_store = get_job_store()
@@ -65,6 +76,16 @@ async def event_stream(job_id: str) -> AsyncIterator[str]:
 
 
 def _event_queues_cleanup(job_id: str) -> None:
-    """Remove the event queue for *job_id* so it can be GC'd."""
+    """
+    Remove the per-job event queue so it can be garbage collected.
+
+    Called after the sentinel ``None`` is dequeued, signalling that the
+    worker has finished and no more events will arrive.
+
+    Parameters
+    ----------
+    job_id : str
+        Identifier of the job whose queue should be removed.
+    """
     from .queue import _event_queues
     _event_queues.pop(job_id, None)

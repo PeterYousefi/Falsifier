@@ -201,10 +201,27 @@ def load_split_indices(path: Path = DEFAULT_SPLIT_PATH) -> dict[str, Any]:
     """
     Load a previously written split-index JSON.
 
+    Parameters
+    ----------
+    path : Path
+        Path to the split-index JSON file.  Defaults to
+        ``data/splits/classify_split_indices.json``.
+
     Returns
     -------
-    dict with keys "train" and "test", each containing "tce_ids" and
-    "host_star_ids" lists.
+    dict
+        Full split-index payload with keys ``"train"`` and ``"test"``, each
+        containing ``"tce_ids"`` and ``"host_star_ids"`` lists.  Also
+        includes metadata keys: ``"schema_version"``, ``"split_method"``,
+        ``"group_key"``, ``"test_size"``, ``"random_state"``,
+        ``"feature_names"``, ``"label_encoding"``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *path* does not exist.
+    json.JSONDecodeError
+        If the file is not valid JSON.
     """
     with open(path, encoding="utf-8") as f:
         return json.load(f)

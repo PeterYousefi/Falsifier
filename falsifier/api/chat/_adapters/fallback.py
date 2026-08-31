@@ -59,10 +59,16 @@ class FallbackAdapter:
 
     def _load_explanation(self) -> str:
         """
-        Load the non_claims list from stage_explanations.json.
+        Load the ``non_claims`` list from ``stage_explanations.json``.
 
-        Returns a "not_available" string if the artifact is absent rather than
-        inventing content.
+        Returns a ``"not_available"`` marker string if the artifact is absent
+        or unreadable rather than inventing content.
+
+        Returns
+        -------
+        str
+            Formatted markdown listing the non-claims, or a ``[not_available]``
+            marker when the artifact cannot be loaded.
         """
         if not _EXPLANATIONS_PATH.exists():
             return (

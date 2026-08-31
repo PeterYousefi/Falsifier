@@ -100,10 +100,14 @@ def extract_feature_matrix(vet_outputs: list[VetOutput]) -> np.ndarray:
     Parameters
     ----------
     vet_outputs : list[VetOutput]
+        VetOutput records to vectorise.  An empty list returns a ``(0, 7)``
+        array.
 
     Returns
     -------
     np.ndarray, shape (N, 7), dtype float64
+        Row *i* corresponds to ``vet_outputs[i]``.  Missing metrics are
+        ``NaN`` (see ``extract_features`` for details).
     """
     if not vet_outputs:
         return np.empty((0, 7), dtype=np.float64)
@@ -147,8 +151,23 @@ def decode_label(label: int) -> str:
     """
     Decode a binary label to a human-readable description.
 
-    1 → "candidate_or_caveats"
-    0 → "false_positive_or_ambiguous"
+    1 → ``"candidate_or_caveats"``
+    0 → ``"false_positive_or_ambiguous"``
+
+    Parameters
+    ----------
+    label : int
+        Binary label produced by ``encode_label``.
+
+    Returns
+    -------
+    str
+        Human-readable disposition category.
+
+    Raises
+    ------
+    ValueError
+        If *label* is neither 0 nor 1.
     """
     if label == 1:
         return "candidate_or_caveats"

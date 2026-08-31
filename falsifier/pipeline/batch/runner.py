@@ -78,6 +78,34 @@ _BATCH_MANIFEST_PATH = _BATCH_ARTIFACT_DIR / "BATCH_MANIFEST.json"
 
 @dataclass
 class BatchTargetResult:
+    """
+    Outcome record for a single target in a batch run.
+
+    Attributes
+    ----------
+    planet_name : str
+        Canonical NASA Exoplanet Archive name for this target.
+    status : str
+        One of ``"ok"`` (freshly run), ``"cached"`` (served from disk cache),
+        ``"failed"`` (exception raised during run), ``"skipped"`` (dry-run
+        mode — no stages executed).
+    retrieve_artifact_path : str or None
+        Absolute path to the serialised ``RetrieveOutput`` JSON, or ``None``
+        if the retrieve stage was not reached.
+    disequilibrium_artifact_path : str or None
+        Absolute path to the serialised ``DisequilibriumOutput`` JSON, or
+        ``None`` if the disequilibrium stage was not reached.
+    source_flux_ratios : dict[str, dict]
+        Mapping of chemical species to ``{ratio, ratio_uncertainty,
+        muscles_spectrum_doi}``.  Empty dict on failure or before
+        disequilibrium runs.
+    error : str or None
+        Human-readable exception string if ``status == "failed"``,
+        otherwise ``None``.
+    wall_seconds : float
+        Elapsed wall-clock time for this target in seconds.
+    """
+
     planet_name: str
     status: str               # "ok" | "cached" | "failed" | "skipped"
     retrieve_artifact_path: str | None = None
@@ -167,6 +195,29 @@ def _process_one_target(
     dry_run: bool,
     verbose: bool,
 ) -> BatchTargetResult:
+    """
+    Run the retrieve + disequilibrium pipeline for a single target entry.
+
+    Parameters
+    ----------
+    target : dict
+        A single entry from ``curated_targets.json``.  Must pass
+        ``_validate_target_entry`` before this function is called.
+    artifact_dir : Path
+        Root directory where per-target subdirectories are created.
+    force : bool
+        Re-run even if a valid cached artifact exists.
+    dry_run : bool
+        Parse and validate the target entry only; skip all stage execution.
+    verbose : bool
+        Print per-target progress to stdout.
+
+    Returns
+    -------
+    BatchTargetResult
+        Status and artifact paths for this target.  Exceptions are caught
+        and recorded in ``result.error``; they do not propagate.
+    """
     import time
     t0 = time.monotonic()
     planet_name = target.get("planet_name", "unknown")
@@ -312,9 +363,28 @@ def _process_one_target(
 
 def _build_stage_inputs(target: dict):
     """
-    Build (RetrieveInput, DisequilibriumInput) from a target entry dict.
+    Build ``(RetrieveInput, DisequilibriumInput)`` from a target entry dict.
 
     All values come from the target JSON; nothing is hardcoded here.
+
+    Parameters
+    ----------
+    target : dict
+        A single validated entry from ``curated_targets.json``.
+
+    Returns
+    -------
+    tuple[RetrieveInput, DisequilibriumInput]
+        Fully constructed stage inputs ready for ``run_retrieve`` and
+        ``run_disequilibrium``.
+
+    Raises
+    ------
+    KeyError
+        If a required field is missing from *target* (call
+        ``_validate_target_entry`` first to get a cleaner error).
+    ValueError
+        If a numeric field cannot be converted to the expected type.
     """
     from ..contracts.retrieve import RetrievalConfig, RetrieveInput
     from ..contracts.disequilibrium import (
@@ -398,7 +468,20 @@ _REQUIRED_FIELDS = {
 
 
 def _validate_target_entry(target: dict) -> None:
-    """Raise ValueError if any required field is missing or invalid."""
+    """
+    Validate a single target entry from ``curated_targets.json``.
+
+    Parameters
+    ----------
+    target : dict
+        A single entry from the target list.
+
+    Raises
+    ------
+    ValueError
+        If any required field is absent, if ``included_species`` is empty,
+        or if ``c_to_o_ratio`` is not positive.
+    """
     missing = _REQUIRED_FIELDS - set(target.keys())
     if missing:
         raise ValueError(
@@ -424,6 +507,23 @@ def _write_batch_manifest(
     artifact_dir: Path,
     target_list_path: Path,
 ) -> None:
+    """
+    Write the batch-run manifest to ``BATCH_MANIFEST.json``.
+
+    Records run date, falsifier version, target counts, and per-target
+    artifact paths.  The manifest is the sole committed traceability record
+    for the batch run (AGENTS.md Rule 3).
+
+    Parameters
+    ----------
+    results : list[BatchTargetResult]
+        All per-target results from a ``run_batch`` call.
+    artifact_dir : Path
+        Directory where ``BATCH_MANIFEST.json`` is written.  Created if absent.
+    target_list_path : Path
+        Path to the source ``curated_targets.json``; recorded in the manifest
+        for traceability.
+    """
     artifact_dir.mkdir(parents=True, exist_ok=True)
     n_ok = sum(1 for r in results if r.status == "ok")
     n_cached = sum(1 for r in results if r.status == "cached")
@@ -466,16 +566,66 @@ def _write_batch_manifest(
 # ---------------------------------------------------------------------------
 
 def _safe_name(s: str) -> str:
+    """
+    Convert *s* to a filesystem-safe directory name.
+
+    Replaces spaces, forward slashes, and backslashes with underscores.
+
+    Parameters
+    ----------
+    s : str
+        Input string, e.g. a planet name such as ``"TRAPPIST-1 b"``.
+
+    Returns
+    -------
+    str
+        Filesystem-safe version of *s*.
+    """
     return s.replace(" ", "_").replace("/", "_").replace("\\", "_")
 
 
 def _load_json_artifact(path: Path) -> dict:
+    """
+    Load a JSON file and return its contents as a dict.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the JSON file.
+
+    Returns
+    -------
+    dict
+        Parsed JSON content.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *path* does not exist.
+    json.JSONDecodeError
+        If the file is not valid JSON.
+    """
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def _extract_source_flux_ratios(disq_dict: dict) -> dict[str, dict]:
-    """Extract {species: {ratio, ratio_uncertainty}} from a DisequilibriumOutput dict."""
+    """
+    Extract per-species flux ratios from a serialised ``DisequilibriumOutput`` dict.
+
+    Parameters
+    ----------
+    disq_dict : dict
+        A ``DisequilibriumOutput`` instance serialised to a plain dict (e.g.
+        via ``model_dump()`` or ``json.load``).
+
+    Returns
+    -------
+    dict[str, dict]
+        Mapping of species name → ``{ratio, ratio_uncertainty,
+        muscles_spectrum_doi}``.  Missing fields default to ``0.0`` /
+        empty string rather than raising.
+    """
     ratios_raw = disq_dict.get("source_flux_ratios", [])
     out = {}
     for item in ratios_raw:

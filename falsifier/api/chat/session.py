@@ -94,10 +94,19 @@ class ChatResponse:
 
 def _detect_watsonx_config() -> dict | None:
     """
-    Return watsonx.ai config dict if WATSONX_APIKEY is set, else None.
+    Return a watsonx.ai config dict if the required environment variables are
+    set, otherwise return ``None``.
 
-    Required: WATSONX_APIKEY, WATSONX_URL, WATSONX_PROJECT_ID
-    Optional: WATSONX_MODEL_ID (default: ibm/granite-3-3-8b-instruct)
+    Required environment variables: ``WATSONX_APIKEY``, ``WATSONX_URL``,
+    ``WATSONX_PROJECT_ID``.
+    Optional: ``WATSONX_MODEL_ID`` (default: ``ibm/granite-3-3-8b-instruct``).
+
+    Returns
+    -------
+    dict or None
+        Config dict with keys ``api_key``, ``url``, ``project_id``,
+        ``model_id`` — or ``None`` if any required variable is absent or
+        empty.
     """
     api_key = os.environ.get("WATSONX_APIKEY", "").strip()
     if not api_key:
@@ -120,10 +129,21 @@ def _detect_watsonx_config() -> dict | None:
 
 def _build_watsonx_client(config: dict):
     """
-    Construct an ibm_watsonx_ai.foundation_models.ModelInference client.
+    Construct an ``ibm_watsonx_ai.foundation_models.ModelInference`` client.
 
-    Credentials are read exclusively from ``config`` (which was populated
-    from environment variables — nothing is hardcoded).
+    Credentials are read exclusively from *config* (populated from environment
+    variables — nothing is hardcoded).
+
+    Parameters
+    ----------
+    config : dict
+        Must contain keys: ``api_key``, ``url``, ``project_id``,
+        ``model_id``.  All values come from environment variables.
+
+    Returns
+    -------
+    ModelInference
+        Ready-to-use IBM watsonx.ai inference client.
     """
     from ibm_watsonx_ai import Credentials
     from ibm_watsonx_ai.foundation_models import ModelInference
@@ -145,13 +165,27 @@ def _call_watsonx(
     tools: list[dict],
 ) -> dict:
     """
-    Call the watsonx.ai ModelInference.chat endpoint.
+    Call the watsonx.ai ``ModelInference.chat`` endpoint.
 
-    ``tools`` is the list of tool schemas in function-calling format
-    (same as TOOL_SCHEMAS); watsonx.ai accepts this format unchanged.
+    Parameters
+    ----------
+    config : dict
+        watsonx.ai configuration dict (from ``_detect_watsonx_config``).
+    messages : list[dict]
+        Conversation in the ``[{"role": …, "content": …}]`` format.
+    tools : list[dict]
+        Tool schemas in function-calling format (same as ``TOOL_SCHEMAS``);
+        forwarded as ``[{"type": "function", "function": t}]``.
 
-    Returns the raw response dict.
-    Raises on HTTP / credential failure.
+    Returns
+    -------
+    dict
+        Raw watsonx.ai response dict.
+
+    Raises
+    ------
+    Exception
+        On HTTP or credential failure; the caller should catch broadly.
     """
     client = _build_watsonx_client(config)
     watsonx_tools = [{"type": "function", "function": t} for t in tools]
@@ -165,16 +199,27 @@ def _call_watsonx(
 
 def _extract_watsonx_turn(response: dict) -> tuple[str, list[dict]]:
     """
-    Parse a watsonx.ai chat response into (text, tool_calls).
+    Parse a watsonx.ai chat response into ``(text, tool_calls)``.
 
-    watsonx.ai chat response shape:
-      response["choices"][0]["message"] with:
-        - "content": str | None  (text response)
-        - "tool_calls": list of {"id", "type", "function": {"name", "arguments"}}
-      response["choices"][0]["finish_reason"]:
-        "stop" | "tool_calls" | "length" | "eos_token"
+    watsonx.ai chat response shape::
 
-    Returns (text, []) for text responses and ("", tool_calls) for tool turns.
+        response["choices"][0]["message"] = {
+            "content": str | None,
+            "tool_calls": [{"id", "type", "function": {"name", "arguments"}}]
+        }
+        response["choices"][0]["finish_reason"]:
+            "stop" | "tool_calls" | "length" | "eos_token"
+
+    Parameters
+    ----------
+    response : dict
+        Raw response dict from ``_call_watsonx``.
+
+    Returns
+    -------
+    tuple[str, list[dict]]
+        ``(text, [])`` for text-only responses and ``("", tool_calls)`` when
+        the model requests tool calls.
     """
     choice = response["choices"][0]
     msg = choice["message"]
@@ -191,6 +236,15 @@ def _extract_watsonx_turn(response: dict) -> tuple[str, list[dict]]:
 # ---------------------------------------------------------------------------
 
 def _load_explanations() -> dict:
+    """
+    Load ``stage_explanations.json`` from the committed artifact directory.
+
+    Returns
+    -------
+    dict
+        Parsed JSON with ``"stages"`` and ``"non_claims"`` keys, or a
+        minimal empty-dict fallback if the file is absent or unreadable.
+    """
     if _EXPLANATIONS_PATH.exists():
         try:
             with open(_EXPLANATIONS_PATH, encoding="utf-8") as f:
@@ -206,10 +260,27 @@ def _offline_response(
     tool_calls_made: list[dict],
 ) -> str:
     """
-    Assemble a templated response from committed artifact text.
+    Assemble a templated offline response from committed artifact text.
 
-    Used when no watsonx.ai API key is available.  Numbers come only from
-    tool_calls_made results; template text comes from stage_explanations.json.
+    Used when no watsonx.ai API key is available.  Numbers in the response
+    come only from *tool_calls_made* results; template text comes from
+    ``stage_explanations.json``.
+
+    Parameters
+    ----------
+    job_id : str or None
+        The pipeline job being discussed (for display only).
+    message : str
+        The user's original message (not used for generation; present for
+        future keyword routing).
+    tool_calls_made : list[dict]
+        Tool call results already executed before entering offline mode.
+        Each entry is ``{"tool": name, "args": dict, "result": dict}``.
+
+    Returns
+    -------
+    str
+        Formatted markdown text suitable for the chat response body.
     """
     expl = _load_explanations()
     non_claims = expl.get("non_claims", [])
@@ -254,8 +325,21 @@ def _dispatch_tool(name: str, arguments: dict) -> dict:
     """
     Call the named tool with the given arguments.
 
-    Returns the tool result dict.  Any exception is caught and returned as
-    {"error": str} so the model can report it rather than crashing the session.
+    Any exception is caught and returned as ``{"error": str}`` so the model
+    can report it to the user rather than crashing the session.
+
+    Parameters
+    ----------
+    name : str
+        Tool name as it appears in ``TOOL_REGISTRY``.
+    arguments : dict
+        Keyword arguments forwarded to the tool function.
+
+    Returns
+    -------
+    dict
+        Tool result dict on success, or ``{"error": <message>}`` on any
+        exception (``KeyError``, ``TypeError``, or a generic ``Exception``).
     """
     fn = TOOL_REGISTRY.get(name)
     if fn is None:
@@ -423,7 +507,20 @@ async def run_turn(
 # ---------------------------------------------------------------------------
 
 def _get_record_summary(job_id: str) -> dict | None:
-    """Return a minimal summary dict for a done job, or None."""
+    """
+    Return a minimal summary dict for a completed job.
+
+    Parameters
+    ----------
+    job_id : str
+        Pipeline job identifier.
+
+    Returns
+    -------
+    dict or None
+        ``{"tce_ids": [str, …]}`` for a done job with a non-None report,
+        or ``None`` if the job is unknown, not done, or has no report.
+    """
     try:
         store = TOOL_REGISTRY["get_vetting_results"].__globals__["_get_job_store"]()
     except Exception:  # noqa: BLE001
@@ -440,11 +537,36 @@ _SOURCE_RE = _re.compile(r"\[source:\s*[^\]]+\]")
 
 
 def _extract_sources(text: str) -> list[str]:
-    """Extract all [source: ...] citation strings from text."""
+    """
+    Extract all ``[source: …]`` citation strings from *text*.
+
+    Parameters
+    ----------
+    text : str
+        Response text that may contain embedded source citations.
+
+    Returns
+    -------
+    list[str]
+        All substrings matching ``[source: ...]``, in order of appearance.
+    """
     return _SOURCE_RE.findall(text)
 
 
 def _verdict_dict(v: GuardianVerdict) -> dict:
+    """
+    Serialise a ``GuardianVerdict`` to a plain dict for the API response body.
+
+    Parameters
+    ----------
+    v : GuardianVerdict
+        The screening verdict from ``guardian.screen``.
+
+    Returns
+    -------
+    dict
+        Keys: ``safe``, ``risk_label``, ``model_used``, ``confidence``.
+    """
     return {
         "safe": v.safe,
         "risk_label": v.risk_label,

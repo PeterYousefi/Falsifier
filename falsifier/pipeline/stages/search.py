@@ -88,6 +88,12 @@ def _tls_worker_init() -> None:
     before batman is imported.  This is the correct fix: it does not touch the
     global start-method state, does not monkey-patch Pool, and does not require
     fork semantics anywhere in the server process.
+
+    Notes
+    -----
+    This function is intended exclusively for use as a ``Pool(initializer=)``
+    argument — calling it directly outside a pool has no effect beyond loading
+    the shim in the calling process.
     """
     import falsifier._distutils_compat  # noqa: F401
 
@@ -97,23 +103,25 @@ def _compute_odd_even_excess(results, depth_ppm: float) -> float:
     Compute the excess transit-depth scatter normalised by expected per-transit
     photon noise.
 
-    For a planet all transit depths scatter near the photon-noise floor → value
-    close to 1.0.  For an EB whose primary and secondary eclipses alternate at
-    the detected period, the depth-to-depth scatter significantly exceeds the
-    per-transit photon noise → value of several.
+    For a planet, all transit depths scatter near the photon-noise floor
+    (value close to 1.0).  For an eclipsing binary whose primary and secondary
+    eclipses alternate at the detected period, the scatter significantly
+    exceeds the per-transit photon noise (value of several).
 
     Parameters
     ----------
     results
-        ``transitleastsquares`` result object (dict-like).
+        ``transitleastsquares`` result object (provides ``transit_depths``,
+        ``snr``, and ``odd_even_mismatch`` attributes).
     depth_ppm : float
-        Best-fit transit depth in ppm (already computed from ``results.depth``).
+        Best-fit transit depth in ppm (pre-computed from ``results.depth``).
 
     Returns
     -------
     float
-        Normalised excess scatter.  Returns 0.0 when insufficient transit data
-        are available to compute the metric (fewer than 4 finite transit depths).
+        Normalised excess scatter (dimensionless).  Falls back to
+        ``results.odd_even_mismatch`` when fewer than 4 finite transit
+        depths are available or when the SNR / depth is non-positive.
     """
     try:
         transit_depths = np.array(list(results.transit_depths), dtype=np.float64)
@@ -342,7 +350,24 @@ def run_search(
 
 
 def _fold(time: np.ndarray, period: float, epoch: float) -> np.ndarray:
-    """Phase-fold time array; returns phase in [-period/2, period/2]."""
+    """
+    Phase-fold a time array relative to *epoch* and *period*.
+
+    Parameters
+    ----------
+    time : np.ndarray
+        Observation times in the same unit as *period* and *epoch*.
+    period : float
+        Orbital period.
+    epoch : float
+        Reference transit epoch.
+
+    Returns
+    -------
+    np.ndarray
+        Phase values in the range ``(-period/2, period/2]``, same length
+        as *time*.
+    """
     phase = (time - epoch) % period
     phase[phase > period / 2] -= period
     return phase

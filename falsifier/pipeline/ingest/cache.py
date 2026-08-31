@@ -65,13 +65,36 @@ def _normalise(query: str) -> str:
     """
     Normalise a query string to a canonical, whitespace-collapsed, lower-cased
     form so that semantically equivalent queries always produce the same hash.
+
+    Parameters
+    ----------
+    query : str
+        Raw query string (e.g. a MAST/TAP/Gaia query or cache-key prefix).
+
+    Returns
+    -------
+    str
+        NFC-normalised, lower-cased, whitespace-collapsed version of *query*.
     """
     nfc = unicodedata.normalize("NFC", query)
     return " ".join(nfc.lower().split())
 
 
 def query_hash(query: str) -> str:
-    """Return the SHA-256 hex digest of the normalised *query* string."""
+    """
+    Return the SHA-256 hex digest of the normalised *query* string.
+
+    Parameters
+    ----------
+    query : str
+        Raw query string.  Normalised before hashing so semantically
+        equivalent queries produce the same key.
+
+    Returns
+    -------
+    str
+        Lowercase hexadecimal SHA-256 digest (64 characters).
+    """
     return hashlib.sha256(_normalise(query).encode("utf-8")).hexdigest()
 
 
@@ -80,10 +103,42 @@ def query_hash(query: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _sidecar_path(artifact_path: Path) -> Path:
+    """
+    Return the sidecar manifest path for *artifact_path*.
+
+    The sidecar lives alongside the artifact with ``.manifest.json``
+    appended to the artifact's full filename (e.g. ``abc123.fits`` →
+    ``abc123.fits.manifest.json``).
+
+    Parameters
+    ----------
+    artifact_path : Path
+        Path to the cached artifact file.
+
+    Returns
+    -------
+    Path
+        Path to the associated sidecar JSON file.
+    """
     return artifact_path.with_suffix(artifact_path.suffix + ".manifest.json")
 
 
 def _sha256_file(path: Path) -> str:
+    """
+    Compute the SHA-256 hex digest of the file at *path*.
+
+    Reads in 64 KiB chunks to avoid loading large FITS files into memory.
+
+    Parameters
+    ----------
+    path : Path
+        File to hash.
+
+    Returns
+    -------
+    str
+        Lowercase hexadecimal SHA-256 digest (64 characters).
+    """
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
@@ -103,8 +158,33 @@ def write_sidecar(
 ) -> dict[str, Any]:
     """
     Write a JSON sidecar manifest next to *artifact_path* and return the
-    manifest dict.  Must be called immediately after writing the artifact so
-    the SHA-256 reflects the committed bytes.
+    manifest dict.
+
+    Must be called immediately after writing the artifact so the SHA-256
+    reflects the committed bytes.
+
+    Parameters
+    ----------
+    artifact_path : Path
+        Path to the already-written artifact file.  The sidecar is placed
+        alongside it at ``artifact_path + ".manifest.json"``.
+    source_doi : str
+        Citable DOI for the data source.
+    source_url : str
+        Full URL of the remote endpoint that served the artifact.
+    access_date : datetime.date
+        ISO-8601 date when the data was originally fetched.
+    row_count : int
+        Number of rows/cadences in the artifact (AGENTS.md Rule 3).
+    description : str
+        Human-readable label for the artifact.
+    query : str
+        The normalised query string used to produce the cache key.
+
+    Returns
+    -------
+    dict[str, Any]
+        The full manifest dict that was written to the sidecar.
     """
     sha256 = _sha256_file(artifact_path)
     qhash = query_hash(query)
@@ -128,8 +208,19 @@ def write_sidecar(
 
 def read_sidecar(artifact_path: Path) -> dict[str, Any] | None:
     """
-    Read the sidecar manifest for *artifact_path*.  Returns ``None`` if the
-    sidecar does not exist.
+    Read the sidecar manifest for *artifact_path*.
+
+    Parameters
+    ----------
+    artifact_path : Path
+        Path to the cached artifact file.  The sidecar is located at
+        ``artifact_path + ".manifest.json"``.
+
+    Returns
+    -------
+    dict[str, Any] or None
+        The parsed sidecar manifest, or ``None`` if the sidecar does not
+        exist (cache miss or sidecar was deleted).
     """
     sidecar = _sidecar_path(artifact_path)
     if not sidecar.exists():
@@ -157,13 +248,37 @@ class IngestCache:
         root.mkdir(parents=True, exist_ok=True)
 
     def _artifact_dir(self, qhash: str) -> Path:
-        """Two-level sharding: ``<root>/<qhash[:2]>/``."""
+        """
+        Return the two-level sharded directory for *qhash*.
+
+        Parameters
+        ----------
+        qhash : str
+            SHA-256 hex digest of the normalised query.
+
+        Returns
+        -------
+        Path
+            ``<root>/<qhash[:2]>/``
+        """
         return self.root / qhash[:2]
 
     def artifact_path(self, qhash: str, suffix: str) -> Path:
         """
-        Canonical path for an artifact with the given query hash and file
-        extension (e.g. ``".fits"`` or ``".parquet"``).
+        Return the canonical path for a cached artifact.
+
+        Parameters
+        ----------
+        qhash : str
+            SHA-256 hex digest of the normalised query (from ``query_hash``).
+        suffix : str
+            File extension including the leading dot, e.g. ``".fits"`` or
+            ``".parquet"``.
+
+        Returns
+        -------
+        Path
+            ``<root>/<qhash[:2]>/<qhash><suffix>``
         """
         d = self._artifact_dir(qhash)
         return d / f"{qhash}{suffix}"
@@ -257,9 +372,33 @@ class IngestCache:
         """
         Write *data* to the cache and record provenance in the sidecar.
 
+        The write is performed atomically (temp-file + rename) so readers
+        never see a partially written artifact.
+
+        Parameters
+        ----------
+        query : str
+            The original (unnormalised) query string used as the cache key.
+        suffix : str
+            File extension including the leading dot, e.g. ``".fits"``.
+        data : bytes
+            Raw artifact bytes to cache.
+        source_doi : str
+            Citable DOI for the data source.
+        source_url : str
+            Full URL of the remote endpoint that served the data.
+        access_date : datetime.date
+            Date when the data was originally fetched from the remote.
+        row_count : int
+            Number of rows/cadences in *data* (AGENTS.md Rule 3).
+        description : str
+            Human-readable label for the artifact.
+
         Returns
         -------
-        (path, manifest_dict)
+        tuple[Path, dict[str, Any]]
+            ``(path, manifest_dict)`` — path to the written artifact and
+            the sidecar manifest that was recorded alongside it.
         """
         qhash = query_hash(query)
         path = self.artifact_path(qhash, suffix)

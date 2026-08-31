@@ -155,7 +155,23 @@ def extract_time_system(header: Any, fits_path: str) -> tuple[str, str]:
 def _flux_unit_from_header(header: Any, col_name: str, fits_path: str) -> str:
     """
     Read the FITS TUNIT keyword for *col_name* from the binary table header.
+
     Falls back to a known default for SAP_FLUX / PDCSAP_FLUX with a warning.
+
+    Parameters
+    ----------
+    header : fits.Header
+        Binary-table extension header containing TTYPE/TUNIT keywords.
+    col_name : str
+        Name of the flux column whose unit to look up (e.g. ``"SAP_FLUX"``).
+    fits_path : str
+        Path string used in the UserWarning message when no TUNIT is found.
+
+    Returns
+    -------
+    str
+        Unit string from TUNIT, or a per-column fallback with a UserWarning
+        if the keyword is absent.
     """
     # Find column index (1-based) for col_name
     ncols = header.get("TFIELDS", 0)
@@ -192,7 +208,19 @@ _EXPTIME_TO_CADENCE: list[tuple[float, str]] = [
 
 
 def _exptime_to_cadence_label(exptime_s: float) -> str:
-    """Return a human-readable cadence label for an exptime in seconds."""
+    """
+    Return a human-readable cadence label for an exposure time in seconds.
+
+    Parameters
+    ----------
+    exptime_s : float
+        Exposure time in seconds (from the lightkurve search result table).
+
+    Returns
+    -------
+    str
+        Human-readable label such as ``"fast (20 s)"`` or ``"long (30 min)"``.
+    """
     for threshold, label in _EXPTIME_TO_CADENCE:
         if exptime_s <= threshold:
             return label
@@ -222,6 +250,28 @@ def _empty_result_error(
 
     The diagnostic search is read-only and never substitutes data — the
     caller will still raise, not proceed (AGENTS.md: no source substitution).
+
+    Parameters
+    ----------
+    target_id : str
+        The target identifier that returned zero results.
+    mission : str
+        Mission name passed to the original lightkurve search (e.g.
+        ``"Kepler"``).
+    author : str
+        Reduction pipeline author filter (e.g. ``"Kepler"``).
+    cadence : str
+        Cadence filter that matched zero results (e.g. ``"long"``).
+    search_kwargs : dict
+        The full kwargs dict passed to ``lk.search_lightcurve``; included
+        in the exception ``query`` field for diagnostics.
+    lk : object
+        The imported ``lightkurve`` module used for the diagnostic probe.
+
+    Returns
+    -------
+    TargetNotFoundError
+        Informative exception with cadence availability details when known.
     """
     # --- probe 1: same mission, any cadence ---
     probe_kwargs: dict = {
@@ -286,16 +336,42 @@ def fetch_lightcurve(
     """
     Download light curve data from MAST via lightkurve.
 
+    Parameters
+    ----------
+    target_id : str
+        Canonical target identifier, e.g. ``"KIC 11904151"`` or
+        ``"TIC 150428135"``.
+    mission : str
+        Mission name passed to ``lk.search_lightcurve``, e.g. ``"Kepler"``
+        or ``"TESS"``.
+    author : str
+        Reduction pipeline author filter (e.g. ``"Kepler"`` or ``"SPOC"``).
+    cadence : str
+        Cadence filter: ``"long"``, ``"short"``, or ``"fast"``.
+    sectors : list[int] or None
+        Sector/quarter numbers to fetch.  ``None`` returns all available.
+    mast_product_id : str or None
+        If given, pin the download to the specific MAST product filename or
+        obs_id that contains this string.  Raises if zero or multiple match.
+    flux_column : str
+        Name of the flux column to read from the FITS binary table.
+        Default: ``"SAP_FLUX"``.
+
     Returns
     -------
-    list of ``(segment, mast_uri, row_count)`` tuples — one per sector/quarter.
+    list[tuple[LightCurveSegment, str, int]]
+        One ``(segment, mast_uri, row_count)`` tuple per downloaded
+        sector/quarter.
 
     Raises
     ------
     TargetNotFoundError
-        If lightkurve returns zero results.
+        If lightkurve returns zero results for the requested target and
+        cadence.
     NoProductMatchError
         If *mast_product_id* is given but no result matches it.
+    AmbiguousProductError
+        If *mast_product_id* matches more than one result.
     MastFetchError
         On any other lightkurve / network failure.
     HeaderMissingKeyError

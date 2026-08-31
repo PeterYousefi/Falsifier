@@ -148,7 +148,21 @@ def calibrated_predict(
     calibrator: IsotonicRegression,
     y_raw: np.ndarray,
 ) -> np.ndarray:
-    """Apply a fitted isotonic calibrator to raw predictions."""
+    """
+    Apply a fitted isotonic calibrator to raw XGBoost predictions.
+
+    Parameters
+    ----------
+    calibrator : IsotonicRegression
+        A calibrator fitted by ``fit_calibrator``.
+    y_raw : np.ndarray, shape (N,)
+        Raw predicted probabilities from XGBoost (before calibration).
+
+    Returns
+    -------
+    np.ndarray, shape (N,), range [0.0, 1.0]
+        Calibrated probabilities, clipped to ``[0.0, 1.0]``.
+    """
     return np.clip(calibrator.predict(np.clip(y_raw, 0.0, 1.0)), 0.0, 1.0)
 
 

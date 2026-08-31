@@ -111,6 +111,18 @@ class GuardianVerdict:
 # ---------------------------------------------------------------------------
 
 def _load_non_claims() -> list[str]:
+    """
+    Load the ``non_claims`` list from ``stage_explanations.json``.
+
+    Returns a hardcoded fallback list if the artifact is absent or
+    unreadable.
+
+    Returns
+    -------
+    list[str]
+        List of immutable non-claim statements from the committed artifact,
+        or the fallback list when the artifact is unavailable.
+    """
     if _EXPLANATIONS_PATH.exists():
         try:
             with open(_EXPLANATIONS_PATH, encoding="utf-8") as f:
@@ -128,10 +140,25 @@ def _heuristic_screen(text: str) -> GuardianVerdict:
     """
     Rule-based screening used when the Guardian model is not available.
 
-    Blocks:
-    1. Any biosignature claim (unconditional per locked claim).
+    Blocks two categories of unsafe output:
+
+    1. Any biosignature claim (unconditional per the locked claim in
+       AGENTS.md).
     2. Floating-point numbers with ≥3 sig-fig decimal places + unit that
-       appear in the text WITHOUT an adjacent [source: tool(args)] citation.
+       appear in the text **without** an adjacent ``[source: tool(args)]``
+       citation.
+
+    Parameters
+    ----------
+    text : str
+        Raw LLM output text to screen.
+
+    Returns
+    -------
+    GuardianVerdict
+        ``safe=True`` if neither category is triggered; ``safe=False`` with
+        an appropriate ``risk_label`` and redacted ``screened`` text
+        otherwise.
     """
     # Check biosignature claims first.
     # The locked non-claim phrase ("not a biosignature detector") is allowlisted —
@@ -203,13 +230,24 @@ _guardian_load_attempted = False
 
 def _try_load_guardian():
     """
-    Attempt to load ibm-granite/granite-guardian-3.1-2b from the local
-    HuggingFace cache.  Sets _guardian_pipeline on success.
+    Attempt to load ``ibm-granite/granite-guardian-3.1-2b`` from the local
+    HuggingFace cache.
+
+    Sets the module-level ``_guardian_pipeline`` on success.  This function
+    is idempotent — a second call after the first attempt (whether successful
+    or not) returns immediately.
 
     Silently falls back to heuristic mode if:
-    - transformers is not installed
-    - the model is not in the local cache (no network call is made)
-    - CUDA / MPS is not available
+
+    - ``transformers`` is not installed,
+    - the model is not in the local HuggingFace cache (``local_files_only=True``
+      ensures no network call is ever made), or
+    - neither CUDA nor MPS is available.
+
+    Notes
+    -----
+    A failed load attempt is recorded in ``_guardian_load_attempted`` so
+    inference errors do not cause repeated load attempts at runtime.
     """
     global _guardian_pipeline, _guardian_load_attempted
     if _guardian_load_attempted:
@@ -231,8 +269,20 @@ def _granite_screen(text: str) -> GuardianVerdict:
     """
     Screen text using the local Granite Guardian model.
 
-    Returns a GuardianVerdict.  Falls back to heuristic if the model
-    is not available or the inference fails.
+    Attempts to load the model lazily via ``_try_load_guardian()``.
+    Falls back to ``_heuristic_screen`` when the model is unavailable or
+    an inference error occurs.
+
+    Parameters
+    ----------
+    text : str
+        Raw LLM output text to screen.
+
+    Returns
+    -------
+    GuardianVerdict
+        Result from the Granite Guardian model, or from the heuristic
+        fallback if the model is not available.
     """
     _try_load_guardian()
     if _guardian_pipeline is None:

@@ -76,6 +76,18 @@ def validate_target_id(target_id: str) -> None:
     Raise HTTP 422 if *target_id* does not match a known catalogue pattern.
 
     Called before any network request so malformed input is rejected cheaply.
+
+    Parameters
+    ----------
+    target_id : str
+        Raw identifier string from the POST /jobs request body.
+
+    Raises
+    ------
+    HTTPException
+        Status 422 if the string is empty, exceeds 64 characters, or does
+        not match any of the accepted catalogue patterns (KIC, TIC, EPIC,
+        Kepler, K2, TOI).
     """
     stripped = target_id.strip()
     if not stripped:
@@ -106,7 +118,20 @@ _ip_call_times: dict[str, deque] = defaultdict(deque)
 
 def check_rate_limit(ip: str) -> None:
     """
-    Raise HTTP 429 if *ip* has exceeded RATE_LIMIT_CALLS within the window.
+    Raise HTTP 429 if *ip* has exceeded ``RATE_LIMIT_CALLS`` within the window.
+
+    Implements a sliding-window counter: call timestamps older than
+    ``RATE_LIMIT_WINDOW_SECONDS`` are expired on each invocation.
+
+    Parameters
+    ----------
+    ip : str
+        Client IP address (from ``get_client_ip``).
+
+    Raises
+    ------
+    HTTPException
+        Status 429 with a ``Retry-After`` header if the rate limit is exceeded.
     """
     now = time.monotonic()
     window_start = now - RATE_LIMIT_WINDOW_SECONDS
@@ -133,10 +158,22 @@ def check_rate_limit(ip: str) -> None:
 
 def get_client_ip(request: Request) -> str:
     """
-    Extract the best-available client IP from the request.
+    Extract the best-available client IP from a FastAPI request.
 
-    Prefers X-Forwarded-For (set by Code Engine / Knative ingress) over
-    the raw client host.
+    Prefers ``X-Forwarded-For`` (set by Code Engine / Knative ingress) over
+    the raw TCP client address.
+
+    Parameters
+    ----------
+    request : Request
+        Incoming FastAPI request object.
+
+    Returns
+    -------
+    str
+        The leftmost address from ``X-Forwarded-For`` (the original client),
+        the raw ``request.client.host``, or ``"unknown"`` if neither is
+        available.
     """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
@@ -154,6 +191,18 @@ def get_client_ip(request: Request) -> str:
 def check_concurrency(job_store: dict) -> None:
     """
     Raise HTTP 429 with queue position if too many jobs are active.
+
+    Parameters
+    ----------
+    job_store : dict
+        The in-memory ``_job_store`` dict from ``queue.py``; maps job IDs to
+        ``JobRecord`` objects.
+
+    Raises
+    ------
+    HTTPException
+        Status 429 if the count of ``"queued"`` or ``"running"`` jobs meets or
+        exceeds ``MAX_CONCURRENT_JOBS``.
     """
     active = sum(
         1 for r in job_store.values()

@@ -28,6 +28,17 @@ class FetchError(IngestError):
     """
 
     def __init__(self, message: str, *, endpoint: str, query: str) -> None:
+        """
+        Parameters
+        ----------
+        message : str
+            Human-readable description of the fetch failure.
+        endpoint : str
+            The URL or service name that was contacted when the failure
+            occurred.
+        query : str
+            The query string or MAST product ID that triggered the failure.
+        """
         super().__init__(message)
         self.endpoint = endpoint
         self.query = query
@@ -41,43 +52,62 @@ class FetchError(IngestError):
 
 
 class MastFetchError(FetchError):
-    """Raised on MAST / lightkurve fetch failure."""
+    """
+    Raised on MAST / lightkurve fetch failure.
+
+    Inherits ``endpoint`` and ``query`` attributes from ``FetchError``.
+    """
 
 
 class TapFetchError(FetchError):
-    """Raised on NASA Exoplanet Archive TAP fetch failure."""
+    """
+    Raised on NASA Exoplanet Archive TAP fetch failure.
+
+    Inherits ``endpoint`` and ``query`` attributes from ``FetchError``.
+    """
 
 
 class GaiaFetchError(FetchError):
-    """Raised on astroquery.gaia fetch failure."""
+    """
+    Raised on astroquery.gaia fetch failure.
+
+    Inherits ``endpoint`` and ``query`` attributes from ``FetchError``.
+    """
 
 
 class TargetNotFoundError(FetchError):
     """
     Raised when no data exist for the requested target at the requested
-    service.  Distinct from a network failure: the target name is simply
-    absent from the archive.
+    service.
+
+    Distinct from a network failure: the target name is simply absent from
+    the archive.  ``endpoint`` and ``query`` are inherited from ``FetchError``.
     """
 
 
 class NoProductMatchError(MastFetchError):
     """
     Raised when lightkurve returns results but none match the pinned
-    ``mast_product_id``.  Never fall back silently to a different product.
+    ``mast_product_id``.
+
+    Never fall back silently to a different product (AGENTS.md policy).
     """
 
 
 class AmbiguousProductError(MastFetchError):
     """
     Raised when more than one product matches the pinned ``mast_product_id``.
-    The product ID must be unique; this indicates a manifest error.
+
+    The product ID must be unique; multiple matches indicate a manifest error.
     """
 
 
 class HeaderMissingKeyError(IngestError):
     """
     Raised when a required FITS header keyword (e.g. TIMESYS, TIMEUNIT) is
-    absent.  Time-system information must come from the header, never from a
+    absent.
+
+    Time-system information must come from the header, never from a
     hardcoded assumption.
 
     Attributes
@@ -89,6 +119,17 @@ class HeaderMissingKeyError(IngestError):
     """
 
     def __init__(self, message: str, *, fits_path: str, key: str) -> None:
+        """
+        Parameters
+        ----------
+        message : str
+            Human-readable description of which header key is missing.
+        fits_path : str
+            Path to the FITS file that is missing the required header key.
+        key : str
+            Name of the FITS header keyword that was expected but absent
+            (e.g. ``"TIMESYS"`` or ``"TIME_FMT"``).
+        """
         super().__init__(message)
         self.fits_path = fits_path
         self.key = key
@@ -104,20 +145,26 @@ class HeaderMissingKeyError(IngestError):
 class PartialDataError(IngestError):
     """
     Raised when a fetch returns fewer segments than expected and the failure
-    mode is ambiguous.  Never return partial data silently.
+    mode is ambiguous.
+
+    Never return partial data silently (AGENTS.md policy).
     """
 
 
 class StaleArtifactError(IngestError):
     """
     Raised when a cached artifact exceeds ``max_age`` and ``offline=True``
-    prevents a refetch.  The caller must either increase ``max_age`` or
-    disable offline mode.
+    prevents a refetch.
+
+    The caller must either increase ``max_age`` or disable offline mode to
+    trigger a live refetch.
     """
 
 
 class CacheCorruptedError(IngestError):
     """
     Raised when the SHA-256 of a cached file does not match its sidecar
-    manifest.  The artifact must be deleted and re-fetched.
+    manifest.
+
+    The artifact must be deleted and re-fetched to recover.
     """

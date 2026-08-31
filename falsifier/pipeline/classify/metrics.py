@@ -72,7 +72,24 @@ def _precision_recall_at(
     y_prob: np.ndarray,
     threshold: float = 0.5,
 ) -> tuple[float, float]:
-    """Return (precision, recall) at *threshold*.  Returns (0, 0) if no predictions."""
+    """
+    Compute precision and recall at a fixed probability threshold.
+
+    Parameters
+    ----------
+    y_true : np.ndarray, shape (N,), dtype int {0, 1}
+        Ground-truth binary labels.
+    y_prob : np.ndarray, shape (N,), range [0, 1]
+        Predicted probabilities for the positive class.
+    threshold : float
+        Classification threshold.  Predictions >= threshold are positive.
+
+    Returns
+    -------
+    tuple[float, float]
+        ``(precision, recall)`` in [0, 1].  Returns ``(0.0, 0.0)`` when no
+        positive predictions are made.
+    """
     y_pred = (y_prob >= threshold).astype(int)
     tp = int(((y_pred == 1) & (y_true == 1)).sum())
     fp = int(((y_pred == 1) & (y_true == 0)).sum())

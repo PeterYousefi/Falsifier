@@ -31,6 +31,17 @@ _EXPLANATIONS_PATH = (
 # Lazy import: queue imports fastapi/pydantic at module scope; guard it so
 # tools.py can be imported in the pydantic-only fast CI venv for unit tests.
 def _get_job_store() -> dict:
+    """
+    Return the in-memory job store dict.
+
+    Lazily imports from ``queue`` to avoid importing FastAPI/Pydantic at
+    module scope (which would break the lightweight CI venv).
+
+    Returns
+    -------
+    dict[str, JobRecord]
+        The live job store mapping job IDs to their ``JobRecord`` objects.
+    """
     from ..queue import get_job_store
     return get_job_store()
 
@@ -41,10 +52,25 @@ def _get_job_store() -> dict:
 
 def _find_tce(job_id: str, tce_id: str) -> tuple[Any, Any] | None:
     """
-    Return (search_out, tce) from the job's in-memory search stage output.
+    Return ``(search_out, tce)`` from the job's in-memory search stage output.
 
-    Returns None if the job does not exist, is not done, or the tce_id is
-    not found in the search output.
+    Parameters
+    ----------
+    job_id : str
+        Pipeline job identifier.
+    tce_id : str
+        TCE identifier to look up within the search output.
+
+    Returns
+    -------
+    tuple[SearchOutput, TCE] or None
+        ``(search_out, tce)`` if found; ``None`` if the job does not exist,
+        is not done, or the TCE ID is not present in the search output.
+
+    Notes
+    -----
+    The current implementation always returns ``None`` because raw stage
+    outputs are resolved per-tool using ``record.report``.
     """
     store = _get_job_store()
     record = store.get(job_id)
@@ -56,6 +82,19 @@ def _find_tce(job_id: str, tce_id: str) -> tuple[Any, Any] | None:
 
 
 def _record_for(job_id: str) -> Any | None:
+    """
+    Look up a ``JobRecord`` by *job_id*.
+
+    Parameters
+    ----------
+    job_id : str
+        Pipeline job identifier.
+
+    Returns
+    -------
+    JobRecord or None
+        The job record if it exists, otherwise ``None``.
+    """
     return _get_job_store().get(job_id)
 
 

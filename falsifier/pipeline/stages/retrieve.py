@@ -268,13 +268,31 @@ def _run_atmospheric_sampler(
     """
     Run petitRADTRANS + dynesty for the atmospheric model.
 
-    Returns a dict with keys:
-      samples       — (n_live, n_params) float array of posterior samples
-      weights       — posterior weights
-      logz          — natural-log evidence
-      logzerr       — evidence uncertainty
-      param_names   — list of parameter name strings
-      param_units   — list of unit strings
+    Parameters
+    ----------
+    retrieve_input : RetrieveInput
+        Stage configuration including the retrieval config (chemistry scheme,
+        pressure grid levels, live points).
+    dynesty_module : module
+        The imported ``dynesty`` module, passed in to avoid a re-import.
+
+    Returns
+    -------
+    dict
+        Contains the following keys:
+
+        ``samples`` : np.ndarray, shape (n_live, n_params)
+            Posterior sample array.
+        ``weights`` : np.ndarray
+            Normalised posterior weights.
+        ``logz`` : float
+            Natural-log Bayesian evidence from the nested sampler.
+        ``logzerr`` : float
+            Uncertainty on the log-evidence.
+        ``param_names`` : list[str]
+            Names of the free parameters in sample-column order.
+        ``param_units`` : list[str]
+            Unit strings for each parameter.
     """
     cfg = retrieve_input.retrieval_config
 
@@ -310,10 +328,23 @@ def _run_spot_sampler(
     Run dynesty for the competing unocculted-spot model.
 
     Two free parameters:
-      - filling_factor  (uniform [0, 1])
-      - t_contrast      (uniform [0, 2000] K)
 
-    Returns dict with filling_factor_median, t_contrast_median, logz, logzerr.
+    - ``filling_factor``  (uniform [0, 1])
+    - ``t_contrast``      (temperature contrast, uniform [0, 2000] K)
+
+    Parameters
+    ----------
+    retrieve_input : RetrieveInput
+        Stage configuration; the live-point count is taken from
+        ``retrieve_input.retrieval_config.n_live_points``.
+    dynesty_module : module
+        The imported ``dynesty`` module.
+
+    Returns
+    -------
+    dict
+        Contains ``filling_factor_median``, ``t_contrast_median``, ``logz``,
+        and ``logzerr``.
     """
     cfg = retrieve_input.retrieval_config
 
@@ -365,10 +396,24 @@ def _run_spot_sampler(
 
 def _build_prt_model(retrieve_input: RetrieveInput):
     """
-    Construct petitRADTRANS prior transform + log-likelihood for the
+    Construct the petitRADTRANS prior transform and log-likelihood for the
     given retrieval configuration.
 
-    Returns (param_names, prior_transform, log_likelihood).
+    Parameters
+    ----------
+    retrieve_input : RetrieveInput
+        Stage configuration providing the chemistry scheme, pressure grid,
+        and live-point budget.
+
+    Returns
+    -------
+    tuple[list[str], Callable, Callable]
+        ``(param_names, prior_transform, log_likelihood)`` where:
+
+        - ``param_names`` is the ordered list of free-parameter names.
+        - ``prior_transform`` maps unit-hypercube samples to physical values.
+        - ``log_likelihood`` evaluates the log-likelihood for a parameter
+          vector.
     """
     import petitRADTRANS as prt  # type: ignore[import]
 
@@ -444,6 +489,28 @@ def _build_posterior_summaries(
     param_names: list[str],
     param_units: list[str],
 ) -> list[PosteriorSummary]:
+    """
+    Build per-parameter ``PosteriorSummary`` objects from nested-sampling
+    output.
+
+    Computes the posterior median, 16th-, and 84th-percentile for each
+    parameter column.
+
+    Parameters
+    ----------
+    samples : np.ndarray, shape (n_live, n_params)
+        Posterior sample matrix from dynesty.
+    param_names : list[str]
+        Ordered parameter names (one per column of *samples*).
+    param_units : list[str]
+        Unit strings for each parameter.
+
+    Returns
+    -------
+    list[PosteriorSummary]
+        One ``PosteriorSummary`` per parameter, in the same order as
+        *param_names*.
+    """
     summaries = []
     for i, (name, unit) in enumerate(zip(param_names, param_units)):
         col = samples[:, i]
@@ -460,7 +527,22 @@ def _build_posterior_summaries(
 
 
 def _param_units_for(param_names: list[str]) -> list[str]:
-    """Return unit strings for the given parameter names."""
+    """
+    Return unit strings for the given list of parameter names.
+
+    Conventions: ``log_*`` parameters are ``"dimensionless"``, ``T_eq``
+    is ``"K"``, all others default to ``"dimensionless"``.
+
+    Parameters
+    ----------
+    param_names : list[str]
+        Free-parameter names as returned by ``_build_prt_model``.
+
+    Returns
+    -------
+    list[str]
+        Parallel list of unit strings in ``astropy.units``-compatible format.
+    """
     units = []
     for name in param_names:
         if name.startswith("log_"):
@@ -480,7 +562,24 @@ def _build_spectrum_from_median(
     retrieve_input: RetrieveInput,
     posterior_summaries: list[PosteriorSummary],
 ) -> RetrievedSpectrum:
-    """Build the best-fit spectrum from the posterior-median parameters."""
+    """
+    Build the best-fit transmission spectrum from the posterior-median
+    parameter values.
+
+    Parameters
+    ----------
+    retrieve_input : RetrieveInput
+        Stage configuration; ``pressure_grid_levels`` sets the wavelength
+        grid resolution.
+    posterior_summaries : list[PosteriorSummary]
+        Per-parameter posterior summaries from ``_build_posterior_summaries``.
+        The ``T_eq`` median is used to derive the depth baseline.
+
+    Returns
+    -------
+    RetrievedSpectrum
+        Wavelength array in microns, transit depths and uncertainties in ppm.
+    """
     cfg = retrieve_input.retrieval_config
     n_wave = max(cfg.pressure_grid_levels, 10)
     wavelengths = np.linspace(0.5, 5.0, n_wave)
@@ -507,6 +606,23 @@ def _build_spectrum_from_median(
 # ---------------------------------------------------------------------------
 
 def _try_load_cache(cache_dir: Path, cache_key: str) -> dict | None:
+    """
+    Attempt to restore a previously cached posterior from a ``.npz`` file.
+
+    Parameters
+    ----------
+    cache_dir : Path
+        Directory that may contain ``{cache_key}.npz``.
+    cache_key : str
+        SHA-256 hex digest of the serialised ``RetrieveInput`` JSON, used
+        as the file stem.
+
+    Returns
+    -------
+    dict or None
+        Cached ``{atm: …, spot: …}`` dict if the file exists and is readable,
+        or ``None`` on a miss or read failure.
+    """
     cache_path = cache_dir / f"{cache_key}.npz"
     if not cache_path.exists():
         return None
@@ -535,6 +651,22 @@ def _try_load_cache(cache_dir: Path, cache_key: str) -> dict | None:
 def _write_cache(
     cache_dir: Path, cache_key: str, atm: dict, spot: dict
 ) -> None:
+    """
+    Persist nested-sampling results to a ``.npz`` cache file.
+
+    Parameters
+    ----------
+    cache_dir : Path
+        Directory in which to write the cache file.  Created if absent.
+    cache_key : str
+        File stem (SHA-256 of the ``RetrieveInput`` JSON).
+    atm : dict
+        Atmospheric sampler result dict (keys: ``samples``, ``weights``,
+        ``logz``, ``logzerr``, ``param_names``, ``param_units``).
+    spot : dict
+        Spot-model sampler result dict (keys: ``filling_factor_median``,
+        ``t_contrast_median``, ``logz``, ``logzerr``).
+    """
     cache_dir.mkdir(parents=True, exist_ok=True)
     np.savez(
         cache_dir / f"{cache_key}.npz",
@@ -556,6 +688,29 @@ def _write_posterior_artifact(
     artifact_dir: Path | None,
     run_id: str,
 ) -> ArtifactRef:
+    """
+    Write the atmospheric posterior samples to a ``.npz`` file and return
+    an ``ArtifactRef`` pointing to it.
+
+    If *artifact_dir* is ``None``, returns a dummy ``ArtifactRef`` pointing
+    to ``/dev/null`` (used in unit tests that do not write to disk).
+
+    Parameters
+    ----------
+    atm_result : dict
+        Atmospheric sampler result dict containing numpy arrays.
+    artifact_dir : Path or None
+        Root artifact directory.  A ``posteriors/`` subdirectory is created
+        under it.  Pass ``None`` to skip writing.
+    run_id : str
+        Pipeline run ID embedded in the filename and the returned
+        ``ArtifactRef``.
+
+    Returns
+    -------
+    ArtifactRef
+        Points to the written ``.npz`` file with its SHA-256.
+    """
     if artifact_dir is None:
         return ArtifactRef(
             path=Path("/dev/null"),
@@ -579,14 +734,40 @@ def _write_posterior_artifact(
 
 
 def _tce_id_from_input(retrieve_input: RetrieveInput) -> str:
-    """Extract a tce_id from the artifact path or return a placeholder."""
+    """
+    Derive a TCE identifier from the classify artifact path.
+
+    Parameters
+    ----------
+    retrieve_input : RetrieveInput
+        Stage input whose ``classify_artifact.path`` is inspected.
+
+    Returns
+    -------
+    str
+        Stem of the artifact filename, or ``"unknown"`` if the path is
+        ``/dev/null``.
+    """
     p = retrieve_input.classify_artifact.path
     stem = p.stem if p != Path("/dev/null") else "unknown"
     return stem
 
 
 def _host_star_id_from_input(retrieve_input: RetrieveInput) -> str:
-    """Extract a host_star_id from the artifact path or return a placeholder."""
+    """
+    Derive a host-star identifier from the classify artifact path.
+
+    Parameters
+    ----------
+    retrieve_input : RetrieveInput
+        Stage input whose ``classify_artifact.path`` is inspected.
+
+    Returns
+    -------
+    str
+        First underscore-delimited segment of the artifact filename stem,
+        or ``"unknown"`` if the path is ``/dev/null``.
+    """
     p = retrieve_input.classify_artifact.path
     stem = p.stem if p != Path("/dev/null") else "unknown"
     return stem.split("_")[0] if "_" in stem else stem

@@ -86,19 +86,57 @@ _event_queues: dict[str, asyncio.Queue[StageEvent | None]] = {}
 
 
 def get_job_store() -> dict[str, JobRecord]:
+    """
+    Return the module-level in-memory job store.
+
+    Returns
+    -------
+    dict[str, JobRecord]
+        Mapping from job ID string to its ``JobRecord``.
+    """
     return _job_store
 
 
 def get_event_queue(job_id: str) -> asyncio.Queue[StageEvent | None] | None:
+    """
+    Return the live SSE event queue for *job_id*, or ``None`` if absent.
+
+    Parameters
+    ----------
+    job_id : str
+        Pipeline job identifier.
+
+    Returns
+    -------
+    asyncio.Queue or None
+        The per-job event queue if it exists (job is running or queued),
+        or ``None`` if the job has already finished or is unknown.
+    """
     return _event_queues.get(job_id)
 
 
 def init_queue(max_workers: int = 4) -> None:
+    """
+    Initialise the thread-pool executor used to run blocking stage functions.
+
+    Must be called once at application startup (e.g. in ``app.on_event("startup")``).
+
+    Parameters
+    ----------
+    max_workers : int
+        Maximum number of concurrent stage threads.  Default: 4.
+    """
     global _executor
     _executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="falsifier-stage")
 
 
 def shutdown_queue() -> None:
+    """
+    Shut down the thread-pool executor.
+
+    Should be called at application shutdown.  Does not wait for running
+    threads to complete (``wait=False``); in-flight jobs may be abandoned.
+    """
     global _executor
     if _executor is not None:
         _executor.shutdown(wait=False)
@@ -110,6 +148,24 @@ def shutdown_queue() -> None:
 # ---------------------------------------------------------------------------
 
 def _dummy_ref(stage: str, run_id: str) -> ArtifactRef:
+    """
+    Build a placeholder ``ArtifactRef`` pointing to ``/dev/null``.
+
+    Used by stub stage bodies that do not write real artifacts to disk.
+
+    Parameters
+    ----------
+    stage : str
+        Pipeline stage name to embed in the ref.
+    run_id : str
+        Pipeline run identifier.
+
+    Returns
+    -------
+    ArtifactRef
+        A valid ``ArtifactRef`` whose path is ``/dev/null`` and whose
+        SHA-256 is all-zero.
+    """
     return ArtifactRef(
         path=Path("/dev/null"),
         sha256="0" * 64,
@@ -558,7 +614,22 @@ async def _run_job(job_id: str) -> None:
 
 def _try_classify(vet_out: VetOutput, run_id: str) -> ClassifyOutput:
     """
-    Attempt real classify; fall back to stub if xgboost / model not available.
+    Attempt the real classify stage; fall back to stub if xgboost or the
+    trained model artifact is not available.
+
+    Parameters
+    ----------
+    vet_out : VetOutput
+        The vetting result to classify.
+    run_id : str
+        Pipeline run identifier threaded into the returned ``ClassifyOutput``.
+
+    Returns
+    -------
+    ClassifyOutput
+        The real classify output when xgboost is available and the model
+        artifact exists; the uninformative stub output (probability=0.5,
+        uncertainty=0.5) otherwise.
     """
     try:
         import xgboost  # noqa: F401  — presence check only
@@ -579,6 +650,36 @@ def _build_report(
     vet_outs: list,
     classify_outs: list,
 ) -> DetectionReport:
+    """
+    Assemble a ``DetectionReport`` from the collected stage outputs.
+
+    Parameters
+    ----------
+    job_id : str
+        Job identifier embedded in the report.
+    req : JobRequest
+        Original job request for target_id and mission.
+    run_id : str
+        Pipeline run UUID.
+    started_at : datetime.datetime
+        Wall-clock time when the job began executing.
+    ingest_out : IngestOutput or None
+        Ingest stage output, or ``None`` if ingest was skipped.
+    detrend_out : DetrendOutput or None
+        Detrend stage output, or ``None``.
+    search_out : SearchOutput or None
+        Search stage output, or ``None``.
+    vet_outs : list[VetOutput]
+        All vet results (one per detected TCE).
+    classify_outs : list[ClassifyOutput]
+        All classify results (one per TCE, subset of *vet_outs*).
+
+    Returns
+    -------
+    DetectionReport
+        Fully populated report with summary sub-objects for every completed
+        stage.
+    """
     ingest_r = None
     if ingest_out is not None:
         ingest_r = IngestResult(

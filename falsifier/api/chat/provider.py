@@ -58,14 +58,28 @@ class LLMProvider(Protocol):
 
 def get_provider(watsonx_config: dict | None) -> LLMProvider:
     """
-    Return the appropriate LLMProvider for the current environment.
+    Return the appropriate ``LLMProvider`` for the current environment.
 
-    If ``watsonx_config`` is not None (i.e. WATSONX_APIKEY is set and valid),
-    returns a WatsonxAdapter backed by IBM watsonx.ai ModelInference.
+    If ``watsonx_config`` is not ``None`` (i.e. ``WATSONX_APIKEY`` is set and
+    valid), returns a ``WatsonxAdapter`` backed by IBM watsonx.ai
+    ``ModelInference``.
 
-    If ``watsonx_config`` is None, returns FallbackAdapter — the deterministic
-    offline adapter that reads only from committed pipeline artifacts.  This is
-    what runs key-free so the demo works without any credentials.
+    If ``watsonx_config`` is ``None``, returns ``FallbackAdapter`` — the
+    deterministic offline adapter that reads only from committed pipeline
+    artifacts.  This is what runs key-free so the demo works without any
+    credentials.
+
+    Parameters
+    ----------
+    watsonx_config : dict or None
+        Configuration dict from ``session._detect_watsonx_config()``, or
+        ``None`` if no credentials are available.
+
+    Returns
+    -------
+    LLMProvider
+        Either a ``WatsonxAdapter`` (live) or a ``FallbackAdapter``
+        (offline/key-free).
     """
     if watsonx_config is not None:
         from ._adapters.watsonx import WatsonxAdapter

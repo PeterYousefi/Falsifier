@@ -50,7 +50,18 @@ class WatsonxAdapter:
     # ------------------------------------------------------------------
 
     def _get_client(self):
-        """Lazy-load the ModelInference client (avoids import at module scope)."""
+        """
+        Lazy-load the ``ModelInference`` client on first use.
+
+        Avoids importing ``ibm_watsonx_ai`` at module scope so that the module
+        can be imported in environments without the SDK installed.
+
+        Returns
+        -------
+        ModelInference
+            The constructed IBM watsonx.ai inference client, cached as
+            ``self._client`` for subsequent calls.
+        """
         if self._client is None:
             from ibm_watsonx_ai import Credentials
             from ibm_watsonx_ai.foundation_models import ModelInference

@@ -85,9 +85,23 @@ def normalise_target_id(raw: str) -> str:
 
     - KIC targets → ``"KIC {integer}"``
     - TIC targets → ``"TIC {integer}"``
-    - Other forms are returned as-is (upper-cased, stripped).
+    - Other forms are returned upper-cased and stripped.
 
-    This is the ``host_star_id`` value used as the ML split group key.
+    This canonical form is used as the ``host_star_id`` group key in the ML
+    train/test split (AGENTS.md Rule 4).
+
+    Parameters
+    ----------
+    raw : str
+        Raw target identifier as submitted by the caller, e.g.
+        ``"KIC11904151"``, ``"kic 11904151"``, or ``"Kepler-10"``.
+
+    Returns
+    -------
+    str
+        Canonical form such as ``"KIC 11904151"`` or ``"TIC 150428135"``.
+        Non-KIC/TIC identifiers are returned upper-cased (e.g.
+        ``"KEPLER-10"``).
     """
     stripped = raw.strip().upper()
     for prefix in ("KIC", "TIC"):
@@ -287,7 +301,24 @@ def run_ingest(
 # ---------------------------------------------------------------------------
 
 def _mast_cache_query(inp: IngestInput) -> str:
-    """Deterministic cache query string for a MAST request."""
+    """
+    Build the deterministic cache query string for a MAST request.
+
+    The string uniquely identifies the combination of mission, author,
+    cadence, target, and sectors so that ``IngestCache`` always maps the
+    same request to the same on-disk artifact.
+
+    Parameters
+    ----------
+    inp : IngestInput
+        The stage input whose fields are serialised into the cache key.
+
+    Returns
+    -------
+    str
+        A colon-delimited key such as
+        ``"mast:Kepler:Kepler:long:KIC 11904151:sectors=3,4"``.
+    """
     sectors_str = ",".join(str(s) for s in sorted(inp.sectors)) if inp.sectors else "all"
     return (
         f"mast:{inp.mission}:{inp.author}:{inp.cadence}:"
@@ -304,7 +335,45 @@ def _fetch_lightcurves(
     force_refetch: bool,
     provenance_records: list[DatasetProvenance],
 ) -> list[LightCurveSegment]:
-    """Fetch light curves from MAST, using cache when possible."""
+    """
+    Fetch light curves from MAST, using the content-addressed cache when possible.
+
+    On a cache hit: re-parses the cached multi-extension FITS into segments
+    and appends a ``DatasetProvenance`` record with the original access date.
+
+    On a cache miss (and ``offline=False``): calls
+    ``fetch_lightcurve`` from the MAST source module, serialises all segments
+    to a single FITS file, writes it to cache, and appends provenance.
+
+    Parameters
+    ----------
+    inp : IngestInput
+        Stage configuration including target_id, mission, cadence, sectors.
+    cache : IngestCache
+        The content-addressed cache instance.
+    offline : bool
+        If ``True``, raise ``IngestError`` on a cache miss rather than
+        fetching from the network.
+    max_age : timedelta or None
+        Maximum acceptable age for a cached artifact.
+    force_refetch : bool
+        Skip the cache lookup and always fetch from MAST.
+    provenance_records : list[DatasetProvenance]
+        Mutable list; a new ``DatasetProvenance`` entry is appended for every
+        source that contributes data.
+
+    Returns
+    -------
+    list[LightCurveSegment]
+        One segment per downloaded sector/quarter.
+
+    Raises
+    ------
+    IngestError
+        On a cache miss when ``offline=True``.
+    MastFetchError
+        If the network fetch fails or returns an empty result set.
+    """
     from astropy.io import fits as _fits
 
     cache_query = _mast_cache_query(inp)
@@ -411,7 +480,24 @@ def _fetch_lightcurves(
 
 
 def _segments_to_fits_bytes(segments: list[LightCurveSegment]) -> bytes:
-    """Serialise a list of ``LightCurveSegment`` to a multi-extension FITS bytes object."""
+    """
+    Serialise a list of ``LightCurveSegment`` objects to a multi-extension FITS
+    bytes object suitable for caching.
+
+    Each segment becomes one BinTable extension.  TIME, FLUX, FLUX_ERR, and
+    QUALITY columns are written; time-system metadata is preserved in the
+    extension header.
+
+    Parameters
+    ----------
+    segments : list[LightCurveSegment]
+        Segments to serialise.  May be empty (produces a header-only FITS).
+
+    Returns
+    -------
+    bytes
+        In-memory FITS bytes that can be passed to ``IngestCache.put``.
+    """
     import numpy as np
     from astropy.io import fits as _fits
 
@@ -448,7 +534,26 @@ def _segments_to_fits_bytes(segments: list[LightCurveSegment]) -> bytes:
 
 
 def _fits_to_segments(fits_path: Path, inp: IngestInput) -> list[LightCurveSegment]:
-    """Re-parse a cached multi-extension FITS back into ``LightCurveSegment`` objects."""
+    """
+    Re-parse a cached multi-extension FITS back into ``LightCurveSegment`` objects.
+
+    Reads the TIME, FLUX, FLUX_ERR, and QUALITY columns from each BinTable
+    extension.  Time-scale and time-format are read from the TIMESYS and
+    TIME_FMT header keywords (written by ``_segments_to_fits_bytes``).
+
+    Parameters
+    ----------
+    fits_path : Path
+        Path to the cached multi-extension FITS file.
+    inp : IngestInput
+        Original stage input; ``inp.cadence`` is used as a fallback for the
+        cadence_type field when the CADENCE header keyword is absent.
+
+    Returns
+    -------
+    list[LightCurveSegment]
+        One segment per BinTable extension (skipping the Primary HDU).
+    """
     from astropy.io import fits as _fits
     from ..ingest.sources.mast import extract_time_system
 
@@ -493,6 +598,24 @@ def _fits_to_segments(fits_path: Path, inp: IngestInput) -> list[LightCurveSegme
 
 
 def _gaia_cache_query(inp: IngestInput, ra: float, dec: float) -> str:
+    """
+    Build the deterministic cache query string for a Gaia DR3 request.
+
+    Parameters
+    ----------
+    inp : IngestInput
+        Stage input providing the target identifier.
+    ra : float
+        Right ascension in degrees (J2000) for the cone-search centre.
+    dec : float
+        Declination in degrees (J2000) for the cone-search centre.
+
+    Returns
+    -------
+    str
+        A colon-delimited key such as
+        ``"gaia:dr3:KIC 11904151:ra=285.67942:dec=50.24144"``.
+    """
     return f"gaia:dr3:{normalise_target_id(inp.target_id)}:ra={ra:.5f}:dec={dec:.5f}"
 
 
@@ -505,7 +628,33 @@ def _fetch_gaia(
     force_refetch: bool,
     provenance_records: list[DatasetProvenance],
 ) -> StellarParams | None:
-    """Fetch Gaia DR3 stellar params, using cache when possible."""
+    """
+    Fetch Gaia DR3 stellar parameters, using the cache when possible.
+
+    Currently returns ``None`` because RA/Dec are not available until after
+    the TAP query runs.  In test paths, ``_stellar_params`` is injected
+    directly into ``run_ingest`` so this function is not called.
+
+    Parameters
+    ----------
+    inp : IngestInput
+        Stage configuration including the target identifier.
+    cache : IngestCache
+        The content-addressed cache instance.
+    offline : bool
+        If ``True``, raise on a cache miss rather than calling the network.
+    max_age : timedelta or None
+        Maximum acceptable age for a cached artifact.
+    force_refetch : bool
+        Skip the cache and always fetch from Gaia.
+    provenance_records : list[DatasetProvenance]
+        Mutable list; a new provenance entry is appended when data is fetched.
+
+    Returns
+    -------
+    StellarParams or None
+        ``None`` in the current implementation (RA/Dec not yet resolved).
+    """
     import json
 
     # We don't know RA/Dec until after the TAP query; skip Gaia if not available
@@ -516,6 +665,21 @@ def _fetch_gaia(
 
 
 def _tap_cache_query(inp: IngestInput) -> str:
+    """
+    Build the deterministic cache query string for a NASA Exoplanet Archive
+    TAP request.
+
+    Parameters
+    ----------
+    inp : IngestInput
+        Stage input providing the target identifier.
+
+    Returns
+    -------
+    str
+        A colon-delimited key such as
+        ``"tap:pscomppars:KIC 11904151"``.
+    """
     return f"tap:pscomppars:{normalise_target_id(inp.target_id)}"
 
 
@@ -528,7 +692,30 @@ def _fetch_tap(
     force_refetch: bool,
     provenance_records: list[DatasetProvenance],
 ) -> None:
-    """Fetch planet parameters from TAP, using cache when possible."""
+    """
+    Fetch planet parameters from the NASA Exoplanet Archive TAP service,
+    using the cache when possible.
+
+    Results are serialised to Parquet and stored in the content-addressed
+    cache.  The function appends a ``DatasetProvenance`` entry regardless of
+    whether the data came from cache or network.
+
+    Parameters
+    ----------
+    inp : IngestInput
+        Stage configuration including the target identifier.
+    cache : IngestCache
+        The content-addressed cache instance.
+    offline : bool
+        If ``True``, log a warning and return on a cache miss (TAP is not
+        considered critical for offline/golden test runs).
+    max_age : timedelta or None
+        Maximum acceptable age for a cached Parquet artifact.
+    force_refetch : bool
+        Skip the cache and always query the TAP service.
+    provenance_records : list[DatasetProvenance]
+        Mutable list; a new provenance entry is appended when data is found.
+    """
     import json
 
     cache_query = _tap_cache_query(inp)
