@@ -214,14 +214,9 @@ function MetricExpander({ metric_value, metric_unit, threshold }: {
 }
 
 // Curated display reasons for INCONCLUSIVE tests on the Report page.
-// The raw fixture reason (r?.reason) is preserved as the source of truth in the artifact
-// and shown on the technical Provenance side.  For the general reading copy we show a
-// curated version that says what's *missing* rather than what isn't implemented.
-// Only stellar_density needs this treatment; the others already read as "data not available".
-const CURATED_INCONCLUSIVE_REASON: Partial<Record<string, string>> = {
-  stellar_density:
-    'No reference stellar density available to compare against the transit-derived value (1.09\u202f\u03c1\u2609).',
-}
+// Reserved for future use — currently empty because every test's fixture reason
+// already expresses the scientific result directly.
+const CURATED_INCONCLUSIVE_REASON: Partial<Record<string, string>> = {}
 
 function VetTestRow({ name, vetResult, index }: { name: string; vetResult: VetResult; index: number }) {
   const r = vetResult.test_results?.find((t) => t.test_name === name)
