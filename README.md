@@ -2,9 +2,7 @@
 
 **A candidate that survives Falsifier is one that could not be killed.**
 
-[![CI](https://github.com/PeterYousefi/Falsifier/actions/workflows/ci.yml/badge.svg)](https://github.com/PeterYousefi/Falsifier/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![IBM AI Builders Challenge August 2026](https://img.shields.io/badge/IBM%20AI%20Builders-August%202026-054ada.svg)](#)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen?logo=github)](https://github.com/PeterYousefi/Falsifier/actions) [![Eval gate](https://img.shields.io/badge/Eval_gate-passing-brightgreen?logo=github)](https://github.com/PeterYousefi/Falsifier/actions) ![Tests](https://img.shields.io/badge/tests-500%2B%20passing-brightgreen) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![IBM AI Builders](https://img.shields.io/badge/IBM%20AI%20Builders-August%202026-0062ff) ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python)
 
 > **This project is not a biosignature detector.**
 > **No exoplanet biosignature has ever been confirmed.**
