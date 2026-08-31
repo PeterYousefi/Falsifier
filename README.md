@@ -2,7 +2,7 @@
 
 **A candidate that survives Falsifier is one that could not be killed.**
 
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen?logo=github)](https://github.com/PeterYousefi/Falsifier/actions) [![Eval gate](https://img.shields.io/badge/Eval_gate-passing-brightgreen?logo=github)](https://github.com/PeterYousefi/Falsifier/actions) ![Tests](https://img.shields.io/badge/tests-500%2B%20passing-brightgreen) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![IBM AI Builders](https://img.shields.io/badge/IBM%20AI%20Builders-August%202026-0062ff) ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen?logo=github)](https://github.com/PeterYousefi/Falsifier/actions) [![Eval gate](https://img.shields.io/badge/Eval_gate-passing-brightgreen?logo=github)](https://github.com/PeterYousefi/Falsifier/actions) [![Tests](https://img.shields.io/badge/tests-500%2B%20passing-brightgreen)](tests/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![IBM AI Builders](https://img.shields.io/badge/IBM%20AI%20Builders-August%202026-0062ff)](https://aibuilderschallenge-bobhub.bemyapp.com/) ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python)
 
 > **This project is not a biosignature detector.**
 > **No exoplanet biosignature has ever been confirmed.**
@@ -69,6 +69,14 @@ Judge Memory Moment triggering test (KIC 6965293): odd_even_depth
 <!-- /CLAIM:jmm_triggering_test -->
 
 **The Core Insight:** Generative models and neural networks are trained on shape; space is full of things that look like planets but aren't. A light curve dip can be humanity's next home or an optical illusion from a background eclipsing binary. When AI guesses, space agencies waste resources. Falsifier makes sure space exploration targets physical reality, not statistical flukes.
+
+---
+
+## Challenge Theme
+
+**Advance Space Exploration with AI.** *(August 2026)*
+
+This submission was built for the [IBM AI Builders Challenge](https://aibuilderschallenge-bobhub.bemyapp.com/) under the theme of advancing space exploration through AI. Falsifier directly embodies this theme: it applies adversarial AI and astrophysical reasoning to protect humanity's most expensive space assets from wasted telescope time, ensuring that every target queued for deep-space characterization is physically real.
 
 ---
 
