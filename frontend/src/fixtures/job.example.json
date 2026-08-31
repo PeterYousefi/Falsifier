@@ -11,14 +11,14 @@
     "run_classify": true
   },
   "pipeline_run_id": "example-run-YYYY-MM-DD",
-  "started_at": "YYYY-MM-DDTHH:MM:SSZ",
-  "finished_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "started_at": "2026-01-01T00:00:00Z",
+  "finished_at": "2026-01-01T00:01:00Z",
   "report": {
     "job_id": "example-job-001",
     "target_id": "KIC XXXXXXXX",
     "pipeline_run_id": "example-run-YYYY-MM-DD",
-    "started_at": "YYYY-MM-DDTHH:MM:SSZ",
-    "finished_at": "YYYY-MM-DDTHH:MM:SSZ",
+    "started_at": "2026-01-01T00:00:00Z",
+    "finished_at": "2026-01-01T00:01:00Z",
     "ingest": {
       "host_star_id": "KIC XXXXXXXX",
       "n_segments": 1,

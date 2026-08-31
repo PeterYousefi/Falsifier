@@ -44,9 +44,9 @@
     "vet": [
       {
         "tce_id": "KIC 11904151.01",
-        "disposition": "candidate",
-        "triggering_test": null,
-        "triggering_reason": null,
+        "disposition": "ambiguous",
+        "triggering_test": "centroid_shift",
+        "triggering_reason": "Centroid-shift test inconclusive: no Gaia DR3 astrometry processed for this target; pipeline could not rule out a background eclipsing binary via centroid displacement.",
         "wall_time_seconds": 0.01,
         "test_results": [
           {
@@ -65,10 +65,10 @@
           },
           {
             "test_name": "centroid_shift",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — Batalha et al. (2011) centroid analysis on this exact target found no shift (used as the field's ~2\" benchmark)."
+            "reason": "Centroid-shift test inconclusive: no Gaia DR3 astrometry processed for this target; pipeline could not rule out a background eclipsing binary via centroid displacement."
           },
           {
             "test_name": "transit_shape",
@@ -79,24 +79,24 @@
           },
           {
             "test_name": "stellar_density",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — asteroseismic density (19 oscillation frequencies) matches the transit-derived density closely."
+            "reason": "Stellar density test inconclusive: spectroscopic stellar parameters not ingested; pipeline could not compute a transit-derived density for comparison."
           },
           {
             "test_name": "gaia_ruwe",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — no binarity flagged anywhere in the literature; RUWE likely ≈1.0."
+            "reason": "RUWE test inconclusive: Gaia DR3 catalogue not queried; pipeline could not retrieve a RUWE value for this target."
           },
           {
             "test_name": "systematics_coincidence",
-            "outcome": "PASS",
+            "outcome": "INCONCLUSIVE",
             "metric_value": null,
             "metric_unit": null,
-            "reason": "Pass — best-vetted small planet in the Kepler sample with no reported systematics issue."
+            "reason": "Systematics-coincidence test inconclusive: no cotrending basis vectors correlated against transit times; cannot rule out instrumental origin."
           }
         ],
         "period_days": 0.8374854177807519,
@@ -329,7 +329,7 @@
       "source_fits": "data/golden/kepler10_q3_long.fits",
       "source_doi": "10.1088/0004-637X/729/1/27",
       "pipeline_run_id": "fixture-regen-q3-2026-08-17",
-      "note": "All seven test_results produced by run_vet() against data/golden/kepler10_q3_long.fits (TLS 1.32, biweight detrend window=0.75 d). odd_even_depth=1.1876 (PASS), transit_shape=175.82 ppm (PASS); centroid_shift/stellar_density/gaia_ruwe/systematics_coincidence set to PASS reflecting literature confirmation: Batalha+2011 centroid analysis found no shift, asteroseismic density (19 frequencies) matches transit-derived density, no binarity flagged in literature, and no systematics overlap reported. stellar_density_rho_sun=1.09 is from Batalha+2011 (DOI:10.1088/0004-637X/729/1/27), not derived from TLS. inclination=82.8 was derived numerically for geometry closure. Epoch=260.5516 BKJD is TLS-measured t0 within Q3. Disposition updated to 'candidate' — all 7 tests PASS. No trained classifier artifact."
+      "note": "All seven test_results produced by run_vet() against data/golden/kepler10_q3_long.fits (TLS 1.32, biweight detrend window=0.75 d). odd_even_depth=1.1876 (PASS), transit_shape=175.82 ppm (PASS); centroid_shift/stellar_density/gaia_ruwe/systematics_coincidence are INCONCLUSIVE — Gaia DR3 astrometry not queried, spectroscopic stellar parameters not ingested, RUWE not available, systematics correlation not run. stellar_density_rho_sun=1.09 is from Batalha+2011 (DOI:10.1088/0004-637X/729/1/27), not derived from TLS. inclination=82.8 was derived numerically for geometry closure. Epoch=260.5516 BKJD is TLS-measured t0 within Q3. Disposition is 'ambiguous' — no FAILs or FLAGs but four INCONCLUSIVE tests. No trained classifier artifact."
     },
     "stellar_params": {
       "teff_K": 5627,
