@@ -1,0 +1,68 @@
+{
+  "_comment": "Copy this file to job.json for local fixture-mode development. Replace ALL placeholder values with real pipeline output. Do NOT commit job.json — it is excluded by .gitignore.",
+  "job_id": "example-job-001",
+  "status": "done",
+  "request": {
+    "target_id": "KIC XXXXXXXX",
+    "mission": "Kepler",
+    "author": "pipeline",
+    "cadence": "long",
+    "sectors": null,
+    "run_classify": true
+  },
+  "pipeline_run_id": "example-run-YYYY-MM-DD",
+  "started_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "finished_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "report": {
+    "job_id": "example-job-001",
+    "target_id": "KIC XXXXXXXX",
+    "pipeline_run_id": "example-run-YYYY-MM-DD",
+    "started_at": "YYYY-MM-DDTHH:MM:SSZ",
+    "finished_at": "YYYY-MM-DDTHH:MM:SSZ",
+    "ingest": {
+      "host_star_id": "KIC XXXXXXXX",
+      "n_segments": 1,
+      "has_stellar_params": false,
+      "code_version": "0.0.0-example",
+      "input_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "wall_time_seconds": 0.0
+    },
+    "detrend": {
+      "host_star_id": "KIC XXXXXXXX",
+      "n_segments": 1,
+      "detrending_method": "biweight",
+      "wall_time_seconds": 0.0
+    },
+    "search": {
+      "host_star_id": "KIC XXXXXXXX",
+      "n_tces": 0,
+      "tls_version": "0.0.0",
+      "wall_time_seconds": 0.0,
+      "tce_ids": []
+    },
+    "vet": [],
+    "classify": [],
+    "non_claims": [
+      "This project is not a biosignature detector.",
+      "No exoplanet biosignature has ever been confirmed.",
+      "The classifier probability is a ranking score only, not a verdict.",
+      "Disposition is determined exclusively by the vet stage."
+    ],
+    "fixture_provenance": {
+      "schema_version": "1",
+      "fixture_id": "example-job-001",
+      "generated_date": "YYYY-MM-DD",
+      "source_fits": "data/golden/REPLACE_WITH_REAL_FITS_PATH.fits",
+      "source_doi": "10.XXXX/REPLACE_WITH_REAL_DOI",
+      "pipeline_run_id": "example-run-YYYY-MM-DD",
+      "note": "Replace this note with the actual pipeline provenance string produced by the pipeline run."
+    },
+    "stellar_params": {
+      "teff_K": 0,
+      "radius_rsun": 0.0,
+      "luminosity_lsun": 0.0
+    }
+  },
+  "error": null,
+  "events": []
+}

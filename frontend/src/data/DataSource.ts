@@ -50,8 +50,29 @@ export interface DataSource {
 // FixtureDataSource — reads committed JSON, no backend required
 // ---------------------------------------------------------------------------
 
-import fixtureJob from '../fixtures/job.json'
-import fixtureJobEB from '../fixtures/job_false_positive.json'
+// job.json and job_false_positive.json are excluded from the repository via
+// .gitignore (raw pipeline input parameters must not be bundled into client
+// assets).  We load them via import.meta.glob so that Vite resolves the glob
+// at build time: if a file is absent the record is simply empty and we fall
+// back to _ABSENT_JOB, keeping the build green without the file present.
+const _jobGlobs = import.meta.glob('../fixtures/job.json', { eager: true })
+const _jobEBGlobs = import.meta.glob('../fixtures/job_false_positive.json', { eager: true })
+
+/** Minimal typed stub used when the fixture file is not present in the repo. */
+const _ABSENT_JOB = {
+  job_id: '__no_fixture__',
+  status: 'unknown' as const,
+  request: null,
+  report: null,
+  error: 'Fixture file not present. See job.example.json for schema.',
+  events: [],
+}
+
+const fixtureJob: unknown =
+  (_jobGlobs['../fixtures/job.json'] as { default?: unknown } | undefined)?.default ?? _ABSENT_JOB
+const fixtureJobEB: unknown =
+  (_jobEBGlobs['../fixtures/job_false_positive.json'] as { default?: unknown } | undefined)?.default ?? _ABSENT_JOB
+
 import fixtureProvenance from '../fixtures/provenance.json'
 import fixtureEvents from '../fixtures/events.json'
 import fixtureChat from '../fixtures/chat.json'

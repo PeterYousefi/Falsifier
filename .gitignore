@@ -67,3 +67,8 @@ data/artifacts/adversarial_selftest.manifest.json
 data/artifacts/injection_recovery.json
 data/artifacts/injection_recovery.manifest.json
 data/artifacts/injection_recovery_completeness.png
+
+# job.json — raw pipeline input parameters; never bundle into repository or
+# client-side assets.  Use job.example.json for local development scaffolding.
+job.json
+**/job.json
