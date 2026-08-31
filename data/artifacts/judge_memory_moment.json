@@ -1,0 +1,14 @@
+{
+  "schema_version": "1",
+  "produced_at": "2026-08-31T00:25:07.535178Z",
+  "target": "KIC 6965293",
+  "source_doi": "10.1088/0004-6256/141/3/83",
+  "access_date": "2026-08-26",
+  "depth_ppm": 13315,
+  "depth_pct": 1.33,
+  "odd_even_mismatch": 4.32,
+  "disposition": "false_positive",
+  "triggering_test": "odd_even_depth",
+  "triggering_reason": "Odd/even transit depth mismatch 4.32 exceeds threshold 3.0; alternating depth asymmetry is consistent with an eclipsing binary.",
+  "notes": "Produced by scripts/judge_memory_moment.py from the committed KIC 6965293 Q3 golden FITS. Depth and mismatch are pipeline-measured values from the best TLS TCE."
+}

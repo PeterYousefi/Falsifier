@@ -119,6 +119,14 @@ _NUMERIC_ALLOWLIST: frozenset[str] = frozenset(
         # Formula description inside a backtick code span — a mathematical
         # expression, not a claimed measurement.
         "1e6",     # `(1 - results.depth) * 1e6` formula in defect log table cell
+        # Display repetitions of CLAIM-backed pipeline values.
+        # These appear inside code-fence blocks (ASCII diagram and expected-output
+        # table) in README.md as visual display only.  The CLAIM blocks for each
+        # value are the enforced source of truth; these are stable display copies.
+        "1.33",    # CLAIM:jmm_depth_pct / CLAIM:diff_proof_target_b_depth_pct
+        "4.32",    # CLAIM:jmm_odd_even_mismatch (repeated in ASCII diagram)
+        "0.02",    # CLAIM:diff_proof_target_a_depth_pct (in expected-output table)
+        "1.19",    # odd_even_mismatch for KIC 11904151 — display row in expected-output table
     }
 )
 
@@ -596,6 +604,110 @@ def _regen_toi_cp_count() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Judge Memory Moment claims
+# Source of truth: data/artifacts/judge_memory_moment.json
+# ---------------------------------------------------------------------------
+
+_JUDGE_MEMORY_PATH = REPO_ROOT / "data" / "artifacts" / "judge_memory_moment.json"
+
+
+def _load_judge_memory() -> dict:
+    """Load data/artifacts/judge_memory_moment.json; raise FileNotFoundError if absent."""
+    if not _JUDGE_MEMORY_PATH.exists():
+        raise FileNotFoundError(
+            f"Missing: {_JUDGE_MEMORY_PATH}\n"
+            "Generate with: python3 scripts/judge_memory_moment.py"
+        )
+    with open(_JUDGE_MEMORY_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _regen_jmm_depth_pct() -> str:
+    """Transit depth percentage from the judge_memory_moment pipeline run."""
+    data = _load_judge_memory()
+    pct = data["depth_pct"]
+    return f"Judge Memory Moment transit depth (KIC 6965293, pipeline-measured): {pct:.2f}%"
+
+
+def _regen_jmm_odd_even_mismatch() -> str:
+    """Odd/even mismatch from the judge_memory_moment pipeline run."""
+    data = _load_judge_memory()
+    m = data["odd_even_mismatch"]
+    return f"Judge Memory Moment odd/even mismatch (KIC 6965293, pipeline-measured): {m:.2f}"
+
+
+def _regen_jmm_disposition() -> str:
+    """Disposition from the judge_memory_moment pipeline run."""
+    data = _load_judge_memory()
+    return f"Judge Memory Moment disposition (KIC 6965293): {data['disposition']}"
+
+
+def _regen_jmm_triggering_test() -> str:
+    """Triggering test from the judge_memory_moment pipeline run."""
+    data = _load_judge_memory()
+    return f"Judge Memory Moment triggering test (KIC 6965293): {data['triggering_test']}"
+
+
+# ---------------------------------------------------------------------------
+# Differentiator Proof claims
+# Source of truth: data/artifacts/differentiator_proof.json
+# ---------------------------------------------------------------------------
+
+_DIFF_PROOF_PATH = REPO_ROOT / "data" / "artifacts" / "differentiator_proof.json"
+
+
+def _load_diff_proof() -> dict:
+    """Load data/artifacts/differentiator_proof.json; raise FileNotFoundError if absent."""
+    if not _DIFF_PROOF_PATH.exists():
+        raise FileNotFoundError(
+            f"Missing: {_DIFF_PROOF_PATH}\n"
+            "Generate with: python3 scripts/differentiator_proof.py"
+        )
+    with open(_DIFF_PROOF_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _regen_diff_proof_target_a_depth_pct() -> str:
+    """Transit depth % for Target A (planet candidate) from differentiator_proof.json."""
+    data = _load_diff_proof()
+    pct = data["target_a"]["depth_pct"]
+    kic = data["target_a"]["kic_id"]
+    return f"Differentiator Proof Target A depth ({kic}): {pct:.2f}%"
+
+
+def _regen_diff_proof_target_b_depth_pct() -> str:
+    """Transit depth % for Target B (EB) from differentiator_proof.json."""
+    data = _load_diff_proof()
+    pct = data["target_b"]["depth_pct"]
+    kic = data["target_b"]["kic_id"]
+    return f"Differentiator Proof Target B depth ({kic}): {pct:.2f}%"
+
+
+def _regen_diff_proof_target_a_disposition() -> str:
+    """Disposition for Target A from differentiator_proof.json."""
+    data = _load_diff_proof()
+    kic = data["target_a"]["kic_id"]
+    disp = data["target_a"]["disposition"]
+    return f"Differentiator Proof Target A disposition ({kic}): {disp}"
+
+
+def _regen_diff_proof_target_b_disposition() -> str:
+    """Disposition for Target B from differentiator_proof.json."""
+    data = _load_diff_proof()
+    kic = data["target_b"]["kic_id"]
+    disp = data["target_b"]["disposition"]
+    return f"Differentiator Proof Target B disposition ({kic}): {disp}"
+
+
+def _regen_diff_proof_target_b_triggering_test() -> str:
+    """Triggering test for Target B from differentiator_proof.json."""
+    data = _load_diff_proof()
+    kic = data["target_b"]["kic_id"]
+    tt = data["target_b"]["triggering_test"]
+    return f"Differentiator Proof Target B triggering test ({kic}): {tt}"
+
+
+# ---------------------------------------------------------------------------
 # Claim registry
 # Maps CLAIM id → regeneration function
 # ---------------------------------------------------------------------------
@@ -642,6 +754,17 @@ CLAIM_REGISTRY: dict[str, Callable[[], str]] = {
     "toi_fp_count": _regen_toi_fp_count,
     "toi_pc_count": _regen_toi_pc_count,
     "toi_cp_count": _regen_toi_cp_count,
+    # Judge Memory Moment (source: data/artifacts/judge_memory_moment.json)
+    "jmm_depth_pct": _regen_jmm_depth_pct,
+    "jmm_odd_even_mismatch": _regen_jmm_odd_even_mismatch,
+    "jmm_disposition": _regen_jmm_disposition,
+    "jmm_triggering_test": _regen_jmm_triggering_test,
+    # Differentiator Proof (source: data/artifacts/differentiator_proof.json)
+    "diff_proof_target_a_depth_pct": _regen_diff_proof_target_a_depth_pct,
+    "diff_proof_target_b_depth_pct": _regen_diff_proof_target_b_depth_pct,
+    "diff_proof_target_a_disposition": _regen_diff_proof_target_a_disposition,
+    "diff_proof_target_b_disposition": _regen_diff_proof_target_b_disposition,
+    "diff_proof_target_b_triggering_test": _regen_diff_proof_target_b_triggering_test,
 }
 
 

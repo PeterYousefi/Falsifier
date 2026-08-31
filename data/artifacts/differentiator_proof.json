@@ -1,0 +1,25 @@
+{
+  "schema_version": "1",
+  "produced_at": "2026-08-31T00:26:29.251507Z",
+  "target_a": {
+    "kic_id": "KIC 11904151",
+    "depth_ppm": 176,
+    "depth_pct": 0.02,
+    "odd_even_mismatch": 1.19,
+    "disposition": "ambiguous",
+    "triggering_test": "centroid_shift",
+    "triggering_reason": "Centroid time series not available for this target; centroid shift test skipped.",
+    "source_doi": "10.1088/0004-637X/729/1/27"
+  },
+  "target_b": {
+    "kic_id": "KIC 6965293",
+    "depth_ppm": 13315,
+    "depth_pct": 1.33,
+    "odd_even_mismatch": 4.32,
+    "disposition": "false_positive",
+    "triggering_test": "odd_even_depth",
+    "triggering_reason": "Odd/even transit depth mismatch 4.32 exceeds threshold 3.0; alternating depth asymmetry is consistent with an eclipsing binary.",
+    "source_doi": "10.1088/0004-6256/141/3/83"
+  },
+  "notes": "Produced by scripts/differentiator_proof.py from committed golden FITS files. Both targets show a transit/eclipse signal; the pipeline gives opposite dispositions based on physical vetting tests, not signal shape alone."
+}

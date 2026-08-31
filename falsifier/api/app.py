@@ -39,6 +39,7 @@ from .routes.jobs import router as jobs_router
 from .routes.provenance import router as provenance_router
 from .routes.chat import router as chat_router
 from .routes.verify import router as verify_router
+from .routes.honesty import router as honesty_router
 
 # ---------------------------------------------------------------------------
 # CORS origins
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     application.include_router(provenance_router)
     application.include_router(chat_router)
     application.include_router(verify_router)
+    application.include_router(honesty_router)
 
     @application.get("/health", tags=["meta"])
     async def health() -> dict:
