@@ -89,7 +89,7 @@ If humanity relies on standard AI pipelines that optimize for discovery volume, 
 No cloud accounts. No API keys. No complex database provisioning. The deterministic core is offline-first and runs in seconds, making it immediately deployable for resource-constrained observatories:
 
 ```bash
-pip install -r requirements.txt && pytest tests/test_known_eb_rejected.py
+pip install -e ".[dev]" && pytest tests/test_known_eb_rejected.py
 ```
 
 ---

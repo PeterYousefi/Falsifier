@@ -1071,6 +1071,60 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
+    # Pass 4: dead-link / required-file checks.
+    # Verifies that files linked in the README actually exist in the repo so that
+    # badge links, footer links, and artifact paths are never dangling.
+    # Only runs against the project README (not synthetic test fixtures).
+    if args.readme.resolve() == default_readme.resolve():
+        required_files = [
+            (
+                REPO_ROOT / "LICENSE",
+                "LICENSE file (linked by MIT badge and footer); add it with: "
+                "scripts/export_license.py or create it manually.",
+            ),
+            (
+                _IMPACT_FACTS_PATH,
+                "data/artifacts/impact_facts.json (impact CLAIMs source); "
+                "regenerate with: python scripts/impact_facts.py",
+            ),
+        ]
+        dead_link_errors: list[str] = []
+        for fpath, hint in required_files:
+            if not fpath.exists():
+                msg = (
+                    f"DEAD LINK      [{fpath.relative_to(REPO_ROOT)}]  "
+                    f"File does not exist in repo.  {hint}"
+                )
+                dead_link_errors.append(msg)
+                print(f"ERROR: {msg}", file=sys.stderr)
+            else:
+                print(f"OK             [{fpath.relative_to(REPO_ROOT)}]  exists")
+
+        # Verify the quickstart command in README does not reference a
+        # nonexistent requirements.txt at repo root.
+        readme_text_current = args.readme.read_text(encoding="utf-8")
+        root_req = REPO_ROOT / "requirements.txt"
+        if (
+            "pip install -r requirements.txt" in readme_text_current
+            and not root_req.exists()
+        ):
+            msg = (
+                "DEAD LINK      [requirements.txt]  "
+                "README quickstart uses 'pip install -r requirements.txt' but no "
+                "root-level requirements.txt exists.  "
+                "Replace with: pip install -e \".[dev]\""
+            )
+            dead_link_errors.append(msg)
+            print(f"ERROR: {msg}", file=sys.stderr)
+
+        if dead_link_errors:
+            print(
+                f"\n{len(dead_link_errors)} dead-link / missing-file error(s).  "
+                "Fix the linked paths or create the missing files.",
+                file=sys.stderr,
+            )
+            return 2
+
     if warnings:
         print(
             f"\n{len(warnings)} warning(s).  "
