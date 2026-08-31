@@ -1,10 +1,10 @@
 # Falsifier
 
+**A candidate that survives Falsifier is one that could not be killed.**
+
 [![CI](https://github.com/PeterYousefi/Falsifier/actions/workflows/ci.yml/badge.svg)](https://github.com/PeterYousefi/Falsifier/actions/workflows/ci.yml)
-[![Live Demo](https://img.shields.io/badge/demo-falsifier.vercel.app-blue)](https://falsifier.vercel.app)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-[![IBM AI Builders Challenge 2026](https://img.shields.io/badge/IBM_AI_Builders_Challenge-Space_Exploration-0062ff)](https://ibm.com/ai-builders)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![IBM AI Builders Challenge August 2026](https://img.shields.io/badge/IBM%20AI%20Builders-August%202026-054ada.svg)](#)
 
 > **This project is not a biosignature detector.**
 > **No exoplanet biosignature has ever been confirmed.**
@@ -16,7 +16,7 @@
 The James Webb Space Telescope is one of the most expensive scientific instruments
 humanity has ever built — Falsifier makes sure humanity doesn't point it at an AI hallucination."**
 
-Most transit-detection pipelines and AI classification models are built to find planets, inherently suffering from confirmation bias when dealing with noisy deep-space data. This one is built to destroy its own candidates. A dimming light curve is not a discovery until it has survived seven independent attempts to explain it away as something else — and until then, the pipeline is designed to fail it, not flatter it.
+Most transit-detection pipelines and AI classification models are built to *find* planets, inherently suffering from confirmation bias when dealing with noisy deep-space data. This one is built to destroy its own candidates. A dimming light curve is not a discovery until it has survived seven independent attempts to explain it away as something else — and until then, the pipeline is designed to fail it, not flatter it.
 
 ▶ [Watch the walkthrough](__DEMO_VIDEO_URL__) — enter a Kepler/TESS target ID, watch every pipeline stage stream live, see the named rejection mechanism fire.
 
@@ -70,17 +70,17 @@ Judge Memory Moment disposition (KIC 6965293): false_positive
 Judge Memory Moment triggering test (KIC 6965293): odd_even_depth
 <!-- /CLAIM:jmm_triggering_test -->
 
-The Core Insight: Generative models and neural networks are trained on shape; space is full of things that look like planets but aren't. A light curve dip can be humanity's next home or an optical illusion from a background eclipsing binary. When AI guesses, space agencies waste resources. Falsifier makes sure space exploration targets physical reality, not statistical flukes.
+**The Core Insight:** Generative models and neural networks are trained on shape; space is full of things that look like planets but aren't. A light curve dip can be humanity's next home or an optical illusion from a background eclipsing binary. When AI guesses, space agencies waste resources. Falsifier makes sure space exploration targets physical reality, not statistical flukes.
 
 ---
 
 ## Challenge Fit: Advancing Space Exploration With AI
 
-Space exploration does not begin at the launch pad; it begins at the targeting queue.
+**Space exploration does not begin at the launch pad; it begins at the targeting queue.**
 
-NASA's upcoming Habitable Worlds Observatory (HWO), the Roman Space Telescope, and future direct-imaging interstellar precursor probes cannot be redirected on a whim. Their cryogenic propellants, station-keeping fuel, and observation windows are finite.
+NASA's upcoming **Habitable Worlds Observatory (HWO)**, the **Roman Space Telescope**, and future direct-imaging interstellar precursor probes cannot be redirected on a whim. Their cryogenic propellants, station-keeping fuel, and observation windows are finite.
 
-If humanity relies on standard AI pipelines that optimize for discovery volume, we will point multi-billion-dollar space assets at ghosts. Falsifier directly advances space exploration by serving as the autonomous pre-flight targeting firewall: ensuring that every target queued for deep-space characterization has survived every physical falsification test known to astrophysics.
+If humanity relies on standard AI pipelines that optimize for discovery volume, we will point multi-billion-dollar space assets at ghosts. Falsifier directly advances space exploration by serving as the **autonomous pre-flight targeting firewall**: ensuring that every target queued for deep-space characterization has survived every physical falsification test known to astrophysics.
 
 ---
 
@@ -166,7 +166,7 @@ via the
 Differentiator Proof Target B triggering test (KIC 6965293): odd_even_depth
 <!-- /CLAIM:diff_proof_target_b_triggering_test -->
 
-gate. Pipeline operates on astrophysics, not signal shape alone.
+gate. Identical AI classification inputs. Completely opposite physical realities. The AI guesses; Falsifier physically checks.
 
 ---
 
