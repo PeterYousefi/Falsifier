@@ -192,11 +192,13 @@ Every candidate is run through seven independent vetting tests ([`falsifier/pipe
 
 ---
 
-## Real-World Impact: Democratizing Exoplanet Discovery
+## Problem statement
 
 NASA's TESS mission generates a high-cadence, continuous all-sky photometric survey covering hundreds of thousands of pre-selected targets per sector. The professional astronomy community cannot process this volume, leaving the bulk of exoplanet discovery to underfunded university astrophysics departments and citizen science collectives.
 
 The problem: the Kepler KOI cumulative table (NASA Exoplanet Archive, DOI `10.26133/NEA12`) records a significant false-positive fraction across its catalogued objects — exact figures in the Measured Results section (`CLAIM:koi_fp_fraction`, `CLAIM:koi_total_rows`), sourced from `data/artifacts/impact_facts.json`. University teams do not have the supercomputing budgets to run massive deep-learning ensembles, nor the staffing to manually vet thousands of false alarms.
+
+## Selected challenge theme
 
 > "We get flooded with high-probability AI classifications from citizen scientists. Triaging them manually takes our graduate students hundreds of hours per semester. A tool that can run on a standard laptop and definitively kill the bulk of those false positives using physical centroid and depth gates doesn't just save time — it makes our entire university survey program financially viable."
 > — Principal Investigator, University Exoplanet Survey (shared anonymously, August 2026)
@@ -205,9 +207,11 @@ By running entirely locally on a deterministic fallback path without requiring e
 
 ---
 
-## Technical Execution & Radical Honesty
+## Solution description
 
 Most hackathon projects wire an API key to a frontend and call it a day. Falsifier is a production-ready AI operations framework orchestrated via a scalable FastAPI pipeline, featuring automated LLM evaluation scripts (Pydantic VetInput/VetOutput enforcement) and multi-model routing (`ibm/granite-3-3-8b-instruct`, XGBoost, and `granite-guardian-3.1-2b`).
+
+## AI approach and architecture
 
 ### Radical Honesty & The Degradation Ledger
 
@@ -254,7 +258,7 @@ Falsifier self-reports which backend answered a given request:
 
 ---
 
-## How IBM Bob Was Used
+## How IBM Bob was used
 
 IBM Bob is the primary development tool for this submission. The `.bob/` directory is committed and inspectable:
 
