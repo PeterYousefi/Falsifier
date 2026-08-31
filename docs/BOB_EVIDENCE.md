@@ -20,7 +20,7 @@ a separate copy of this table that could drift.
 | TDD scaffolding session (golden test stubs) | *(no canonical path)* | ❌ not yet committed |
 | Defect-surfacing session (depth-formula bug) | *(no canonical path)* | ❌ not yet committed |
 | Policy-enforcement session (SDE_THRESHOLD extraction) | *(no canonical path)* | ❌ not yet committed |
-| Bobalytics / usage screenshots | *(no canonical path)* | ❌ not yet committed |
+| **Subscription screenshot (Pro Plus, Bobcoin usage)** | [`docs/bob-evidence/bob-subscription-pro-plus.png`](bob-evidence/bob-subscription-pro-plus.png) | ✅ Yes |
 
 ---
 
@@ -49,6 +49,22 @@ implementation of the pipeline stages:
 - Contract tests were written from this document as failing stubs.
 - The seven vetting test names as load-bearing identifiers are specified here.
 
+### docs/bob-evidence/bob-subscription-pro-plus.png
+
+[`docs/bob-evidence/bob-subscription-pro-plus.png`](bob-evidence/bob-subscription-pro-plus.png)
+is a screenshot of the IBM Bob subscription settings page captured during the project.
+It shows:
+
+- **Plan**: Pro Plus
+- **Organisation**: `bob-001 (us-east)`
+- **Region**: United States (East)
+- **Bobcoin budget**: 160 Bobcoins (budget period renewing 2026-09-23)
+- **Bobcoins spent**: 160.12 — confirming active, substantive use of the platform
+  throughout this project
+
+This evidences that the paid Bob subscription powering all agent sessions in this
+repository was active and heavily used during development.
+
 ---
 
 ## Not yet committed
@@ -62,7 +78,7 @@ table but do not exist as committed files in this repository.
 | TDD scaffolding session (golden test stubs) | *(no canonical path)* | The generated stubs (`test_kepler10_recovery.py`, `test_known_eb_rejected.py`) are committed but the Bob session that produced them was not exported |
 | Defect-surfacing session (depth-formula bug) | *(no canonical path)* | The fix is present in `falsifier/pipeline/stages/search.py` (line: `(1.0 - results.depth) * 1_000_000`) but no session log is committed |
 | Policy-enforcement session (SDE_THRESHOLD extraction) | *(no canonical path)* | The constant lives in `scripts/pipeline_constants.py`; no session log is committed |
-| Bobalytics / usage screenshots | `docs/bob-evidence/` | Not yet exported; directory is reserved for future Bob artifacts |
+| Bobalytics / usage screenshots | `docs/bob-evidence/` | Not yet exported; directory is reserved for future Bob artifacts (subscription screenshot committed separately above) |
 
 ---
 

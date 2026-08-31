@@ -8,7 +8,7 @@ The full inventory table is in [`docs/BOB_EVIDENCE.md`](../BOB_EVIDENCE.md).
 
 | File | Description |
 |---|---|
-| *(directory created)* | Reserved for future Bob session exports (screenshots, Bobalytics CSVs, etc.) |
+| [`bob-subscription-pro-plus.png`](bob-subscription-pro-plus.png) | IBM Bob subscription page — Pro Plus plan, org `bob-001 (us-east)`, Bobcoin budget 160 / spent 160.12, renews 2026-09-23. Evidences active paid Bob subscription used throughout this project. |
 
 Session transcripts are not exported or committed; the evidentiary chain runs
 through the committed code, tests, and plan-mode document rather than raw transcripts.
